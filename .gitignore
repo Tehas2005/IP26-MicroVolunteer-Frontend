@@ -1,0 +1,11 @@
+# Ecosistem Node
+node_modules/
+dist/
+dist-ssr/
+
+# Fisiere de sistem Mac
+.DS_Store
+
+# Fisiere locale de mediu
+.env
+.env.local
