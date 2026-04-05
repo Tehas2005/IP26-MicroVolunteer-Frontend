@@ -1,0 +1,17 @@
+# Dependinte
+node_modules/
+
+# Build
+dist/
+build/
+
+# Secrete
+.env
+
+# IDEs
+.vscode/
+.idea/
+
+# Sistem
+.DS_Store
+Thumbs.db
