@@ -95,14 +95,14 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
         type="button"
         onClick={handleLogin}
         disabled={loading}
-        style={{ ...primaryButtonStyle(loading), height: 46, marginTop: '1rem' }}
+        style={{ ...primaryButtonStyle(loading), height: 40, marginTop: '1rem', width: '50%', marginLeft: 'auto', marginRight: 'auto', display: 'flex' }}
       >
         {loading ? 'Se autentifică...' : 'Log In'}
       </button>
       <button
         type="button"
         style={{
-          width: '100%', height: 46,
+          width: '50%', height: 40, marginLeft: 'auto', marginRight: 'auto',
           border: '1.5px solid #e2e8f0', borderRadius: 12,
           marginTop: '0.6rem', background: 'white',
           fontSize: 14, cursor: 'pointer', color: '#333',

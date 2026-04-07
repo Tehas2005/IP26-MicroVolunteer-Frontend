@@ -1,5 +1,3 @@
-import type { IdMethod } from './types';
-
 // ─── Validatori — returnează string gol dacă valoarea e validă ────────────────
 
 export function validateEmail(value: string): string {
@@ -26,17 +24,6 @@ export function validatePhone(value: string): string {
   if (!value.trim()) return 'Telefonul este obligatoriu.';
   if (!/^(\+4|0)\d{9}$/.test(value.replace(/\s/g, '')))
     return 'Format invalid (07XXXXXXXX).';
-  return '';
-}
-
-export function validateIdNumber(value: string, method: IdMethod): string {
-  if (!value.trim()) return 'Numărul este obligatoriu.';
-  if (method === 'national_id' && !/^\d{13}$/.test(value.trim()))
-    return 'CNP: exact 13 cifre.';
-  if (method === 'passport' && !/^[A-Z0-9]{6,9}$/i.test(value.trim()))
-    return '6–9 caractere alfanumerice.';
-  if (method === 'drivers_license' && value.trim().length < 5)
-    return 'Prea scurt.';
   return '';
 }
 

@@ -1,25 +1,3 @@
-import type { IdMethod } from './types';
-
-// ─── Opțiuni document de identitate ──────────────────────────────────────────
-
-export const ID_METHODS: { value: IdMethod; label: string }[] = [
-  { value: 'national_id',      label: 'CNP / ID Național' },
-  { value: 'passport',         label: 'Pașaport' },
-  { value: 'drivers_license',  label: 'Permis de conducere' },
-];
-
-export const ID_PLACEHOLDERS: Record<IdMethod, string> = {
-  national_id:      '1234567890123',
-  passport:         'AB1234567',
-  drivers_license:  'B123456',
-};
-
-export const ID_MAX_LENGTHS: Record<IdMethod, number> = {
-  national_id:      13,
-  passport:         9,
-  drivers_license:  20,
-};
-
 // ─── Pași înregistrare ────────────────────────────────────────────────────────
 
 export const STEP_LABELS = ['Cont', 'Profil', 'Identitate'] as const;
