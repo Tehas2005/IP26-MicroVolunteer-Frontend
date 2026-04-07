@@ -224,13 +224,13 @@ type StepNavigationProps = {
 /** Butoanele de navigare Înapoi (←) și Continuă/Submit ale unui pas. */
 export function StepNavigation({ onBack, onNext, nextLabel, loading }: StepNavigationProps) {
   return (
-    <div style={{ display: 'flex', gap: 8, marginTop: '1rem' }}>
+    <div style={{ display: 'flex', gap: 8, marginTop: '1rem', maxWidth: '50%', marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
       {onBack && (
         <button
           type="button"
           onClick={onBack}
           style={{
-            flexShrink: 0, width: 46, height: 46,
+            flexShrink: 0, width: 40, height: 40,
             border: '1.5px solid #e2e8f0', borderRadius: 12,
             background: 'white', cursor: 'pointer',
             color: '#888', fontSize: 18,
@@ -243,7 +243,7 @@ export function StepNavigation({ onBack, onNext, nextLabel, loading }: StepNavig
         type="button"
         onClick={onNext}
         disabled={loading}
-        style={{ ...primaryButtonStyle(!!loading), marginTop: 0, flex: 1, height: 46 }}
+        style={{ ...primaryButtonStyle(!!loading), marginTop: 0, flex: 1, height: 40 }}
       >
         {loading ? 'Se procesează...' : `${nextLabel} →`}
       </button>
