@@ -1,11 +1,23 @@
-import EmailVerification from './EmailVerification'
+import React from 'react';
+import EmailVerification from './EmailVerification';
 
-function App() {
+/**
+ * Exemplu de utilizare a componentei EmailVerification
+ */
+const App: React.FC = () => {
+  const handleVerificationComplete = (code: string) => {
+    console.log('Cod verificat:', code);
+    // Aici ar fi logica de navigare sau salvare
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <EmailVerification />
+    <div>
+      <EmailVerification 
+        email="utilizator@exemplu.ro"
+        onVerificationComplete={handleVerificationComplete}
+      />
     </div>
-  )
-}
+  );
+};
 
-export default App
+export default App;

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ClipboardEvent } from 'react';
 import './EmailVerification.css';
 
 interface EmailVerificationProps {
@@ -14,6 +14,7 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({
   const [code, setCode] = useState<string[]>(['', '', '', '', '', '']);
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const handleInputChange = (index: number, value: string) => {
@@ -27,17 +28,29 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({
     setCode(newCode);
     setError('');
 
-    // TODO: Implementează auto-focus pe următorul input
-    // if (value && index < 5) {
-    //   inputRefs.current[index + 1]?.focus();
-    // }
+    // Auto-focus pe următorul input dacă există
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
   };
 
   const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
-    // TODO: Implementează logica de backspace pentru navigare înapoi
-    // if (e.key === 'Backspace' && !code[index] && index > 0) {
-    //   inputRefs.current[index - 1]?.focus();
-    // }
+    if (e.key === 'Backspace' && !code[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    
+    // Verifică dacă datele lipite sunt exact 6 cifre
+    if (/^\d{6}$/.test(pastedData)) {
+      const newCode = pastedData.split('');
+      setCode(newCode);
+      setError('');
+      inputRefs.current[5]?.focus();
+    }
   };
 
   const validateCode = (): boolean => {
@@ -64,13 +77,12 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({
     setIsLoading(true);
     setError('');
 
-    // TODO: Implementează simulare apel API (2-3 secunde)
-    // TODO: Implementează success screen după verificare
+    // Simulare apel API (2-3 secunde)
     setTimeout(() => {
       setIsLoading(false);
-      const fullCode = code.join('');
-      console.log('Cod verificat:', fullCode);
+      setIsSuccess(true);
       
+      const fullCode = code.join('');
       if (onVerificationComplete) {
         onVerificationComplete(fullCode);
       }
@@ -78,11 +90,35 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({
   };
 
   const handleResendEmail = () => {
-    // TODO: Implementează logica de retrimitere email
     setCode(['', '', '', '', '', '']);
     setError('');
+    inputRefs.current[0]?.focus();
+    // Aici ar fi logica de retrimitere email
     console.log('Email retrimis');
   };
+
+  if (isSuccess) {
+    return (
+      <div className="verification-container">
+        <div className="verification-card success-card">
+          <div className="success-icon">
+            <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+              <circle cx="40" cy="40" r="40" fill="#10B981" fillOpacity="0.1"/>
+              <circle cx="40" cy="40" r="30" fill="#10B981" fillOpacity="0.2"/>
+              <path d="M25 40L35 50L55 30" stroke="#10B981" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <h2 className="success-title">Verificare reușită!</h2>
+          <p className="success-message">
+            Contul tău a fost verificat cu succes. Poți acum să folosești toate funcționalitățile platformei.
+          </p>
+          <button className="success-button" onClick={() => console.log('Navigate to dashboard')}>
+            Continuă către platformă
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="verification-container">
@@ -119,7 +155,9 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({
                 value={digit}
                 onChange={(e) => handleInputChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
+                onPaste={index === 0 ? handlePaste : undefined}
                 className={`code-input ${error ? 'error' : ''}`}
+                autoFocus={index === 0}
               />
             ))}
           </div>
