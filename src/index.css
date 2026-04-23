@@ -1,1 +1,18 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', sans-serif;
+  }
+
+  body {
+    @apply min-h-screen bg-white text-brand-black antialiased;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+

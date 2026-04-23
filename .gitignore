@@ -1,11 +1,5 @@
-# Ecosistem Node
-node_modules/
-dist/
-dist-ssr/
-
-# Fisiere de sistem Mac
+node_modules
+dist
 .DS_Store
-
-# Fisiere locale de mediu
-.env
-.env.local
+.vscode/
+*.tsbuildinfo
