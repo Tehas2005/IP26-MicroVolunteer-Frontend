@@ -33,6 +33,10 @@ export function AnimatedCharacters({ mood, compact = false }: AnimatedCharacters
       }
 
       const rect = svg.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) {
+        return
+      }
+
       const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX
       const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY
 
