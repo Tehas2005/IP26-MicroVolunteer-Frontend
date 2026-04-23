@@ -139,6 +139,13 @@ const askForHelpStyles = `
     font-weight: 600;
   }
 
+  .ask-help-helper-text {
+    color: #6b7280;
+    font-size: 13px;
+    margin-top: 8px;
+    font-weight: 500;
+  }
+
   .ask-help-success-box {
     background-color: #dcfce7;
     color: #166534;
@@ -205,10 +212,73 @@ const askForHelpStyles = `
   }
 `
 
-function InformatiiSuplimentare() {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+const romaniaCities = [
+  'Alba Iulia',
+  'Alexandria',
+  'Arad',
+  'Bacău',
+  'Baia Mare',
+  'Bistrița',
+  'Botoșani',
+  'Brașov',
+  'Brăila',
+  'București',
+  'Buzău',
+  'Călărași',
+  'Cluj-Napoca',
+  'Constanța',
+  'Craiova',
+  'Deva',
+  'Drobeta-Turnu Severin',
+  'Focșani',
+  'Galați',
+  'Giurgiu',
+  'Iași',
+  'Miercurea-Ciuc',
+  'Oradea',
+  'Piatra-Neamț',
+  'Pitești',
+  'Ploiești',
+  'Râmnicu Vâlcea',
+  'Reșița',
+  'Satu Mare',
+  'Sfântu Gheorghe',
+  'Sibiu',
+  'Slatina',
+  'Slobozia',
+  'Suceava',
+  'Târgu Jiu',
+  'Târgu Mureș',
+  'Târgoviște',
+  'Timișoara',
+  'Tulcea',
+  'Vaslui',
+  'Zalău',
+]
 
-  const handleInput = () => {
+function InformatiiSuplimentare({
+  location,
+  onLocationChange,
+  onLocationBlur,
+  requestType,
+  showLocationError,
+  value,
+  onChange,
+}: {
+  location: string
+  onLocationChange: (value: string) => void
+  onLocationBlur: () => void
+  requestType: 'Online' | 'Fizic'
+  showLocationError: boolean
+  value: string
+  onChange: (value: string) => void
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const isPhysicalRequest = requestType === 'Fizic'
+
+  const handleInput = (nextValue: string) => {
+    onChange(nextValue)
+
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
@@ -220,13 +290,43 @@ function InformatiiSuplimentare() {
       className="ask-help-field-group"
       style={{ borderTop: '1px solid #e5e7eb', paddingTop: '28px', marginTop: '12px' }}
     >
-      <label className="ask-help-field-label">Descriere detaliată a situației</label>
+      <label className="ask-help-field-label">
+        Locație {isPhysicalRequest && <span className="ask-help-required-asterisk">*</span>}
+      </label>
+      <input
+        type="text"
+        list="orase-romania"
+        className="ask-help-text-input"
+        placeholder="Scrie orașul sau alege din listă"
+        value={location}
+        onChange={(event) => onLocationChange(event.target.value)}
+        onBlur={onLocationBlur}
+      />
+      <datalist id="orase-romania">
+        {romaniaCities.map((city) => (
+          <option key={city} value={city} />
+        ))}
+      </datalist>
+      {showLocationError ? (
+        <div className="ask-help-error-text">&nbsp;</div>
+      ) : (
+        <div className="ask-help-helper-text">
+          {isPhysicalRequest
+            ? 'Alege un oraș din România sau scrie-l manual.'
+            : 'Pentru cererile online, locația rămâne opțională.'}
+        </div>
+      )}
+
+      <label className="ask-help-field-label" style={{ marginTop: '18px' }}>
+        Informații suplimentare
+      </label>
       <textarea
         ref={textareaRef}
         className="ask-help-text-input"
-        placeholder="Oferă mai multe detalii despre cum te putem ajuta..."
+        placeholder="Adaugă informații suplimentare pentru cererea ta..."
         rows={3}
-        onInput={handleInput}
+        value={value}
+        onChange={(event) => handleInput(event.target.value)}
         style={{ resize: 'none', overflow: 'hidden', minHeight: '80px' }}
       />
     </div>
@@ -239,6 +339,9 @@ export function AskForHelpPage() {
   const [titlu, setTitlu] = useState('')
   const [requestType, setRequestType] = useState<'Online' | 'Fizic'>('Online')
   const [urgency, setUrgency] = useState<'Verde' | 'Galben' | 'Roșu'>('Verde')
+  const [location, setLocation] = useState('')
+  const [informatiiSuplimentare, setInformatiiSuplimentare] = useState('')
+  const [locationTouched, setLocationTouched] = useState(false)
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -246,6 +349,14 @@ export function AskForHelpPage() {
   useEffect(() => {
     setIsGuest(authIsGuest)
   }, [authIsGuest])
+
+  useEffect(() => {
+    if (error && (requestType === 'Online' || location.trim())) {
+      setError('')
+    }
+  }, [error, location, requestType])
+
+  const showLocationError = requestType === 'Fizic' && locationTouched && !location.trim()
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -257,22 +368,34 @@ export function AskForHelpPage() {
       return
     }
 
+    if (requestType === 'Fizic' && !location.trim()) {
+      setLocationTouched(true)
+      setError('Completează locația pentru cererile fizice.')
+      return
+    }
+
     const payload = {
       isGuest,
       titlu,
       requestType,
       urgency: isGuest ? null : urgency,
+      location: location.trim() || null,
+      informatiiSuplimentare,
     }
+
+    void payload
 
     setIsSubmitting(true)
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 1500))
-      console.log('JSON pregătit:', JSON.stringify(payload))
       setSuccessMessage('Cererea ta a fost trimisă voluntarilor!')
       setTitlu('')
       setRequestType('Online')
       setUrgency('Verde')
+      setLocation('')
+      setInformatiiSuplimentare('')
+      setLocationTouched(false)
     } finally {
       setIsSubmitting(false)
     }
@@ -359,7 +482,15 @@ export function AskForHelpPage() {
               </div>
             </div>
 
-            {!isGuest && <InformatiiSuplimentare />}
+            <InformatiiSuplimentare
+              location={location}
+              onLocationChange={setLocation}
+              onLocationBlur={() => setLocationTouched(true)}
+              requestType={requestType}
+              showLocationError={showLocationError}
+              value={informatiiSuplimentare}
+              onChange={setInformatiiSuplimentare}
+            />
 
             <button
               type="submit"
