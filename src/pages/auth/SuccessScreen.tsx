@@ -1,13 +1,9 @@
-import type { AuthMode } from '../auth/types';
+import type { AuthMode } from './types';
 
 type Props = {
   mode: AuthMode;
 };
 
-/**
- * Ecranul afișat după autentificare sau înregistrare reușită.
- * Include o bară de progres animată înainte de redirecționarea spre dashboard.
- */
 export function SuccessScreen({ mode }: Props) {
   return (
     <div style={{ textAlign: 'center', padding: '3rem 0' }}>

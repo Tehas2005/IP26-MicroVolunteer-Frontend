@@ -11,10 +11,6 @@ type Props = {
   isMobile: boolean;
 };
 
-/**
- * Pasul 2 din înregistrare — informații de profil.
- * Colectează: prenume, nume, telefon, oraș (opțional).
- */
 export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props) {
   const [touched, setTouched] = useState<Partial<Record<keyof RegisterFormData, boolean>>>({});
 
@@ -23,8 +19,8 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
 
   const errors = {
     firstName: !data.firstName.trim() ? 'Prenumele este obligatoriu.' : '',
-    lastName:  !data.lastName.trim()  ? 'Numele este obligatoriu.'    : '',
-    phone:     validatePhone(data.phone),
+    lastName: !data.lastName.trim() ? 'Numele este obligatoriu.' : '',
+    phone: validatePhone(data.phone),
   };
 
   function handleNext() {
@@ -35,7 +31,6 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
 
   return (
     <div>
-     
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 16px' }}>
         <Field label="Prenume" error={touched.firstName ? errors.firstName : ''}>
           <TextInput

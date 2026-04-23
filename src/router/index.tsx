@@ -7,6 +7,9 @@ import AuthPage from '@/pages/AuthPage'
 import HomePage from '@/pages/HomePage'
 
 export const router = createBrowserRouter([
+  { path: '/auth', element: <AuthPage mode="login" /> },
+  { path: '/auth/login', element: <AuthPage mode="login" /> },
+  { path: '/auth/signup', element: <AuthPage mode="signup" /> },
   {
     path: '/',
     element: <RootLayout />,
@@ -14,9 +17,6 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'cere-ajutor', element: <AskForHelpPage /> },
       { path: 'despre-noi', element: <AboutPage /> },
-      { path: 'auth', element: <AuthPage mode="login" /> },
-      { path: 'auth/login', element: <AuthPage mode="login" /> },
-      { path: 'auth/signup', element: <AuthPage mode="signup" /> },
     ],
   },
 ])

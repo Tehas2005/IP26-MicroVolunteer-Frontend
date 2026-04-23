@@ -1,16 +1,14 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import type { AuthMode } from '../types';
 import { inputStyle, primaryButtonStyle, STEP_LABELS } from '../constants';
 import { passwordScore } from '../validators';
-
-// ─── Field ────────────────────────────────────────────────────────────────────
 
 type FieldProps = {
   label: string;
   error?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
-/** Container pentru un câmp de formular: etichetă + input + mesaj de eroare. */
 export function Field({ label, error, children }: FieldProps) {
   return (
     <div style={{ marginBottom: '0.6rem' }}>
@@ -37,8 +35,6 @@ export function Field({ label, error, children }: FieldProps) {
   );
 }
 
-// ─── TextInput ────────────────────────────────────────────────────────────────
-
 type TextInputProps = {
   id: string;
   type?: string;
@@ -50,7 +46,6 @@ type TextInputProps = {
   maxLength?: number;
 };
 
-/** Input text simplu cu border animat și suport pentru validare. */
 export function TextInput({
   id, type = 'text', value, onChange, onBlur, placeholder, hasError, maxLength,
 }: TextInputProps) {
@@ -70,8 +65,6 @@ export function TextInput({
   );
 }
 
-// ─── PasswordInput ────────────────────────────────────────────────────────────
-
 type PasswordInputProps = {
   id: string;
   value: string;
@@ -81,7 +74,6 @@ type PasswordInputProps = {
   hasError?: boolean;
 };
 
-/** Input parolă cu buton de toggle vizibilitate. */
 export function PasswordInput({ id, value, onChange, onBlur, placeholder, hasError }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -114,12 +106,9 @@ export function PasswordInput({ id, value, onChange, onBlur, placeholder, hasErr
   );
 }
 
-// ─── PasswordStrength ─────────────────────────────────────────────────────────
-
 const SCORE_COLORS = ['#e53e3e', '#e53e3e', '#d97706', '#059669', '#047857'];
 const SCORE_LABELS = ['Slabă', 'Slabă', 'Medie', 'Bună', 'Puternică'];
 
-/** Bara vizuală de putere a parolei (apare doar când există input). */
 export function PasswordStrength({ password }: { password: string }) {
   if (!password) return null;
 
@@ -144,9 +133,6 @@ export function PasswordStrength({ password }: { password: string }) {
   );
 }
 
-// ─── ErrorBanner ──────────────────────────────────────────────────────────────
-
-/** Banner roșu pentru erori venite de la API. */
 export function ErrorBanner({ message }: { message: string }) {
   return (
     <div
@@ -162,14 +148,11 @@ export function ErrorBanner({ message }: { message: string }) {
   );
 }
 
-// ─── StepBar ──────────────────────────────────────────────────────────────────
-
-/** Bara de progres pentru cei 3 pași ai înregistrării. */
 export function StepBar({ currentStep }: { currentStep: number }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.9rem' }}>
       {STEP_LABELS.map((label, i) => {
-        const isDone   = i < currentStep;
+        const isDone = i < currentStep;
         const isActive = i === currentStep;
         return (
           <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < STEP_LABELS.length - 1 ? 1 : 0 }}>
@@ -212,8 +195,6 @@ export function StepBar({ currentStep }: { currentStep: number }) {
   );
 }
 
-// ─── StepNavigation ───────────────────────────────────────────────────────────
-
 type StepNavigationProps = {
   onBack?: () => void;
   onNext: () => void;
@@ -221,7 +202,6 @@ type StepNavigationProps = {
   loading?: boolean;
 };
 
-/** Butoanele de navigare Înapoi (←) și Continuă/Submit ale unui pas. */
 export function StepNavigation({ onBack, onNext, nextLabel, loading }: StepNavigationProps) {
   return (
     <div style={{ display: 'flex', gap: 8, marginTop: '1rem', maxWidth: '50%', marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
@@ -251,16 +231,11 @@ export function StepNavigation({ onBack, onNext, nextLabel, loading }: StepNavig
   );
 }
 
-// ─── TabSwitcher ──────────────────────────────────────────────────────────────
-
-import type { AuthMode } from '../types';
-
 type TabSwitcherProps = {
   mode: AuthMode;
   setMode: (mode: AuthMode) => void;
 };
 
-/** Tab-urile de comutare între Log In și Sign Up. */
 export function TabSwitcher({ mode, setMode }: TabSwitcherProps) {
   return (
     <div

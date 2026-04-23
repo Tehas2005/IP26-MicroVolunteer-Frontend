@@ -6,31 +6,20 @@ import { Step3Identity } from './steps/Step3Identity';
 import { STEP_TITLES } from './constants';
 import type { RegisterFormData } from './types';
 
-// TODO: înlocuiește cu fetcher-ul real când e disponibil.
-// import { registerFetcher } from '@/sdk/AuthFetcher';
-
 const INITIAL_FORM_DATA: RegisterFormData = {
   email: '', password: '', confirm: '',
   firstName: '', lastName: '', phone: '', city: '',
 };
 
 type Props = {
-  onSuccess: () => void;
+  onSuccess: (payload: RegisterFormData) => void;
   onSwitch: () => void;
   isMobile: boolean;
 };
 
-/**
- * Flow-ul complet de înregistrare în 3 pași:
- *   1. Cont       — email + parolă
- *   2. Profil     — nume, telefon, oraș
- *   3. Identitate — verificare prin cod OTP (email sau telefon)
- *
- * TODO: conectează `handleFinalSubmit` cu fetcher-ul real când e disponibil.
- */
 export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
-  const [step,     setStep]     = useState(0);
-  const [loading,  setLoading]  = useState(false);
+  const [step, setStep] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [formData, setFormData] = useState<RegisterFormData>(INITIAL_FORM_DATA);
 
@@ -38,29 +27,15 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
     setFormData((prev) => ({ ...prev, [key]: value }));
   }
 
-  /**
-   * Apelat după verificarea OTP reușită.
-   * Trimite datele complete ale utilizatorului la backend.
-   */
   async function handleFinalSubmit() {
     setLoading(true);
     setApiError('');
     try {
-      // TODO: înlocuiește cu:
-      // await registerFetcher({
-      //   email:     formData.email,
-      //   password:  formData.password,
-      //   firstName: formData.firstName,
-      //   lastName:  formData.lastName,
-      //   phone:     formData.phone,
-      //   city:      formData.city,
-      // });
-      throw new Error('Fetcher-ul de înregistrare nu este conectat încă.');
+      onSuccess(formData);
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Eroare neașteptată. Încearcă din nou.');
     } finally {
       setLoading(false);
-      onSuccess();
     }
   }
 
