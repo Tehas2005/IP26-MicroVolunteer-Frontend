@@ -5,23 +5,29 @@ type Props = {
 };
 
 export function SuccessScreen({ mode }: Props) {
+  const isRegister = mode === 'register';
+
   return (
     <div style={{ textAlign: 'center', padding: '3rem 0' }}>
       <div
         style={{
           width: 64, height: 64, borderRadius: '50%',
-          background: '#f0fdf4', border: '2px solid #86efac',
+          background: isRegister ? 'rgba(94, 149, 98, 0.12)' : '#f0fdf4',
+          border: isRegister ? '2px solid rgba(94, 149, 98, 0.3)' : '2px solid #86efac',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           margin: '0 auto 1rem', fontSize: 28,
+          color: isRegister ? '#5e9562' : 'inherit',
         }}
       >
         ✓
       </div>
       <h2 style={{ margin: '0 0 0.5rem', fontSize: 22, fontWeight: 700, color: '#1a1a1a' }}>
-        {mode === 'register' ? 'Cont creat!' : 'Bun venit înapoi!'}
+        {isRegister ? 'Verificare reușită!' : 'Bun venit înapoi!'}
       </h2>
       <p style={{ color: '#888', fontSize: 14, margin: '0 0 1.5rem' }}>
-        Se pregătește dashboard-ul tău...
+        {isRegister
+          ? 'Contul tău a fost verificat cu succes. Poți acum să folosești toate funcționalitățile platformei.'
+          : 'Se pregătește dashboard-ul tău...'}
       </p>
       <div
         style={{
