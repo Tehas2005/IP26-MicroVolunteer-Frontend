@@ -3,30 +3,21 @@ import { Field, TextInput, PasswordInput, ErrorBanner } from './components';
 import { validateEmail } from './validators';
 import { primaryButtonStyle } from './constants';
 
-// Legarea la backend se va face prin fetchers — placeholder până atunci.
-// import { loginFetcher } from '@/sdk/AuthFetcher';
-
 type Props = {
-  onSuccess: () => void;
+  onSuccess: (payload: { email: string }) => void;
   onSwitch: () => void;
 };
 
-/**
- * Formularul de autentificare.
- * Apelează API-ul de login și stochează token-ul la succes.
- *
- * TODO: înlocuiește `apiLogin` cu fetcher-ul real când e disponibil.
- */
 export function LoginForm({ onSuccess, onSwitch }: Props) {
-  const [email,    setEmail]    = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
-  const [touched,  setTouched]  = useState<Record<string, boolean>>({});
-  const [loading,  setLoading]  = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
 
   const errors = {
-    email:    validateEmail(email),
+    email: validateEmail(email),
     password: password ? '' : 'Parola obligatorie.',
   };
 
@@ -37,11 +28,10 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
     setLoading(true);
     setApiError('');
     try {
-      // TODO: înlocuiește cu: const res = await loginFetcher({ email, password, remember });
-      // if (res.success) onSuccess();
-      onSuccess(); // Placeholder până când se implementează fetcher-ul
-    } catch (err: any) {
-      setApiError(err.message);
+      void remember;
+      onSuccess({ email });
+    } catch (err: unknown) {
+      setApiError(err instanceof Error ? err.message : 'Autentificarea a eșuat.');
     } finally {
       setLoading(false);
     }
@@ -125,8 +115,6 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
     </div>
   );
 }
-
-// ─── Iconițe ──────────────────────────────────────────────────────────────────
 
 function GoogleIcon() {
   return (

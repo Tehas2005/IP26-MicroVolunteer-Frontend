@@ -1,9 +1,5 @@
 import { useEffect, useState } from 'react';
 
-/**
- * Returnează `true` dacă lățimea ferestrei este mai mică de 768px.
- * Se actualizează automat la resize.
- */
 export function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 

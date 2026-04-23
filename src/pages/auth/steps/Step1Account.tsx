@@ -9,10 +9,6 @@ type Props = {
   onNext: () => void;
 };
 
-/**
- * Pasul 1 din înregistrare — credențiale de acces.
- * Colectează: email, parolă, confirmare parolă.
- */
 export function Step1Account({ data, onChange, onNext }: Props) {
   const [touched, setTouched] = useState<Partial<Record<keyof RegisterFormData, boolean>>>({});
 
@@ -20,9 +16,9 @@ export function Step1Account({ data, onChange, onNext }: Props) {
     setTouched((prev) => ({ ...prev, [key]: true }));
 
   const errors = {
-    email:    validateEmail(data.email),
+    email: validateEmail(data.email),
     password: validatePassword(data.password),
-    confirm:  validateConfirm(data.password, data.confirm),
+    confirm: validateConfirm(data.password, data.confirm),
   };
 
   function handleNext() {

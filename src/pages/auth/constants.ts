@@ -1,5 +1,3 @@
-// ─── Pași înregistrare ────────────────────────────────────────────────────────
-
 export const STEP_LABELS = ['Cont', 'Profil', 'Identitate'] as const;
 
 export const STEP_TITLES = [
@@ -7,8 +5,6 @@ export const STEP_TITLES = [
   'Profilul tău',
   'Verificare identitate',
 ] as const;
-
-// ─── Stiluri refolosite (inline styles) ──────────────────────────────────────
 
 export const inputStyle = (
   focused: boolean,

@@ -1,5 +1,3 @@
-// ─── Validatori — returnează string gol dacă valoarea e validă ────────────────
-
 export function validateEmail(value: string): string {
   if (!value) return 'Email obligatoriu.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Email invalid.';
@@ -27,7 +25,6 @@ export function validatePhone(value: string): string {
   return '';
 }
 
-/** Calculează scorul de putere al parolei (0–4). */
 export function passwordScore(password: string): number {
   return [
     password.length >= 8,
