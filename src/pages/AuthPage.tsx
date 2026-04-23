@@ -15,6 +15,10 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
   const { setAuthSession } = useAuthStore()
   const [email, setEmail] = useState('ana@example.com')
   const [password, setPassword] = useState('Parola123')
+  const [signupName, setSignupName] = useState('')
+  const [signupEmail, setSignupEmail] = useState('')
+  const [signupPassword, setSignupPassword] = useState('')
+  const [signupPasswordConfirmation, setSignupPasswordConfirmation] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function handleMockLogin() {
@@ -57,6 +61,7 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
 
           {mode === 'login' ? (
             <form
+              key="login-form"
               className="mt-8 space-y-4"
               onSubmit={(event) => {
                 event.preventDefault()
@@ -114,6 +119,7 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
             </form>
           ) : (
             <form
+              key="signup-form"
               className="mt-8 space-y-4"
               onSubmit={(event) => {
                 event.preventDefault()
@@ -121,25 +127,44 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
             >
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-brand-black">Nume</span>
-                <Input aria-label="Nume" placeholder="Ana Popescu" />
+                <Input
+                  aria-label="Nume"
+                  onChange={(event) => setSignupName(event.target.value)}
+                  placeholder="Ana Popescu"
+                  value={signupName}
+                />
               </label>
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-brand-black">Email</span>
-                <Input aria-label="Email" placeholder="ana@example.com" type="email" />
+                <Input
+                  aria-label="Email"
+                  onChange={(event) => setSignupEmail(event.target.value)}
+                  placeholder="ana@example.com"
+                  type="email"
+                  value={signupEmail}
+                />
               </label>
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-brand-black">Parolă</span>
-                <Input aria-label="Parolă" placeholder="Parola123" type="password" />
+                <Input
+                  aria-label="Parolă"
+                  onChange={(event) => setSignupPassword(event.target.value)}
+                  placeholder="Parola123"
+                  type="password"
+                  value={signupPassword}
+                />
               </label>
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-brand-black">Confirmă parola</span>
                 <Input
                   aria-label="Confirmă parola"
+                  onChange={(event) => setSignupPasswordConfirmation(event.target.value)}
                   placeholder="Parola123"
                   type="password"
+                  value={signupPasswordConfirmation}
                 />
               </label>
 
