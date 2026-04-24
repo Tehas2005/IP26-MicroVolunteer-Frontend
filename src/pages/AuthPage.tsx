@@ -115,7 +115,7 @@ function MobileLayout({ mode, formContent }: LayoutProps) {
         style={{
           position: 'fixed', inset: 0, background: 'white',
           fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', overflowY: 'auto',
         }}
       >
         <div
@@ -157,6 +157,7 @@ function DesktopLayout({ mode, formContent }: LayoutProps) {
         style={{
           position: 'fixed', inset: 0, display: 'flex', background: 'white',
           fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          overflowY: 'auto',
         }}
       >
         <div
@@ -165,6 +166,8 @@ function DesktopLayout({ mode, formContent }: LayoutProps) {
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
             padding: '2rem', overflow: 'hidden',
+            minHeight: '100vh',
+            flexShrink: 0,
           }}
         >
           <div className="character-container" style={{ width: '100%', maxWidth: 400, flex: 1, display: 'flex', alignItems: 'center' }}>
@@ -178,8 +181,11 @@ function DesktopLayout({ mode, formContent }: LayoutProps) {
           style={{
             width: '50%',
             display: 'flex', flexDirection: 'column',
-            justifyContent: 'center',
-            padding: '1.5rem 2.5rem', overflow: 'hidden',
+            justifyContent: 'flex-start',
+            padding: '2.5rem 2.5rem 3rem',
+            minHeight: '100vh',
+            overflowY: 'auto',
+            flexShrink: 0,
           }}
         >
           {formContent}
