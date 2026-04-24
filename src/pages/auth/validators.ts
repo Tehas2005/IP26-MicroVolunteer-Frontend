@@ -20,8 +20,7 @@ export function validateConfirm(password: string, confirm: string): string {
 
 export function validatePhone(value: string): string {
   if (!value.trim()) return 'Telefonul este obligatoriu.';
-  if (!/^(\+4|0)\d{9}$/.test(value.replace(/\s/g, '')))
-    return 'Format invalid (07XXXXXXXX).';
+  if (!/^0\d{9}$/.test(value)) return 'Format invalid (07XXXXXXXX).';
   return '';
 }
 

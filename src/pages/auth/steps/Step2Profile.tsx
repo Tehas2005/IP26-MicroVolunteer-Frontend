@@ -36,7 +36,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           <TextInput
             id="firstName"
             value={data.firstName}
-            onChange={(v) => onChange('firstName', v)}
+            onChange={(v) => onChange('firstName', v.replace(/[^a-zA-ZăâîșțĂÂÎȘȚ\s-]/g, ''))}
             onBlur={touch('firstName')}
             placeholder="Ion"
             hasError={touched.firstName && !!errors.firstName}
@@ -46,7 +46,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           <TextInput
             id="lastName"
             value={data.lastName}
-            onChange={(v) => onChange('lastName', v)}
+            onChange={(v) => onChange('lastName', v.replace(/[^a-zA-ZăâîșțĂÂÎȘȚ\s-]/g, ''))}
             onBlur={touch('lastName')}
             placeholder="Popescu"
             hasError={touched.lastName && !!errors.lastName}
@@ -58,7 +58,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           id="phone"
           type="tel"
           value={data.phone}
-          onChange={(v) => onChange('phone', v)}
+          onChange={(v) => onChange('phone', v.replace(/\D/g, ''))}
           onBlur={touch('phone')}
           placeholder="07XXXXXXXX"
           hasError={touched.phone && !!errors.phone}
@@ -68,7 +68,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
         <TextInput
           id="city"
           value={data.city}
-          onChange={(v) => onChange('city', v)}
+          onChange={(v) => onChange('city', v.replace(/[^a-zA-ZăâîșțĂÂÎȘȚ\s-]/g, ''))}
           placeholder="Cluj-Napoca"
         />
       </Field>
