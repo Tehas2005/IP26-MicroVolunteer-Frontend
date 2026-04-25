@@ -1,34 +1,58 @@
-import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { type ReactNode, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/store/authStore'
+
+import Characters from './auth/Character'
+import { LoginForm } from './auth/LoginForm'
+import { RegisterFlow } from './auth/RegisterFlow'
+import { SuccessScreen } from './auth/SuccessScreen'
+import { TabSwitcher } from './auth/components'
+import { useIsMobile } from './auth/hooks/useIsMobile'
+import type { AuthMode, RegisterFormData } from './auth/types'
+
+const GLOBAL_STYLES = `
+  html, body {
+    margin: 0 !important; padding: 0 !important;
+    width: 100% !important; height: 100% !important;
+    overflow: hidden;
+  }
+  #root, [data-reactroot] {
+    width: 100% !important; height: 100% !important;
+    margin: 0 !important; padding: 0 !important;
+  }
+  @keyframes mv-spin     { to { transform: rotate(360deg); } }
+  @keyframes mv-progress { from { transform: scaleX(0); transform-origin: left; }
+                           to   { transform: scaleX(1); transform-origin: left; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  input::placeholder { color: #ccc; }
+  select option { color: #1a1a1a; }
+`
 
 export interface AuthPageProps {
   mode?: 'login' | 'signup'
 }
 
-export function AuthPage({ mode = 'login' }: AuthPageProps) {
+export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const { setAuthSession } = useAuthStore()
-  const [email, setEmail] = useState('ana@example.com')
-  const [password, setPassword] = useState('Parola123')
-  const [signupName, setSignupName] = useState('')
-  const [signupEmail, setSignupEmail] = useState('')
-  const [signupPassword, setSignupPassword] = useState('')
-  const [signupPasswordConfirmation, setSignupPasswordConfirmation] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [mode, setMode] = useState<AuthMode>(routeMode === 'signup' ? 'register' : 'login')
+  const [success, setSuccess] = useState(false)
 
-  async function handleMockLogin() {
-    setIsSubmitting(true)
+  useEffect(() => {
+    setMode(routeMode === 'signup' ? 'register' : 'login')
+    setSuccess(false)
+  }, [routeMode])
 
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, 900)
-    })
+  function syncMode(nextMode: AuthMode) {
+    setMode(nextMode)
+    navigate(nextMode === 'login' ? '/auth/login' : '/auth/signup')
+  }
 
-    const trimmedEmail = email.trim() || 'ana@example.com'
+  function handleLoginSuccess(payload: { email: string }) {
+    const trimmedEmail = payload.email.trim() || 'utilizator@example.com'
     const inferredName = trimmedEmail.split('@')[0].replace(/[._-]+/g, ' ')
     const normalizedName =
       inferredName.charAt(0).toUpperCase() + inferredName.slice(1) || 'Utilizator'
@@ -36,157 +60,181 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
     setAuthSession({
       token: 'demo-session-token',
       user: {
-        id: 'demo-user',
+        id: 'demo-login-user',
         name: normalizedName,
         email: trimmedEmail,
       },
     })
 
-    setIsSubmitting(false)
-    navigate('/')
+    setSuccess(true)
+    setTimeout(() => navigate('/'), 2700)
   }
 
+  function handleRegisterSuccess(payload: RegisterFormData) {
+    const fullName = `${payload.firstName} ${payload.lastName}`.trim() || 'Utilizator nou'
+
+    setAuthSession({
+      token: 'demo-session-token',
+      user: {
+        id: 'demo-register-user',
+        name: fullName,
+        email: payload.email.trim() || 'utilizator@example.com',
+      },
+    })
+
+    setSuccess(true)
+    setTimeout(() => navigate('/'), 2700)
+  }
+
+  const formContent = success ? (
+    <SuccessScreen mode={mode} />
+  ) : (
+    <>
+      <TabSwitcher mode={mode} setMode={syncMode} />
+      {mode === 'login' ? (
+        <>
+          <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>
+            Bun venit inapoi!
+          </h1>
+          <LoginForm onSuccess={handleLoginSuccess} onSwitch={() => syncMode('register')} />
+        </>
+      ) : (
+        <RegisterFlow onSuccess={handleRegisterSuccess} onSwitch={() => syncMode('login')} isMobile={isMobile} />
+      )}
+    </>
+  )
+
   return (
-    <section className="bg-brand-cream">
-      <div className="mx-auto flex min-h-[calc(100vh-148px)] w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
-        <div className="w-full max-w-xl rounded-[32px] border border-brand-gray bg-white p-6 shadow-sm sm:p-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-purple">
-              {mode === 'login' ? 'Autentificare' : 'Înregistrare'}
-            </p>
-            <h1 className="mt-3 text-3xl font-bold text-brand-black sm:text-4xl">
-              {mode === 'login' ? 'Log In' : 'Sign Up'}
-            </h1>
-          </div>
-
-          {mode === 'login' ? (
-            <form
-              key="login-form"
-              className="mt-8 space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void handleMockLogin()
-              }}
-            >
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-brand-black">Email</span>
-                <Input
-                  aria-label="Email"
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="ana@example.com"
-                  type="email"
-                  value={email}
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-brand-black">Parolă</span>
-                <Input
-                  aria-label="Parolă"
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Parola123"
-                  type="password"
-                  value={password}
-                />
-              </label>
-
-              <Button
-                className="mt-2 w-full"
-                disabled={isSubmitting || !password.trim()}
-                size="lg"
-                type="submit"
-                variant="primary"
-              >
-                {isSubmitting ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Se autentifică...
-                  </span>
-                ) : (
-                  'Log In'
-                )}
-              </Button>
-
-              <p className="pt-2 text-center text-sm text-brand-gray-text">
-                Nu ai cont?{' '}
-                <Link
-                  className="font-semibold text-brand-purple hover:text-brand-purple-dark"
-                  to="/auth/signup"
-                >
-                  Sign Up
-                </Link>
-              </p>
-            </form>
-          ) : (
-            <form
-              key="signup-form"
-              className="mt-8 space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault()
-              }}
-            >
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-brand-black">Nume</span>
-                <Input
-                  aria-label="Nume"
-                  onChange={(event) => setSignupName(event.target.value)}
-                  placeholder="Ana Popescu"
-                  value={signupName}
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-brand-black">Email</span>
-                <Input
-                  aria-label="Email"
-                  onChange={(event) => setSignupEmail(event.target.value)}
-                  placeholder="ana@example.com"
-                  type="email"
-                  value={signupEmail}
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-brand-black">Parolă</span>
-                <Input
-                  aria-label="Parolă"
-                  onChange={(event) => setSignupPassword(event.target.value)}
-                  placeholder="Parola123"
-                  type="password"
-                  value={signupPassword}
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-brand-black">Confirmă parola</span>
-                <Input
-                  aria-label="Confirmă parola"
-                  onChange={(event) => setSignupPasswordConfirmation(event.target.value)}
-                  placeholder="Parola123"
-                  type="password"
-                  value={signupPasswordConfirmation}
-                />
-              </label>
-
-              <Button className="mt-2 w-full" size="lg" type="submit" variant="auth">
-                Sign Up
-              </Button>
-
-              <p className="pt-2 text-center text-sm text-brand-gray-text">
-                Ai deja cont?{' '}
-                <Link
-                  className="font-semibold text-brand-purple hover:text-brand-purple-dark"
-                  to="/auth/login"
-                >
-                  Log In
-                </Link>
-              </p>
-            </form>
-          )}
-        </div>
-      </div>
-    </section>
+    <ResponsiveLayout
+      formContent={formContent}
+      isMobile={isMobile}
+      mode={mode}
+      onGoHome={() => navigate('/')}
+    />
   )
 }
 
-export default AuthPage
+type LayoutProps = {
+  mode: AuthMode
+  formContent: ReactNode
+  isMobile: boolean
+  onGoHome: () => void
+}
+
+function ResponsiveLayout({ mode, formContent, isMobile, onGoHome }: LayoutProps) {
+  return (
+    <>
+      <style>{`${GLOBAL_STYLES}
+        button:not(:disabled):hover { opacity: 0.85; }
+        @media (max-width: 1440px) and (min-width: 768px) {
+          .character-container { max-width: 150px !important; }
+        }
+      `}</style>
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          background: 'white',
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          overflowY: 'auto',
+        }}
+      >
+        <div
+          style={{
+            width: isMobile ? '100%' : '50%',
+            background: '#f5f3ff',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: isMobile ? 'stretch' : 'center',
+            justifyContent: isMobile ? 'flex-end' : 'center',
+            padding: isMobile ? '1rem 1.5rem 0' : '2rem',
+            overflow: 'hidden',
+            minHeight: isMobile ? 130 : '100vh',
+            flexShrink: 0,
+          }}
+        >
+          {isMobile ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'space-between',
+                minHeight: 130,
+                gap: 16,
+              }}
+            >
+              <div style={{ paddingBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <LogoIcon />
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a' }}>Micro-Volunteer</span>
+                </div>
+                <p style={{ fontSize: 11, color: '#a78bfa' }}>Ajutor local, rapid si de incredere</p>
+              </div>
+              <div style={{ width: 160, height: 110, flexShrink: 0 }}>
+                <Characters compact mode={mode} />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div
+                className="character-container"
+                style={{ width: '100%', maxWidth: 400, flex: 1, display: 'flex', alignItems: 'center' }}
+              >
+                <Characters mode={mode} />
+              </div>
+              <p style={{ fontSize: 11, color: '#c4b5fd', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                Micro-Volunteer Crisis Router
+              </p>
+            </>
+          )}
+        </div>
+        <div
+          style={{
+            width: isMobile ? '100%' : '50%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-start',
+            padding: isMobile ? '1.5rem 1.5rem 2rem' : '2.5rem 2.5rem 3rem',
+            minHeight: isMobile ? 'auto' : '100vh',
+            overflowY: 'auto',
+            flexShrink: 0,
+          }}
+        >
+          <Button className="mb-6 w-fit" onClick={onGoHome} variant="ghost">
+            Inapoi pe pagina principala
+          </Button>
+          {formContent}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function LogoIcon() {
+  return (
+    <div
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 7,
+        background: '#7C3AED',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <svg fill="none" height="14" viewBox="0 0 22 22" width="14">
+        <circle cx="11" cy="11" fill="white" opacity="0.9" r="4" />
+        <path
+          d="M11 3L19 7L19 15L11 19L3 15L3 7Z"
+          fill="none"
+          opacity="0.6"
+          stroke="white"
+          strokeWidth="1.5"
+        />
+      </svg>
+    </div>
+  )
+}
