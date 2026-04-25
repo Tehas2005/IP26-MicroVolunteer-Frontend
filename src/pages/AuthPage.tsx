@@ -203,7 +203,7 @@ function ResponsiveLayout({ mode, formContent, isMobile, onGoHome }: LayoutProps
           }}
         >
           <Button className="mb-6 w-fit" onClick={onGoHome} variant="ghost">
-            Inapoi pe pagina principala
+            ← Inapoi pe pagina principala
           </Button>
           {formContent}
         </div>
