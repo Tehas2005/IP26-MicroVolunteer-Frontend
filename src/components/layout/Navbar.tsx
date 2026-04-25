@@ -14,7 +14,6 @@ interface NavAction {
 }
 
 const navActions: NavAction[] = [
-  { label: 'Acasă', path: '/', type: 'link' },
   { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link' },
   { label: 'Despre Noi', path: '/despre-noi', type: 'link' },
   { label: 'Log In', path: '/auth/login', type: 'ghost' },
