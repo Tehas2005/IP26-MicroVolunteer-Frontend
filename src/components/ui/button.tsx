@@ -10,8 +10,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        primary: "bg-brand-black text-white hover:opacity-90",
-        auth: "bg-brand-purple text-white hover:bg-brand-purple-dark",
+        primary:
+          "bg-brand-black text-white hover:bg-brand-black/90 focus-visible:ring-brand-purple/30",
+        auth: "bg-brand-purple text-white hover:bg-brand-purple/90 focus-visible:ring-brand-purple/30",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
