@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { useAuthStore } from '@/store/authStore'
 
@@ -640,6 +640,15 @@ export function AskForHelpPage() {
     setIsGuest(authIsGuest)
   }, [authIsGuest])
 
+  const clearAudio = useCallback(() => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl)
+    }
+
+    setAudioUrl(null)
+    setRecordingError('')
+  }, [audioUrl])
+
   useEffect(() => {
     if (error && (requestType === 'Online' || location.trim())) {
       setError('')
@@ -662,7 +671,7 @@ export function AskForHelpPage() {
         activeStreamRef.current = null
       }
     }
-  }, [isGuest])
+  }, [clearAudio, isGuest])
 
   useEffect(() => {
     return () => {
@@ -710,15 +719,6 @@ export function AskForHelpPage() {
       event.preventDefault()
       addCustomSkill()
     }
-  }
-
-  const clearAudio = () => {
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl)
-    }
-
-    setAudioUrl(null)
-    setRecordingError('')
   }
 
   const startRecording = async () => {
