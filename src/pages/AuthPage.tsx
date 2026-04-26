@@ -1,13 +1,16 @@
-import { type ReactNode, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Characters from './auth/Character';
-import { LoginForm } from './auth/LoginForm';
-import { RegisterFlow } from './auth/RegisterFlow';
-import { SuccessScreen } from './auth/SuccessScreen';
-import { TabSwitcher } from './auth/components';
-import { useIsMobile } from './auth/hooks/useIsMobile';
-import type { AuthMode, RegisterFormData } from './auth/types';
-import { useAuthStore } from '@/store/authStore';
+import { type ReactNode, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+
+import { Button } from '@/components/ui/button'
+import { useAuthStore } from '@/store/authStore'
+
+import Characters from './auth/Character'
+import { LoginForm } from './auth/LoginForm'
+import { RegisterFlow } from './auth/RegisterFlow'
+import { SuccessScreen } from './auth/SuccessScreen'
+import { TabSwitcher } from './auth/components'
+import { useIsMobile } from './auth/hooks/useIsMobile'
+import type { AuthMode, RegisterFormData } from './auth/types'
 
 const GLOBAL_STYLES = `
   html, body {
@@ -25,34 +28,34 @@ const GLOBAL_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   input::placeholder { color: #ccc; }
   select option { color: #1a1a1a; }
-`;
+`
 
 export interface AuthPageProps {
-  mode?: 'login' | 'signup';
+  mode?: 'login' | 'signup'
 }
 
 export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
-  const navigate = useNavigate();
-  const isMobile = useIsMobile();
-  const { setAuthSession } = useAuthStore();
-  const [mode, setMode] = useState<AuthMode>(routeMode === 'signup' ? 'register' : 'login');
-  const [success, setSuccess] = useState(false);
+  const navigate = useNavigate()
+  const isMobile = useIsMobile()
+  const { setAuthSession } = useAuthStore()
+  const [mode, setMode] = useState<AuthMode>(routeMode === 'signup' ? 'register' : 'login')
+  const [success, setSuccess] = useState(false)
 
   useEffect(() => {
-    setMode(routeMode === 'signup' ? 'register' : 'login');
-    setSuccess(false);
-  }, [routeMode]);
+    setMode(routeMode === 'signup' ? 'register' : 'login')
+    setSuccess(false)
+  }, [routeMode])
 
   function syncMode(nextMode: AuthMode) {
-    setMode(nextMode);
-    navigate(nextMode === 'login' ? '/auth/login' : '/auth/signup');
+    setMode(nextMode)
+    navigate(nextMode === 'login' ? '/auth/login' : '/auth/signup')
   }
 
   function handleLoginSuccess(payload: { email: string }) {
-    const trimmedEmail = payload.email.trim() || 'utilizator@example.com';
-    const inferredName = trimmedEmail.split('@')[0].replace(/[._-]+/g, ' ');
+    const trimmedEmail = payload.email.trim() || 'utilizator@example.com'
+    const inferredName = trimmedEmail.split('@')[0].replace(/[._-]+/g, ' ')
     const normalizedName =
-      inferredName.charAt(0).toUpperCase() + inferredName.slice(1) || 'Utilizator';
+      inferredName.charAt(0).toUpperCase() + inferredName.slice(1) || 'Utilizator'
 
     setAuthSession({
       token: 'demo-session-token',
@@ -61,14 +64,14 @@ export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
         name: normalizedName,
         email: trimmedEmail,
       },
-    });
+    })
 
-    setSuccess(true);
-    setTimeout(() => navigate('/'), 2700);
+    setSuccess(true)
+    setTimeout(() => navigate('/'), 2700)
   }
 
   function handleRegisterSuccess(payload: RegisterFormData) {
-    const fullName = `${payload.firstName} ${payload.lastName}`.trim() || 'Utilizator nou';
+    const fullName = `${payload.firstName} ${payload.lastName}`.trim() || 'Utilizator nou'
 
     setAuthSession({
       token: 'demo-session-token',
@@ -77,10 +80,10 @@ export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
         name: fullName,
         email: payload.email.trim() || 'utilizator@example.com',
       },
-    });
+    })
 
-    setSuccess(true);
-    setTimeout(() => navigate('/'), 2700);
+    setSuccess(true)
+    setTimeout(() => navigate('/'), 2700)
   }
 
   const formContent = success ? (
@@ -91,7 +94,7 @@ export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
       {mode === 'login' ? (
         <>
           <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>
-            Bun venit înapoi!
+            Bun venit inapoi!
           </h1>
           <LoginForm onSuccess={handleLoginSuccess} onSwitch={() => syncMode('register')} />
         </>
@@ -99,17 +102,29 @@ export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
         <RegisterFlow onSuccess={handleRegisterSuccess} onSwitch={() => syncMode('login')} isMobile={isMobile} />
       )}
     </>
-  );
+  )
 
-  return <ResponsiveLayout mode={mode} formContent={formContent} isMobile={isMobile} />;
+  return (
+    <ResponsiveLayout
+      formContent={formContent}
+      isMobile={isMobile}
+      mode={mode}
+      onGoHome={() => navigate('/')}
+    />
+  )
 }
 
-type LayoutProps = { mode: AuthMode; formContent: ReactNode; isMobile: boolean };
+type LayoutProps = {
+  mode: AuthMode
+  formContent: ReactNode
+  isMobile: boolean
+  onGoHome: () => void
+}
 
-function ResponsiveLayout({ mode, formContent, isMobile }: LayoutProps) {
+function ResponsiveLayout({ mode, formContent, isMobile, onGoHome }: LayoutProps) {
   return (
     <>
-      <style>{GLOBAL_STYLES + `
+      <style>{`${GLOBAL_STYLES}
         button:not(:disabled):hover { opacity: 0.85; }
         @media (max-width: 1440px) and (min-width: 768px) {
           .character-container { max-width: 150px !important; }
@@ -141,28 +156,26 @@ function ResponsiveLayout({ mode, formContent, isMobile }: LayoutProps) {
           }}
         >
           {isMobile ? (
-            <>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  justifyContent: 'space-between',
-                  minHeight: 130,
-                  gap: 16,
-                }}
-              >
-                <div style={{ paddingBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <LogoIcon />
-                    <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a' }}>Micro-Volunteer</span>
-                  </div>
-                  <p style={{ fontSize: 11, color: '#a78bfa' }}>Ajutor local, rapid și de încredere</p>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'space-between',
+                minHeight: 130,
+                gap: 16,
+              }}
+            >
+              <div style={{ paddingBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <LogoIcon />
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a' }}>Micro-Volunteer</span>
                 </div>
-                <div style={{ width: 160, height: 110, flexShrink: 0 }}>
-                  <Characters mode={mode} compact />
-                </div>
+                <p style={{ fontSize: 11, color: '#a78bfa' }}>Ajutor local, rapid si de incredere</p>
               </div>
-            </>
+              <div style={{ width: 160, height: 110, flexShrink: 0 }}>
+                <Characters compact mode={mode} />
+              </div>
+            </div>
           ) : (
             <>
               <div
@@ -189,26 +202,39 @@ function ResponsiveLayout({ mode, formContent, isMobile }: LayoutProps) {
             flexShrink: 0,
           }}
         >
+          <Button className="mb-6 w-fit" onClick={onGoHome} variant="ghost">
+            ← Inapoi pe pagina principala
+          </Button>
           {formContent}
         </div>
       </div>
     </>
-  );
+  )
 }
 
 function LogoIcon() {
   return (
     <div
       style={{
-        width: 28, height: 28, borderRadius: 7,
+        width: 28,
+        height: 28,
+        borderRadius: 7,
         background: '#7C3AED',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
-      <svg width="14" height="14" viewBox="0 0 22 22" fill="none">
-        <circle cx="11" cy="11" r="4" fill="white" opacity="0.9" />
-        <path d="M11 3L19 7L19 15L11 19L3 15L3 7Z" stroke="white" strokeWidth="1.5" fill="none" opacity="0.6" />
+      <svg fill="none" height="14" viewBox="0 0 22 22" width="14">
+        <circle cx="11" cy="11" fill="white" opacity="0.9" r="4" />
+        <path
+          d="M11 3L19 7L19 15L11 19L3 15L3 7Z"
+          fill="none"
+          opacity="0.6"
+          stroke="white"
+          strokeWidth="1.5"
+        />
       </svg>
     </div>
-  );
+  )
 }
