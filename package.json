@@ -30,6 +30,7 @@
     "react-resizable-panels": "^4.10.0",
     "react-router-dom": "^7.9.5",
     "recharts": "^3.8.0",
+    "serve": "^14.x.x",
     "shadcn": "^4.4.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
