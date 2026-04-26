@@ -3,11 +3,12 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - devops/ci-pipeline
-      # - main
-  # pull_request:
-  #   branches:
-  #     - main
+      - main
+      - test
+  pull_request:
+    branches:
+      - main
+      - test
   workflow_dispatch:
 
 jobs:
