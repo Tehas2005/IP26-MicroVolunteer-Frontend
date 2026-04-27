@@ -5,6 +5,7 @@ import AboutPage from '@/pages/AboutPage'
 import AskForHelpPage from '@/pages/AskForHelpPage'
 import AuthPage from '@/pages/AuthPage'
 import HomePage from '@/pages/HomePage'
+import ProfilePage from '@/pages/ProfilePage'
 
 export const router = createBrowserRouter([
   { path: '/auth', element: <AuthPage mode="login" /> },
@@ -16,6 +17,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'cere-ajutor', element: <AskForHelpPage /> },
+      { path: 'profil', element: <ProfilePage /> },
       { path: 'despre-noi', element: <AboutPage /> },
     ],
   },
