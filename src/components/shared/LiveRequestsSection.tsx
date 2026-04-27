@@ -44,7 +44,10 @@ export function LiveRequestsSection({
 
   return (
     <div className="mt-6">
-      <div className="flex flex-wrap gap-2 border-b border-brand-gray pb-3" role="tablist">
+      <div
+        className="grid grid-cols-2 gap-2 border-b border-brand-gray pb-3"
+        role="tablist"
+      >
         {TAB_OPTIONS.map((tab) => {
           const isActive = tab.value === activeTab
           const tabId = `${tab.value}-requests-tab`
@@ -56,10 +59,10 @@ export function LiveRequestsSection({
               aria-controls={panelId}
               aria-selected={isActive}
               className={cn(
-                'rounded-full border px-4 py-2 text-sm font-semibold transition duration-200',
+                'rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ease-out',
                 isActive
-                  ? 'border-brand-black bg-brand-black text-white shadow-sm'
-                  : 'border-brand-gray bg-white text-brand-gray-text hover:border-brand-purple hover:text-brand-black',
+                  ? 'border-brand-purple bg-brand-purple-light text-brand-purple-dark'
+                  : 'border-brand-gray bg-white text-brand-gray-text hover:border-brand-purple/40 hover:text-brand-black',
               )}
               id={tabId}
               onClick={() => setActiveTab(tab.value)}
@@ -74,7 +77,7 @@ export function LiveRequestsSection({
 
       <div
         aria-labelledby={`${activeTab}-requests-tab`}
-        className="mt-5 rounded-[28px] border border-brand-gray/80 bg-brand-cream/35 p-3 sm:p-4"
+        className="mt-5 rounded-[28px] border border-brand-gray/80 bg-brand-cream/35 p-3 transition-all duration-200 sm:p-4"
         id={activePanelId}
         role="tabpanel"
       >
@@ -96,7 +99,7 @@ export function LiveRequestsSection({
             </EmptyContent>
           </Empty>
         ) : (
-          <div className="max-h-[520px] overflow-y-auto pr-1 scroll-smooth">
+          <div className="max-h-[520px] overflow-y-auto px-3 py-3 scroll-smooth sm:px-4">
             <div className="grid grid-cols-1 gap-4">
               {selectedRequests.map((request) => (
                 <LiveRequestCard key={request.id} request={request} />

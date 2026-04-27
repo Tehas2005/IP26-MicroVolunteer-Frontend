@@ -68,10 +68,10 @@ export function LiveRequestCard({ request }: LiveRequestCardProps) {
   const displayName = getDisplayName(request)
 
   return (
-    <article className="cursor-pointer rounded-[24px] border border-brand-gray bg-[#F8FAFD] px-5 py-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <article className="group cursor-pointer rounded-[24px] border border-brand-gray/90 bg-[#F8FAFD] px-5 py-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-200 hover:border-brand-purple/35 hover:bg-white hover:shadow-[0_0_0_1px_rgba(123,47,190,0.08),0_2px_5px_rgba(26,26,26,0.08)]">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-brand-black sm:text-[1.05rem]">
+          <h3 className="text-base font-semibold text-brand-black transition-colors duration-200 group-hover:text-brand-purple-dark sm:text-[1.05rem]">
             {request.title?.trim() || FALLBACK_TEXT}
           </h3>
 
@@ -84,12 +84,14 @@ export function LiveRequestCard({ request }: LiveRequestCardProps) {
             </span>
           </div>
 
-          <p className="mt-3 text-sm text-brand-gray-text">{urgency.label}</p>
+          <p className="mt-3 text-sm text-brand-gray-text transition-colors duration-200 group-hover:text-brand-black/75">
+            {urgency.label}
+          </p>
         </div>
 
         <span
           aria-hidden="true"
-          className={`h-3 w-16 shrink-0 rounded-full ${urgency.accentClassName}`}
+          className={`h-3 w-16 shrink-0 rounded-full transition-opacity duration-200 group-hover:opacity-85 ${urgency.accentClassName}`}
         />
       </div>
     </article>
