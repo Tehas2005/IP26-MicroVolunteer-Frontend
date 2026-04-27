@@ -1,0 +1,102 @@
+export type LiveRequestUrgencyLevel = 'LOW' | 'MEDIUM' | 'CRITICAL'
+export type LiveRequestCategory = 'FACETOFACE' | 'MESSAGES_ONLY'
+
+export interface LiveRequestCardData {
+  id: string
+  title?: string | null
+  category?: LiveRequestCategory | null
+  urgencyLevel?: LiveRequestUrgencyLevel | null
+  anonymousMode?: boolean | null
+  username?: string | null
+  name?: string | null
+}
+
+export interface LiveRequestCardProps {
+  request: LiveRequestCardData
+}
+
+interface UrgencyConfig {
+  accentClassName: string
+  label: string
+}
+
+const urgencyConfig: Record<LiveRequestUrgencyLevel, UrgencyConfig> = {
+  LOW: {
+    accentClassName: 'bg-brand-green',
+    label: 'Urgenta scazuta',
+  },
+  MEDIUM: {
+    accentClassName: 'bg-brand-orange',
+    label: 'Urgenta medie',
+  },
+  CRITICAL: {
+    accentClassName: 'bg-brand-red',
+    label: 'Urgenta critica',
+  },
+}
+
+const categoryLabels: Record<LiveRequestCategory, string> = {
+  FACETOFACE: 'Fizic',
+  MESSAGES_ONLY: 'Doar Mesaje',
+}
+
+function getDisplayName(request: LiveRequestCardData) {
+  const preferredName = request.anonymousMode ? request.username : request.name
+
+  return preferredName?.trim() || 'User Necunoscut'
+}
+
+function getCategoryLabel(category?: LiveRequestCategory | null) {
+  if (!category) {
+    return 'Categorie necunoscuta'
+  }
+
+  return categoryLabels[category]
+}
+
+function getUrgencyMeta(urgencyLevel?: LiveRequestUrgencyLevel | null): UrgencyConfig {
+  if (!urgencyLevel) {
+    return {
+      accentClassName: 'bg-brand-gray',
+      label: 'Urgenta necunoscuta',
+    }
+  }
+
+  return urgencyConfig[urgencyLevel]
+}
+
+export function LiveRequestCard({ request }: LiveRequestCardProps) {
+  const urgency = getUrgencyMeta(request.urgencyLevel)
+  const categoryLabel = getCategoryLabel(request.category)
+  const displayName = getDisplayName(request)
+
+  return (
+    <article className="cursor-pointer rounded-[24px] border border-brand-gray bg-[#F8FAFD] px-5 py-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-semibold text-brand-black sm:text-[1.05rem]">
+            {request.title?.trim() || 'Cerere live fara titlu'}
+          </h3>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-brand-gray bg-white px-3 py-1 text-xs font-semibold text-brand-black">
+              {displayName}
+            </span>
+            <span className="rounded-full bg-brand-purple-light px-3 py-1 text-xs font-semibold text-brand-purple-dark">
+              {categoryLabel}
+            </span>
+          </div>
+
+          <p className="mt-3 text-sm text-brand-gray-text">{urgency.label}</p>
+        </div>
+
+        <span
+          aria-hidden="true"
+          className={`h-3 w-16 shrink-0 rounded-full ${urgency.accentClassName}`}
+        />
+      </div>
+    </article>
+  )
+}
+
+export default LiveRequestCard

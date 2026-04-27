@@ -1,47 +1,64 @@
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
+import {
+  type LiveRequestCardData,
+  LiveRequestCard,
+} from '@/components/shared/LiveRequestCard'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/store/authStore'
-
-interface PreviewRequest {
-  title: string
-  meta: string
-  accentClassName: string
-}
 
 export function HomePage() {
   const navigate = useNavigate()
   const { isGuest } = useAuthStore()
 
-  const previewRequests: PreviewRequest[] = isGuest
+  const previewRequests: LiveRequestCardData[] = isGuest
     ? [
         {
+          id: 'guest-translation',
           title: 'Traducere rapidă pentru o programare medicală',
-          meta: 'Online · Urgență medie',
-          accentClassName: 'bg-brand-orange',
+          category: 'MESSAGES_ONLY',
+          urgencyLevel: 'MEDIUM',
+          anonymousMode: true,
+          username: 'ana_help',
+          name: 'Ana Popescu',
         },
         {
+          id: 'guest-form-support',
           title: 'Sprijin telefonic pentru completarea unui formular',
-          meta: 'Online · Urgență scăzută',
-          accentClassName: 'bg-brand-green',
+          category: 'MESSAGES_ONLY',
+          urgencyLevel: 'LOW',
+          anonymousMode: false,
+          username: 'mara_27',
+          name: 'Mara Ionescu',
         },
       ]
     : [
         {
+          id: 'user-translation',
           title: 'Traducere rapidă pentru o programare medicală',
-          meta: 'Online · Urgență medie',
-          accentClassName: 'bg-brand-orange',
+          category: 'MESSAGES_ONLY',
+          urgencyLevel: 'MEDIUM',
+          anonymousMode: true,
+          username: 'help_now',
+          name: 'Ana Popescu',
         },
         {
+          id: 'user-medicine',
           title: 'Ridicare medicamente pentru o persoană vulnerabilă',
-          meta: 'Fizic · Urgență ridicată',
-          accentClassName: 'bg-brand-red',
+          category: 'FACETOFACE',
+          urgencyLevel: 'CRITICAL',
+          anonymousMode: false,
+          username: 'maria.safe',
+          name: 'Maria Enache',
         },
         {
+          id: 'user-guidance',
           title: 'Însoțire locală pentru orientare într-o zonă nouă',
-          meta: 'Fizic · Urgență scăzută',
-          accentClassName: 'bg-brand-green',
+          category: 'FACETOFACE',
+          urgencyLevel: 'LOW',
+          anonymousMode: false,
+          username: 'geo_voluntar',
         },
       ]
 
@@ -107,18 +124,7 @@ export function HomePage() {
 
           <div className="mt-6 grid gap-4">
             {previewRequests.map((request) => (
-              <div
-                key={request.title}
-                className="rounded-[24px] border border-brand-gray bg-[#F8FAFD] px-5 py-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold text-brand-black">{request.title}</h3>
-                    <p className="mt-2 text-sm text-brand-gray-text">{request.meta}</p>
-                  </div>
-                  <span className={`h-3 w-16 rounded-full ${request.accentClassName}`} />
-                </div>
-              </div>
+              <LiveRequestCard key={request.id} request={request} />
             ))}
           </div>
         </div>
