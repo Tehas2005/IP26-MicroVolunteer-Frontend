@@ -12,10 +12,12 @@ on:
 
 jobs:
   build-and-deploy:
+    #Deployment triggers only if CI-Pipeline checks successfully
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Deploy FE to Railway
     runs-on: ubuntu-latest
 
     steps:
-
       #Moving the workflow on the VM
       - name: Checkout Code
         uses: actions/checkout@v4
