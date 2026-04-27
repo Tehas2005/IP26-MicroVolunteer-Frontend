@@ -20,6 +20,8 @@ interface UrgencyConfig {
   label: string
 }
 
+const FALLBACK_TEXT = 'Informație indisponibilă'
+
 const urgencyConfig: Record<LiveRequestUrgencyLevel, UrgencyConfig> = {
   LOW: {
     accentClassName: 'bg-brand-green',
@@ -35,30 +37,25 @@ const urgencyConfig: Record<LiveRequestUrgencyLevel, UrgencyConfig> = {
   },
 }
 
-const categoryLabels: Record<LiveRequestCategory, string> = {
-  FACETOFACE: 'Fizic',
-  MESSAGES_ONLY: 'Doar Mesaje',
-}
-
 function getDisplayName(request: LiveRequestCardData) {
   const preferredName = request.anonymousMode ? request.username : request.name
 
-  return preferredName?.trim() || 'User Necunoscut'
+  return preferredName?.trim() || FALLBACK_TEXT
 }
 
 function getCategoryLabel(category?: LiveRequestCategory | null) {
   if (!category) {
-    return 'Categorie necunoscuta'
+    return FALLBACK_TEXT
   }
 
-  return categoryLabels[category]
+  return category
 }
 
 function getUrgencyMeta(urgencyLevel?: LiveRequestUrgencyLevel | null): UrgencyConfig {
   if (!urgencyLevel) {
     return {
       accentClassName: 'bg-brand-gray',
-      label: 'Urgenta necunoscuta',
+      label: FALLBACK_TEXT,
     }
   }
 
@@ -75,7 +72,7 @@ export function LiveRequestCard({ request }: LiveRequestCardProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <h3 className="text-base font-semibold text-brand-black sm:text-[1.05rem]">
-            {request.title?.trim() || 'Cerere live fara titlu'}
+            {request.title?.trim() || FALLBACK_TEXT}
           </h3>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
