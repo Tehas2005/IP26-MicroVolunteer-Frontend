@@ -8,7 +8,7 @@ import type { RegisterFormData } from './types';
 
 const INITIAL_FORM_DATA: RegisterFormData = {
   email: '', password: '', confirm: '',
-  firstName: '', lastName: '', phone: '', city: '',
+  firstName: '', lastName: '', username: '', phone: '', city: '',
 };
 
 type Props = {

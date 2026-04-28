@@ -6,6 +6,7 @@ export type RegisterFormData = {
   confirm: string;
   firstName: string;
   lastName: string;
+  username: string;
   phone: string;
   city: string;
 };

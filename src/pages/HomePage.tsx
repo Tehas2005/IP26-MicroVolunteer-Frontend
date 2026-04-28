@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/store/authStore'
+import { ChatFab } from './chat/ChatFab'
 
 interface PreviewRequest {
   title: string
@@ -123,6 +124,7 @@ export function HomePage() {
           </div>
         </div>
       </section>
+      <ChatFab />
     </div>
   )
 }

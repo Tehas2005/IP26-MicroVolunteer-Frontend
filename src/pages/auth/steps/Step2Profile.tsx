@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Field, TextInput, StepNavigation } from '../components';
-import { validatePhone } from '../validators';
+import { validatePhone, validateUsername } from '../validators';
 import type { RegisterFormData } from '../types';
 
 type Props = {
@@ -20,11 +20,12 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
   const errors = {
     firstName: !data.firstName.trim() ? 'Prenumele este obligatoriu.' : '',
     lastName: !data.lastName.trim() ? 'Numele este obligatoriu.' : '',
+    username: validateUsername(data.username),
     phone: validatePhone(data.phone),
   };
 
   function handleNext() {
-    setTouched({ firstName: true, lastName: true, phone: true });
+    setTouched({ firstName: true, lastName: true, username: true, phone: true });
     if (Object.values(errors).some(Boolean)) return;
     onNext();
   }
@@ -53,6 +54,16 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           />
         </Field>
       </div>
+      <Field label="Username" error={touched.username ? errors.username : ''}>
+        <TextInput
+          id="username"
+          value={data.username}
+          onChange={(v) => onChange('username', v.replace(/[^a-zA-Z0-9_-]/g, ''))}
+          onBlur={touch('username')}
+          placeholder="ion_popescu"
+          hasError={touched.username && !!errors.username}
+        />
+      </Field>
       <Field label="Telefon" error={touched.phone ? errors.phone : ''}>
         <TextInput
           id="phone"
