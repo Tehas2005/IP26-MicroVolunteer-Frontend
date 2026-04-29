@@ -5,15 +5,16 @@ import { useAudioRecorder } from './hooks/useAudioRecorder';
 
 interface Props {
   onSend: (content: MessageContent) => void;
+  conversationClosed?: boolean;
 }
 
-export function ChatInput({ onSend }: Props) {
+export function ChatInput({ onSend, conversationClosed = false }: Props) {
   const [text, setText] = useState('');
   const { isRecording, audioUrl, micError, startRecording, stopRecording, clearAudio } =
     useAudioRecorder();
 
-  const canSend = text.trim().length > 0 || audioUrl !== null;
-  const inputDisabled = isRecording || audioUrl !== null;
+  const canSend = !conversationClosed && (text.trim().length > 0 || audioUrl !== null);
+  const inputDisabled = conversationClosed || isRecording || audioUrl !== null;
 
   function handleSend() {
     if (!canSend) return;
@@ -39,6 +40,16 @@ export function ChatInput({ onSend }: Props) {
     } else {
       void startRecording();
     }
+  }
+
+  if (conversationClosed) {
+    return (
+      <div className="shrink-0 border-t border-brand-gray bg-white px-6 py-4 sm:px-8">
+        <p className="text-center text-sm text-brand-gray-text">
+          Acest task a fost finalizat. Conversația este închisă.
+        </p>
+      </div>
+    );
   }
 
   return (

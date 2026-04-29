@@ -18,10 +18,13 @@ export type Message = {
   timestamp: Date;
 };
 
+export type ConversationStatus = 'open' | 'closed';
+
 export type Conversation = {
   id: string;
   username: string;
   lastMessage: string;
   timestamp: Date;
   unread: number;
+  status: ConversationStatus;
 };

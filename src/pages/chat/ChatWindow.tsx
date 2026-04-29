@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
-import type { Message, MessageContent } from './types';
+import type { ConversationStatus, Message, MessageContent } from './types';
 
 let _idSeed = 10;
 function nextId(): string {
@@ -33,9 +33,10 @@ const MOCK_MESSAGES: Message[] = [
 
 interface Props {
   username: string;
+  status?: ConversationStatus;
 }
 
-export function ChatWindow({ username }: Props) {
+export function ChatWindow({ username, status = 'open' }: Props) {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -75,7 +76,7 @@ export function ChatWindow({ username }: Props) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-brand-cream px-4 py-3 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-brand-cream px-4 py-3 sm:px-6">
         <div className="flex flex-col gap-1.5">
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
@@ -85,7 +86,7 @@ export function ChatWindow({ username }: Props) {
       </div>
 
       {/* Input */}
-      <ChatInput onSend={handleSend} />
+      <ChatInput onSend={handleSend} conversationClosed={status === 'closed'} />
     </>
   );
 }

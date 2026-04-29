@@ -28,7 +28,7 @@ export function ConversationList({ conversations, selectedUsername, onSelect }: 
           <p className="text-sm text-brand-gray-text">Nicio conversație încă.</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto divide-y divide-brand-gray/40">
+        <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-brand-gray/40">
           {conversations.map((conv) => (
             <button
               key={conv.id}

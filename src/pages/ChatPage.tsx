@@ -21,7 +21,7 @@ export function ChatPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col overflow-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <div className="mb-3 flex justify-start">
         <button
           type="button"
@@ -32,12 +32,13 @@ export function ChatPage() {
           Înapoi
         </button>
       </div>
-      <div className="flex flex-1 overflow-hidden rounded-[52px] border border-brand-gray/80 bg-white">
+
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-[52px] border border-brand-gray/80 bg-white">
 
         {/* Left panel — hidden on mobile when a conversation is open */}
         <div
           className={[
-            'flex-col border-r border-brand-gray/60',
+            'min-h-0 flex-col overflow-hidden border-r border-brand-gray/60',
             username ? 'hidden md:flex md:w-72 lg:w-80' : 'flex w-full md:w-72 lg:w-80',
           ].join(' ')}
         >
@@ -51,11 +52,18 @@ export function ChatPage() {
         {/* Right panel — hidden on mobile when no conversation is selected */}
         <div
           className={[
-            'flex-1 flex-col',
+            'min-h-0 flex-1 flex-col overflow-hidden',
             username ? 'flex' : 'hidden md:flex',
           ].join(' ')}
         >
-          {username ? <ChatWindow username={username} /> : <EmptyState />}
+          {username ? (
+            <ChatWindow
+              username={username}
+              status={conversations.find((c) => c.username === username)?.status}
+            />
+          ) : (
+            <EmptyState />
+          )}
         </div>
 
       </div>
