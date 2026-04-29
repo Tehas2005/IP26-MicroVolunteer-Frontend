@@ -10,26 +10,6 @@ function nextId(): string {
   return String(++_idSeed);
 }
 
-const MOCK_MESSAGES: Message[] = [
-  {
-    id: '1',
-    from: 'them',
-    content: { type: 'text', text: 'Bună! Cu ce te pot ajuta astăzi?' },
-    timestamp: new Date(Date.now() - 5 * 60_000),
-  },
-  {
-    id: '2',
-    from: 'me',
-    content: { type: 'text', text: 'Salut! Aș vrea să discut despre cererea mea.' },
-    timestamp: new Date(Date.now() - 4 * 60_000),
-  },
-  {
-    id: '3',
-    from: 'them',
-    content: { type: 'audio', url: '', durationSec: 8 },
-    timestamp: new Date(Date.now() - 3 * 60_000),
-  },
-];
 
 interface Props {
   username: string;
@@ -38,7 +18,7 @@ interface Props {
 
 export function ChatWindow({ username, status = 'open' }: Props) {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
