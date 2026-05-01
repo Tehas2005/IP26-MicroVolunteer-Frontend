@@ -1041,23 +1041,25 @@ export function AskForHelpPage() {
                 </div>
 
                 <div className="ask-help-audio-actions">
-                  <button
-                    type="button"
-                    className="ask-help-record-btn"
-                    onClick={startRecording}
-                    disabled={isGuest || isRecording}
-                  >
-                    {audioUrl ? 'Reinregistreaza mesajul' : 'Incepe inregistrarea'}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="ask-help-record-btn ask-help-danger"
-                    onClick={stopRecording}
-                    disabled={isGuest || !isRecording}
-                  >
-                    Opreste inregistrarea
-                  </button>
+                  {isRecording ? (
+                    <button
+                      type="button"
+                      className="ask-help-record-btn ask-help-danger"
+                      onClick={stopRecording}
+                      disabled={isGuest}
+                    >
+                      Opreste inregistrarea
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="ask-help-record-btn"
+                      onClick={startRecording}
+                      disabled={isGuest}
+                    >
+                      {audioUrl ? 'Reinregistreaza mesajul' : 'Incepe inregistrarea'}
+                    </button>
+                  )}
 
                   <button
                     type="button"
