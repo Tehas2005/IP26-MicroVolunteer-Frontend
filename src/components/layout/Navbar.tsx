@@ -16,6 +16,7 @@ interface NavAction {
 const navActions: NavAction[] = [
   { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link' },
   { label: 'Despre Noi', path: '/despre-noi', type: 'link' },
+  { label: 'Profil', path: '/profil', type: 'link' }, // <-- Вот наша новая ссылка
   { label: 'Log In', path: '/auth/login', type: 'ghost' },
   { label: 'Sign Up', path: '/auth/signup', type: 'auth' },
 ]
