@@ -35,9 +35,11 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
           return
         }
 
+        backend.auth.clearAuthToken()
         clearAuthSession()
       } catch {
         if (!isMounted) return
+        backend.auth.clearAuthToken()
         clearAuthSession()
       } finally {
         if (isMounted) {
@@ -47,6 +49,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
     }
 
     function handleUnauthorized() {
+      backend.auth.clearAuthToken()
       clearAuthSession()
     }
 

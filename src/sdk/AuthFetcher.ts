@@ -44,6 +44,10 @@ export class AuthFetcher {
     this.fetcher.setAuthToken(token)
   }
 
+  public clearAuthToken() {
+    this.fetcher.clearAuthToken()
+  }
+
   public readonly signIn = {
     email: async (
       payload: SignInEmailPayloadType,

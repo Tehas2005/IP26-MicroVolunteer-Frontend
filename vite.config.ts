@@ -2,7 +2,7 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig, loadEnv } from "vite"
 
-const DEFAULT_PROXY_TARGET = "https://micro-volunteer-backend-service.up.railway.app"
+const DEFAULT_PROXY_TARGET = "http://localhost:3000"
 
 function stripApiSuffix(url: string) {
   return url.replace(/\/+$/, "").replace(/\/api(?:\/auth)?$/, "")

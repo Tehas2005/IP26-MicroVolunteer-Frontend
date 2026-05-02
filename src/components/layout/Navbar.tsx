@@ -101,6 +101,7 @@ export function Navbar() {
     try {
       await backend.auth.signOut()
     } finally {
+      backend.auth.clearAuthToken()
       clearAuthSession()
       setIsLoggingOut(false)
       navigate('/')
