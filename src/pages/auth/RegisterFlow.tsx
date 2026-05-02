@@ -72,7 +72,6 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
           name: response.data.user.name,
           email: response.data.user.email,
         },
-        token: response.data.session.token,
       });
     } catch (err) {
       setSessionError(err instanceof Error ? err.message : 'Eroare neasteptata.');

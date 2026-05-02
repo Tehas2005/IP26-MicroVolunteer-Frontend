@@ -57,7 +57,6 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
           name: response.data.user.name,
           email: response.data.user.email,
         },
-        token: response.data.token,
       });
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : 'Autentificarea a esuat.');

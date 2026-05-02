@@ -37,7 +37,7 @@ export interface AuthPageProps {
 export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
-  const { setAuthSession } = useAuthStore()
+  const { isGuest, sessionStatus, setAuthSession } = useAuthStore()
   const [mode, setMode] = useState<AuthMode>(routeMode === 'signup' ? 'register' : 'login')
   const [success, setSuccess] = useState(false)
 
@@ -46,19 +46,25 @@ export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
     setSuccess(false)
   }, [routeMode])
 
+  useEffect(() => {
+    if (!success && sessionStatus === 'ready' && !isGuest) {
+      navigate('/')
+    }
+  }, [isGuest, navigate, sessionStatus, success])
+
   function syncMode(nextMode: AuthMode) {
     setMode(nextMode)
     navigate(nextMode === 'login' ? '/auth/login' : '/auth/signup')
   }
 
   function handleLoginSuccess(payload: AuthSuccessPayload) {
-    setAuthSession({ token: payload.token, user: payload.user })
+    setAuthSession({ user: payload.user })
     setSuccess(true)
     setTimeout(() => navigate('/'), 2700)
   }
 
   function handleRegisterSuccess(payload: AuthSuccessPayload) {
-    setAuthSession({ token: payload.token, user: payload.user })
+    setAuthSession({ user: payload.user })
     setSuccess(true)
     setTimeout(() => navigate('/'), 2700)
   }
