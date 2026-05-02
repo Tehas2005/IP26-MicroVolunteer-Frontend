@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { backend } from '@/lib/backend';
 import { StepBar } from './components';
 import { Step1Account } from './steps/Step1Account';
 import { Step2Profile } from './steps/Step2Profile';
 import { Step3Identity } from './steps/Step3Identity';
 import { STEP_TITLES } from './constants';
-import type { RegisterFormData } from './types';
+import type { RegisterFormData, AuthSuccessPayload } from './types';
 
 const INITIAL_FORM_DATA: RegisterFormData = {
   email: '', password: '', confirm: '',
@@ -12,30 +13,71 @@ const INITIAL_FORM_DATA: RegisterFormData = {
 };
 
 type Props = {
-  onSuccess: (payload: RegisterFormData) => void;
+  onSuccess: (payload: AuthSuccessPayload) => void;
   onSwitch: () => void;
   isMobile: boolean;
 };
 
 export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
   const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [apiError, setApiError] = useState('');
   const [formData, setFormData] = useState<RegisterFormData>(INITIAL_FORM_DATA);
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState('');
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionError, setSessionError] = useState('');
 
   function updateField(key: keyof RegisterFormData, value: string) {
     setFormData((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function handleFinalSubmit() {
-    setLoading(true);
-    setApiError('');
+  async function handleSignupAndGoToStep3() {
+    setSignupLoading(true);
+    setSignupError('');
+
     try {
-      onSuccess(formData);
+      const response = await backend.auth.signUp.email({
+        email: formData.email,
+        password: formData.password,
+        name: `${formData.firstName} ${formData.lastName}`.trim(),
+      });
+
+      if (!response.success || !response.data) {
+        setSignupError(response.message ?? 'Eroare la inregistrare. Incearca din nou.');
+        return;
+      }
+
+      setStep(2);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Eroare neașteptată. Încearcă din nou.');
+      setSignupError(err instanceof Error ? err.message : 'Eroare neasteptata.');
     } finally {
-      setLoading(false);
+      setSignupLoading(false);
+    }
+  }
+
+  async function handleStep3Done() {
+    setSessionLoading(true);
+    setSessionError('');
+
+    try {
+      const response = await backend.auth.getSession();
+
+      if (!response.success || !response.data?.user || !response.data.session) {
+        setSessionError(response.message ?? 'Verificarea a esuat. Incearca din nou.');
+        return;
+      }
+
+      onSuccess({
+        user: {
+          id: response.data.user.id,
+          name: response.data.user.name,
+          email: response.data.user.email,
+        },
+        token: response.data.session.token,
+      });
+    } catch (err) {
+      setSessionError(err instanceof Error ? err.message : 'Eroare neasteptata.');
+    } finally {
+      setSessionLoading(false);
     }
   }
 
@@ -61,17 +103,19 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
           data={formData}
           onChange={updateField}
           onBack={() => setStep(0)}
-          onNext={() => setStep(2)}
+          onNext={handleSignupAndGoToStep3}
           isMobile={isMobile}
+          loading={signupLoading}
+          apiError={signupError}
         />
       )}
       {step === 2 && (
         <Step3Identity
           data={formData}
           onBack={() => setStep(1)}
-          onSubmit={handleFinalSubmit}
-          loading={loading}
-          apiError={apiError}
+          onSubmit={handleStep3Done}
+          loading={sessionLoading}
+          apiError={sessionError}
         />
       )}
 

@@ -1,20 +1,31 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { backend } from '@/lib/backend';
 import { Field, TextInput, PasswordInput, ErrorBanner } from './components';
 import { validateEmail } from './validators';
 import { primaryButtonStyle } from './constants';
+import type { AuthSuccessPayload } from './types';
 
 type Props = {
-  onSuccess: (payload: { email: string }) => void;
+  onSuccess: (payload: AuthSuccessPayload) => void;
   onSwitch: () => void;
 };
 
 export function LoginForm({ onSuccess, onSwitch }: Props) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotTouched, setForgotTouched] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [forgotError, setForgotError] = useState('');
 
   const errors = {
     email: validateEmail(email),
@@ -27,14 +38,122 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
 
     setLoading(true);
     setApiError('');
+
     try {
-      void remember;
-      onSuccess({ email });
+      const response = await backend.auth.signIn.email({
+        email,
+        password,
+        rememberMe: remember,
+      });
+
+      if (!response.success || !response.data) {
+        setApiError(response.message ?? 'Autentificarea a esuat.');
+        return;
+      }
+
+      onSuccess({
+        user: {
+          id: response.data.user.id,
+          name: response.data.user.name,
+          email: response.data.user.email,
+        },
+        token: response.data.token,
+      });
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'Autentificarea a eșuat.');
+      setApiError(err instanceof Error ? err.message : 'Autentificarea a esuat.');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleForgotPassword() {
+    setForgotTouched(true);
+    if (validateEmail(forgotEmail)) return;
+
+    setForgotLoading(true);
+    setForgotError('');
+
+    try {
+      const response = await backend.auth.requestPasswordReset({
+        email: forgotEmail,
+      });
+
+      if (!response.success) {
+        setForgotError(response.message ?? 'Nu s-a putut trimite emailul.');
+        return;
+      }
+
+      setForgotSuccess(true);
+    } catch (err: unknown) {
+      setForgotError(err instanceof Error ? err.message : 'Eroare neasteptata.');
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
+  if (forgotMode) {
+    return (
+      <div>
+        <p style={{ fontSize: 13, color: '#aaa', marginBottom: '0.75rem' }}>
+          Introdu adresa de email si iti trimitem un cod de resetare.
+        </p>
+
+        {forgotError && <ErrorBanner message={forgotError} />}
+
+        {forgotSuccess ? (
+          <div style={{
+            padding: '10px 14px', borderRadius: 8,
+            background: '#f0fff4', border: '1px solid #9ae6b4',
+            color: '#276749', fontSize: 13, marginBottom: '1rem',
+          }}>
+            Cod trimis! Verifica emailul, apoi continua cu resetarea parolei.
+          </div>
+        ) : (
+          <Field label="Email" error={forgotTouched ? validateEmail(forgotEmail) : ''}>
+            <TextInput
+              id="forgot-email"
+              type="email"
+              value={forgotEmail}
+              onChange={setForgotEmail}
+              onBlur={() => setForgotTouched(true)}
+              placeholder="anna@gmail.com"
+              hasError={forgotTouched && !!validateEmail(forgotEmail)}
+            />
+          </Field>
+        )}
+
+        {!forgotSuccess && (
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            disabled={forgotLoading}
+            style={{ ...primaryButtonStyle(forgotLoading), height: 40, marginTop: '0.5rem', width: '50%', marginLeft: 'auto', marginRight: 'auto', display: 'flex' }}
+          >
+            {forgotLoading ? 'Se trimite...' : 'Trimite cod'}
+          </button>
+        )}
+
+        {forgotSuccess && (
+          <button
+            type="button"
+            onClick={() => navigate(`/auth/reset-password?email=${encodeURIComponent(forgotEmail)}`)}
+            style={{ ...primaryButtonStyle(false), height: 40, marginTop: '0.5rem', width: '50%', marginLeft: 'auto', marginRight: 'auto', display: 'flex' }}
+          >
+            Introdu codul
+          </button>
+        )}
+
+        <p style={{ textAlign: 'center', fontSize: 13, color: '#aaa', marginTop: '0.75rem' }}>
+          <button
+            type="button"
+            onClick={() => { setForgotMode(false); setForgotSuccess(false); setForgotError(''); setForgotTouched(false); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7C3AED', fontWeight: 600, fontSize: 13 }}
+          >
+            Inapoi la login
+          </button>
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -54,13 +173,13 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
           hasError={touched.email && !!errors.email}
         />
       </Field>
-      <Field label="Parolă" error={touched.password ? errors.password : ''}>
+      <Field label="Parola" error={touched.password ? errors.password : ''}>
         <PasswordInput
           id="password"
           value={password}
           onChange={setPassword}
           onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-          placeholder="••••••••"
+          placeholder="********"
           hasError={touched.password && !!errors.password}
         />
       </Field>
@@ -72,13 +191,14 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
             onChange={(e) => setRemember(e.target.checked)}
             style={{ accentColor: '#7C3AED' }}
           />
-          Ține-mă minte 30 zile
+          Tine-ma minte 30 zile
         </label>
         <button
           type="button"
+          onClick={() => setForgotMode(true)}
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 13 }}
         >
-          Parolă uitată?
+          Parola uitata?
         </button>
       </div>
       <button
@@ -87,7 +207,7 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
         disabled={loading}
         style={{ ...primaryButtonStyle(loading), height: 40, marginTop: '1rem', width: '50%', marginLeft: 'auto', marginRight: 'auto', display: 'flex' }}
       >
-        {loading ? 'Se autentifică...' : 'Log In'}
+        {loading ? 'Se autentifica...' : 'Log In'}
       </button>
       <button
         type="button"
