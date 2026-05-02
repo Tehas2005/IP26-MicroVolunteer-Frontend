@@ -23,8 +23,9 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
   const [formData, setFormData] = useState<RegisterFormData>(INITIAL_FORM_DATA);
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupError, setSignupError] = useState('');
-  const [sessionLoading, setSessionLoading] = useState(false);
-  const [sessionError, setSessionError] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
 
   function updateField(key: keyof RegisterFormData, value: string) {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -54,29 +55,53 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
     }
   }
 
-  async function handleStep3Done() {
-    setSessionLoading(true);
-    setSessionError('');
+  async function handleVerifyCode(code: string) {
+    setVerifyLoading(true);
+    setVerifyError('');
 
     try {
-      const response = await backend.auth.getSession();
+      const verificationResponse = await backend.auth.verifyEmail({
+        email: formData.email,
+        otp: code,
+      });
 
-      if (!response.success || !response.data?.user || !response.data.session) {
-        setSessionError(response.message ?? 'Verificarea a esuat. Incearca din nou.');
+      if (!verificationResponse.success || !verificationResponse.data) {
+        setVerifyError(verificationResponse.message ?? 'Codul introdus este invalid sau a expirat.')
         return;
+      }
+
+      if (verificationResponse.data.token) {
+        backend.auth.setAuthToken(verificationResponse.data.token)
       }
 
       onSuccess({
         user: {
-          id: response.data.user.id,
-          name: response.data.user.name,
-          email: response.data.user.email,
+          id: verificationResponse.data.user.id,
+          name: verificationResponse.data.user.name,
+          email: verificationResponse.data.user.email,
         },
       });
     } catch (err) {
-      setSessionError(err instanceof Error ? err.message : 'Eroare neasteptata.');
+      setVerifyError(err instanceof Error ? err.message : 'Eroare neasteptata.');
     } finally {
-      setSessionLoading(false);
+      setVerifyLoading(false);
+    }
+  }
+
+  async function handleResendCode() {
+    setResendLoading(true)
+    setVerifyError('')
+
+    try {
+      const response = await backend.auth.sendVerificationOtp(formData.email)
+
+      if (!response.success) {
+        setVerifyError(response.message ?? 'Nu am putut retrimite codul. Incearca din nou.')
+      }
+    } catch (err) {
+      setVerifyError(err instanceof Error ? err.message : 'Eroare neasteptata.')
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -112,9 +137,11 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
         <Step3Identity
           data={formData}
           onBack={() => setStep(1)}
-          onSubmit={handleStep3Done}
-          loading={sessionLoading}
-          apiError={sessionError}
+          onSubmit={handleVerifyCode}
+          onResend={handleResendCode}
+          loading={verifyLoading}
+          resendLoading={resendLoading}
+          apiError={verifyError}
         />
       )}
 
