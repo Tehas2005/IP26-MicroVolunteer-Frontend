@@ -66,12 +66,8 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
       });
 
       if (!verificationResponse.success || !verificationResponse.data) {
-        setVerifyError(verificationResponse.message ?? 'Codul introdus este invalid sau a expirat.')
+        setVerifyError(getOtpErrorMessage(verificationResponse.message))
         return;
-      }
-
-      if (verificationResponse.data.token) {
-        backend.auth.setAuthToken(verificationResponse.data.token)
       }
 
       onSuccess({
@@ -83,7 +79,7 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
         token: verificationResponse.data.token,
       });
     } catch (err) {
-      setVerifyError(err instanceof Error ? err.message : 'Eroare neasteptata.');
+      setVerifyError(getOtpErrorMessage(err instanceof Error ? err.message : undefined));
     } finally {
       setVerifyLoading(false);
     }
@@ -162,4 +158,18 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
       </p>
     </div>
   );
+}
+
+function getOtpErrorMessage(message?: string | null): string {
+  if (!message) {
+    return 'Codul de verificare este greșit sau a expirat.';
+  }
+
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes('invalid otp') || normalizedMessage.includes('otp')) {
+    return 'Codul de verificare este greșit sau a expirat.';
+  }
+
+  return message;
 }

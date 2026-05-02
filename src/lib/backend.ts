@@ -2,8 +2,9 @@ import { Backend } from '@/sdk/backend'
 import { Fetcher } from '@/sdk/Fetcher'
 import type { FetcherConfigType } from '@/sdk/types'
 
-const baseURL = (import.meta.env.VITE_API_URL as string | undefined)?.trim()
-  || (import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin)
+const baseURL = import.meta.env.DEV
+  ? window.location.origin
+  : ((import.meta.env.VITE_API_URL as string | undefined) ?? window.location.origin)
 
 const fetcher = new Fetcher({
   baseURL,
