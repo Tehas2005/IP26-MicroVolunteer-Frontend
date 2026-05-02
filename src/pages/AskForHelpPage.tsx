@@ -640,6 +640,10 @@ export function AskForHelpPage() {
     setIsGuest(authIsGuest)
   }, [authIsGuest])
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [])
+
   const clearAudio = useCallback(() => {
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl)
