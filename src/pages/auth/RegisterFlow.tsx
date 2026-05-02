@@ -76,7 +76,6 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
           name: verificationResponse.data.user.name,
           email: verificationResponse.data.user.email,
         },
-        token: verificationResponse.data.token,
       });
     } catch (err) {
       setVerifyError(getOtpErrorMessage(err instanceof Error ? err.message : undefined));

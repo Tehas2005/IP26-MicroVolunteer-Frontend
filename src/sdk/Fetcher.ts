@@ -100,7 +100,7 @@ export class Fetcher {
     data?: unknown,
     options?: FetcherRequestOptionsType,
   ): Promise<ApiResponse<T>> {
-    const fullURL = this.buildURL(path)
+    const fullURL = this.buildURL(path, options?.query)
     const requestOptions = this.buildRequestOptions(method, data, options)
 
     try {
@@ -153,18 +153,13 @@ export class Fetcher {
     return baseURL.replace(/\/+$/, '')
   }
 
-  private buildURL(url: string): string {
+  private buildURL(url: string, query?: FetcherRequestOptionsType['query']): string {
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      return url
+      return this.appendQueryParams(url, query)
     }
 
-    let path = url.startsWith('/') ? url : `/${url}`
-
-    if (!path.startsWith('/api/')) {
-      path = `/api${path}`
-    }
-
-    return `${this.config.baseURL}${path}`
+    const path = url.startsWith('/') ? url : `/${url}`
+    return this.appendQueryParams(`${this.config.baseURL}${path}`, query)
   }
 
   private buildRequestOptions(
@@ -228,5 +223,24 @@ export class Fetcher {
       return typeof message === 'string' ? message : null
     }
     return null
+  }
+
+  private appendQueryParams(url: string, query?: FetcherRequestOptionsType['query']) {
+    if (!query) return url
+
+    const searchParams = new URLSearchParams()
+
+    Object.entries(query).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') {
+        return
+      }
+
+      searchParams.append(key, String(value))
+    })
+
+    const queryString = searchParams.toString()
+    if (!queryString) return url
+
+    return `${url}${url.includes('?') ? '&' : '?'}${queryString}`
   }
 }
