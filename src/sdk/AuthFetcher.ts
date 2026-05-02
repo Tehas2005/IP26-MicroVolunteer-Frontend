@@ -31,6 +31,12 @@ type SuccessResponseType = {
   success: boolean
 }
 
+type VerifyEmailResponseType = {
+  status: boolean
+  token: string | null
+  user: BetterAuthUserType
+}
+
 export class AuthFetcher {
   constructor(private readonly fetcher: Fetcher) {}
 
@@ -72,8 +78,17 @@ export class AuthFetcher {
 
   public readonly verifyEmail = async (
     payload: VerifyEmailPayloadType,
+  ): Promise<ApiResponse<VerifyEmailResponseType>> => {
+    return this.fetcher.post<VerifyEmailResponseType>('/auth/email-otp/verify-email', payload)
+  }
+
+  public readonly sendVerificationOtp = async (
+    email: string,
   ): Promise<ApiResponse<SuccessResponseType>> => {
-    return this.fetcher.post<SuccessResponseType>('/auth/email-otp/verify-email', payload)
+    return this.fetcher.post<SuccessResponseType>('/auth/email-otp/send-verification-otp', {
+      email,
+      type: 'email-verification',
+    })
   }
 
   public readonly signOut = async (): Promise<ApiResponse<SuccessResponseType>> => {
