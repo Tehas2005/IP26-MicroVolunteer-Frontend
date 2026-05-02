@@ -42,7 +42,7 @@ export class AuthFetcher {
     email: async (
       payload: SignInEmailPayloadType,
     ): Promise<ApiResponse<SignInResponseType>> => {
-      return this.fetcher.post<SignInResponseType>('/auth/sign-in/email', payload)
+      return this.fetcher.post<SignInResponseType>('/api/auth/sign-in/email', payload)
     },
   }
 
@@ -50,33 +50,36 @@ export class AuthFetcher {
     email: async (
       payload: SignUpEmailPayloadType,
     ): Promise<ApiResponse<SignUpResponseType>> => {
-      return this.fetcher.post<SignUpResponseType>('/auth/sign-up/email', payload)
+      return this.fetcher.post<SignUpResponseType>('/api/auth/sign-up/email', payload)
     },
   }
 
   public readonly getSession = async (): Promise<ApiResponse<SessionResponseType>> => {
-    return this.fetcher.get<SessionResponseType>('/auth/get-session')
+    return this.fetcher.get<SessionResponseType>('/api/auth/get-session')
   }
 
   public readonly requestPasswordReset = async (
     payload: RequestPasswordResetPayloadType,
   ): Promise<ApiResponse<SuccessResponseType>> => {
-    return this.fetcher.post<SuccessResponseType>('/auth/email-otp/request-password-reset', payload)
+    return this.fetcher.post<SuccessResponseType>(
+      '/api/auth/email-otp/request-password-reset',
+      payload,
+    )
   }
 
   public readonly resetPassword = async (
     payload: ResetPasswordPayloadType,
   ): Promise<ApiResponse<SuccessResponseType>> => {
-    return this.fetcher.post<SuccessResponseType>('/auth/email-otp/reset-password', payload)
+    return this.fetcher.post<SuccessResponseType>('/api/auth/email-otp/reset-password', payload)
   }
 
   public readonly verifyEmail = async (
     payload: VerifyEmailPayloadType,
   ): Promise<ApiResponse<SuccessResponseType>> => {
-    return this.fetcher.post<SuccessResponseType>('/auth/email-otp/verify-email', payload)
+    return this.fetcher.post<SuccessResponseType>('/api/auth/email-otp/verify-email', payload)
   }
 
   public readonly signOut = async (): Promise<ApiResponse<SuccessResponseType>> => {
-    return this.fetcher.post<SuccessResponseType>('/auth/sign-out')
+    return this.fetcher.post<SuccessResponseType>('/api/auth/sign-out')
   }
 }
