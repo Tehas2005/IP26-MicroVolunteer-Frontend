@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { backend } from '@/lib/backend';
 import { StepBar } from './components';
 import { Step1Account } from './steps/Step1Account';
 import { Step2Profile } from './steps/Step2Profile';
 import { Step3Identity } from './steps/Step3Identity';
 import { STEP_TITLES } from './constants';
-import type { RegisterFormData } from './types';
+import type { RegisterFormData, AuthSuccessPayload } from './types';
 
 const INITIAL_FORM_DATA: RegisterFormData = {
   email: '', password: '', confirm: '',
@@ -12,30 +13,91 @@ const INITIAL_FORM_DATA: RegisterFormData = {
 };
 
 type Props = {
-  onSuccess: (payload: RegisterFormData) => void;
+  onSuccess: (payload: AuthSuccessPayload) => void;
   onSwitch: () => void;
   isMobile: boolean;
 };
 
 export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
   const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [apiError, setApiError] = useState('');
   const [formData, setFormData] = useState<RegisterFormData>(INITIAL_FORM_DATA);
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
 
   function updateField(key: keyof RegisterFormData, value: string) {
     setFormData((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function handleFinalSubmit() {
-    setLoading(true);
-    setApiError('');
+  async function handleSignupAndGoToStep3() {
+    setSignupLoading(true);
+    setSignupError('');
+
     try {
-      onSuccess(formData);
+      const response = await backend.auth.signUp.email({
+        email: formData.email,
+        password: formData.password,
+        name: `${formData.firstName} ${formData.lastName}`.trim(),
+      });
+
+      if (!response.success || !response.data) {
+        setSignupError(response.message ?? 'Eroare la inregistrare. Incearca din nou.');
+        return;
+      }
+
+      setStep(2);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Eroare neașteptată. Încearcă din nou.');
+      setSignupError(err instanceof Error ? err.message : 'Eroare neasteptata.');
     } finally {
-      setLoading(false);
+      setSignupLoading(false);
+    }
+  }
+
+  async function handleVerifyCode(code: string) {
+    setVerifyLoading(true);
+    setVerifyError('');
+
+    try {
+      const verificationResponse = await backend.auth.verifyEmail({
+        email: formData.email,
+        otp: code,
+      });
+
+      if (!verificationResponse.success || !verificationResponse.data) {
+        setVerifyError(getOtpErrorMessage(verificationResponse.message))
+        return;
+      }
+
+      onSuccess({
+        user: {
+          id: verificationResponse.data.user.id,
+          name: verificationResponse.data.user.name,
+          email: verificationResponse.data.user.email,
+        },
+      });
+    } catch (err) {
+      setVerifyError(getOtpErrorMessage(err instanceof Error ? err.message : undefined));
+    } finally {
+      setVerifyLoading(false);
+    }
+  }
+
+  async function handleResendCode() {
+    setResendLoading(true)
+    setVerifyError('')
+
+    try {
+      const response = await backend.auth.sendVerificationOtp(formData.email)
+
+      if (!response.success) {
+        setVerifyError(response.message ?? 'Nu am putut retrimite codul. Incearca din nou.')
+      }
+    } catch (err) {
+      setVerifyError(err instanceof Error ? err.message : 'Eroare neasteptata.')
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -61,17 +123,21 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
           data={formData}
           onChange={updateField}
           onBack={() => setStep(0)}
-          onNext={() => setStep(2)}
+          onNext={handleSignupAndGoToStep3}
           isMobile={isMobile}
+          loading={signupLoading}
+          apiError={signupError}
         />
       )}
       {step === 2 && (
         <Step3Identity
           data={formData}
           onBack={() => setStep(1)}
-          onSubmit={handleFinalSubmit}
-          loading={loading}
-          apiError={apiError}
+          onSubmit={handleVerifyCode}
+          onResend={handleResendCode}
+          loading={verifyLoading}
+          resendLoading={resendLoading}
+          apiError={verifyError}
         />
       )}
 
@@ -91,4 +157,18 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
       </p>
     </div>
   );
+}
+
+function getOtpErrorMessage(message?: string | null): string {
+  if (!message) {
+    return 'Codul de verificare este greșit sau a expirat.';
+  }
+
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes('invalid otp') || normalizedMessage.includes('otp')) {
+    return 'Codul de verificare este greșit sau a expirat.';
+  }
+
+  return message;
 }

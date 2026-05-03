@@ -9,3 +9,7 @@ export type RegisterFormData = {
   phone: string;
   city: string;
 };
+
+export type AuthSuccessPayload = {
+  user: { id: string; name: string; email: string };
+};
