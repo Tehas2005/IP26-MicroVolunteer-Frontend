@@ -155,3 +155,10 @@ export type DeleteTaskDetailsResponseType = {
   success: boolean
   [key: string]: unknown
 }
+
+export type UploadResponseEnvelopeType = {
+  data?: string | null
+  message?: string | null
+  statusCode?: number
+  [key: string]: unknown
+}

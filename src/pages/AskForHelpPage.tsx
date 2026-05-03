@@ -108,14 +108,29 @@ function resolveTaskLocation(location: string): TaskLocationPayload | null {
   return ROMANIA_CITY_COORDINATES[normalizedLocation] ?? null
 }
 
-function buildTaskDescription(details: string, location: string, skills: string[]) {
+function buildTaskDescription(
+  details: string,
+  location: string,
+  skills: string[],
+  audioMessageUrl?: string | null,
+) {
   const contentParts = [
     details.trim() || 'Cerere trimisa din formularul Cere Ajutor.',
     location.trim() ? `Locatie declarata: ${location.trim()}` : null,
     skills.length > 0 ? `Skills needed: ${skills.join(', ')}` : null,
+    audioMessageUrl ? `Mesaj vocal: ${audioMessageUrl}` : null,
   ]
 
   return contentParts.filter(Boolean).join('\n\n')
+}
+
+function getUploadedAssetUrl(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || !('data' in payload)) {
+    return null
+  }
+
+  const data = payload.data
+  return typeof data === 'string' && data.trim() ? data : null
 }
 
 function getValidationErrors(data: unknown): ValidationErrorItem[] {
@@ -709,6 +724,7 @@ export function AskForHelpPage() {
   const [customSkill, setCustomSkill] = useState('')
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [audioFile, setAudioFile] = useState<File | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingError, setRecordingError] = useState('')
   const [error, setError] = useState('')
@@ -733,6 +749,7 @@ export function AskForHelpPage() {
     }
 
     setAudioUrl(null)
+    setAudioFile(null)
     setRecordingError('')
   }, [audioUrl])
 
@@ -777,7 +794,6 @@ export function AskForHelpPage() {
   }, [audioUrl])
 
   const showLocationError = requestType === 'Fizic' && locationTouched && !location.trim()
-  const hasUnsupportedVoiceMessage = Boolean(audioUrl)
 
   const toggleSkill = (skill: string) => {
     setSelectedSkills((currentSkills) =>
@@ -840,7 +856,11 @@ export function AskForHelpPage() {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
 
         if (blob.size > 0) {
+          const recordedFile = new File([blob], `mesaj-vocal-${Date.now()}.webm`, {
+            type: blob.type || 'audio/webm',
+          })
           const nextAudioUrl = URL.createObjectURL(blob)
+          setAudioFile(recordedFile)
           setAudioUrl(nextAudioUrl)
         }
 
@@ -897,26 +917,41 @@ export function AskForHelpPage() {
       return
     }
 
-    if (audioUrl) {
-      setError('Backendul curent nu are inca endpoint pentru upload de mesaj vocal.')
-      return
-    }
-
-    const payload: CreateTaskPayload = {
-      title: titlu.trim(),
-      description: buildTaskDescription(details, location, nextSkills),
-      status: 'OPEN' as const,
-      urgency: mapUrgencyToBackend(urgency),
-      category: mapRequestTypeToCategory(requestType),
-      location: resolvedLocation,
-      anonymousMode: isAnonymous,
-      city: location.trim() || undefined,
-      skillsNeeded: nextSkills,
-    }
-
     setIsSubmitting(true)
 
     try {
+      let uploadedAudioUrl: string | null = null
+
+      if (audioFile) {
+        const uploadResponse = await backend.uploads.uploadAudio(audioFile)
+
+        if (!uploadResponse.success) {
+          setError(
+            uploadResponse.message || 'Nu am putut incarca mesajul vocal. Incearca din nou.',
+          )
+          return
+        }
+
+        uploadedAudioUrl = getUploadedAssetUrl(uploadResponse.data)
+
+        if (!uploadedAudioUrl) {
+          setError('Backendul nu a returnat URL-ul mesajului vocal incarcat.')
+          return
+        }
+      }
+
+      const payload: CreateTaskPayload = {
+        title: titlu.trim(),
+        description: buildTaskDescription(details, location, nextSkills, uploadedAudioUrl),
+        status: 'OPEN' as const,
+        urgency: mapUrgencyToBackend(urgency),
+        category: mapRequestTypeToCategory(requestType),
+        location: resolvedLocation,
+        anonymousMode: isAnonymous,
+        city: location.trim() || undefined,
+        skillsNeeded: nextSkills,
+      }
+
       const response = await backend.tasks.create(payload)
 
       if (!response.success) {
@@ -1200,16 +1235,12 @@ export function AskForHelpPage() {
                 {audioUrl && <audio controls src={audioUrl} className="ask-help-audio-player" />}
 
                 {recordingError && <div className="ask-help-error-text">{recordingError}</div>}
-                {hasUnsupportedVoiceMessage && (
-                  <div className="ask-help-error-text">
-                    Mesajul vocal este salvat doar local momentan. Sterge-l ca sa poti trimite
-                    cererea catre backend.
-                  </div>
-                )}
 
                 {!isGuest && !recordingError && (
                   <p className="ask-help-helper-text">
-                    Browserul va cere acces la microfon cand incepi inregistrarea.
+                    {audioUrl
+                      ? 'Mesajul vocal va fi incarcat automat cand trimiti cererea.'
+                      : 'Browserul va cere acces la microfon cand incepi inregistrarea.'}
                   </p>
                 )}
               </div>
@@ -1218,13 +1249,9 @@ export function AskForHelpPage() {
             <button
               type="submit"
               className={`ask-help-primary-submit-btn ${isSubmitting ? 'ask-help-submitting' : ''}`}
-              disabled={isSubmitting || isRecording || hasUnsupportedVoiceMessage}
+              disabled={isSubmitting || isRecording}
             >
-              {isSubmitting
-                ? 'Se trimite...'
-                : hasUnsupportedVoiceMessage
-                  ? 'Sterge mesajul vocal pentru a continua'
-                  : 'Trimite Cererea'}
+              {isSubmitting ? 'Se trimite...' : 'Trimite Cererea'}
             </button>
 
             {error && <div className="ask-help-error-text">{error}</div>}
