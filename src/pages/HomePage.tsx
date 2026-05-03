@@ -1,66 +1,81 @@
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
-import {
-  type LiveRequestCardData,
-} from '@/components/shared/LiveRequestCard'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import { Button } from '@/components/ui/button'
+import { backend } from '@/lib/backend'
+import {
+  extractTasksList,
+  isTaskOwnedByCurrentUser,
+  mapTaskToLiveRequestCard,
+  readCreatedTaskIds,
+} from '@/lib/liveRequests'
 import { useAuthStore } from '@/store/authStore'
 
 export function HomePage() {
   const navigate = useNavigate()
-  const { isGuest } = useAuthStore()
+  const isGuest = useAuthStore((state) => state.isGuest)
+  const sessionStatus = useAuthStore((state) => state.sessionStatus)
+  const authUser = useAuthStore((state) => state.user)
 
-  const myRequests: LiveRequestCardData[] = [
-    {
-      id: 'my-translation',
-      title: 'Traducere rapidă pentru o programare medicală',
-      category: 'MESSAGES_ONLY',
-      urgencyLevel: 'MEDIUM',
-      anonymousMode: true,
-      username: 'help_now',
-      name: 'Ana Popescu',
-    },
-    {
-      id: 'my-form-support',
-      title: 'Sprijin pentru completarea unui formular local',
-      category: 'FACETOFACE',
-      urgencyLevel: 'LOW',
-      anonymousMode: false,
-      username: 'maria.support',
-      name: 'Maria Enache',
-    },
-  ]
+  const { data: liveTasks = [], isLoading: isLoadingLiveRequests } = useQuery({
+    queryKey: ['live-requests', authUser?.id],
+    enabled: sessionStatus === 'ready' && !isGuest,
+    queryFn: async () => {
+      const response = await backend.tasks.list({
+        page: 1,
+        pageSize: 50,
+        order: 'DESC',
+      })
 
-  const volunteerFeedRequests: LiveRequestCardData[] = [
-    {
-      id: 'volunteer-medicine',
-      title: 'Ridicare medicamente pentru o persoană vulnerabilă',
-      category: 'FACETOFACE',
-      urgencyLevel: 'CRITICAL',
-      anonymousMode: false,
-      username: 'maria.safe',
-      name: 'Maria Enache',
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut încărca cererile live.')
+      }
+
+      return extractTasksList(response.data)
     },
-    {
-      id: 'volunteer-guidance',
-      title: 'Însoțire locală pentru orientare într-o zonă nouă',
-      category: 'FACETOFACE',
-      urgencyLevel: 'LOW',
-      anonymousMode: false,
-      username: 'geo_voluntar',
-    },
-    {
-      id: 'volunteer-check-in',
-      title: 'Verificare rapidă prin mesaje pentru o persoană izolată',
-      category: 'MESSAGES_ONLY',
-      urgencyLevel: 'MEDIUM',
-      anonymousMode: true,
-      username: 'safe_contact',
-      name: 'Ioana Marin',
-    },
-  ]
+  })
+
+  const { myRequests, volunteerFeedRequests } = useMemo(() => {
+    if (isGuest || !authUser) {
+      return {
+        myRequests: [],
+        volunteerFeedRequests: [],
+      }
+    }
+
+    const locallyTrackedTaskIds = new Set(readCreatedTaskIds(authUser.id))
+    const ownedTaskIds = new Set<string>()
+
+    const ownedTasks = liveTasks.filter((task) => {
+      const isOwnedByCurrentUser = isTaskOwnedByCurrentUser(task, authUser.id, locallyTrackedTaskIds)
+
+      if (isOwnedByCurrentUser) {
+        ownedTaskIds.add(String(task.id))
+      }
+
+      return isOwnedByCurrentUser
+    })
+
+    const publicTasks = liveTasks.filter((task) => !ownedTaskIds.has(String(task.id)))
+
+    return {
+      myRequests: ownedTasks.map((task) =>
+        mapTaskToLiveRequestCard(task, {
+          currentUserName: authUser.name,
+          isOwnedByCurrentUser: true,
+        }),
+      ),
+      volunteerFeedRequests: publicTasks.map((task) =>
+        mapTaskToLiveRequestCard(task, {
+          currentUserName: authUser.name,
+          isOwnedByCurrentUser: false,
+        }),
+      ),
+    }
+  }, [authUser, isGuest, liveTasks])
 
   return (
     <div className="bg-brand-cream">
@@ -124,6 +139,7 @@ export function HomePage() {
 
           <LiveRequestsSection
             isGuest={isGuest}
+            isLoading={isLoadingLiveRequests}
             myRequests={myRequests}
             volunteerRequests={volunteerFeedRequests}
           />

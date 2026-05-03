@@ -95,7 +95,7 @@ export type CreateProfilePayloadType = {
 
 export type UpdateProfilePayloadType = Partial<CreateProfilePayloadType>
 
-export type TaskUrgencyType = 'LOW' | 'MEDIUM' | 'CRITICAL' | string
+export type TaskUrgencyType = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | string
 export type TaskStatusType =
   | 'OPEN'
   | 'ASSIGNED'
@@ -103,10 +103,10 @@ export type TaskStatusType =
   | 'COMPLETED'
   | 'CANCELLED'
   | string
-export type TaskCategoryType = 'FACETOFACE' | 'MESSAGES_ONLY' | string
+export type TaskCategoryType = 'FACETOFACE' | 'FACE_TO_FACE' | 'MESSAGES_ONLY' | string
 
 export type TaskResponseType = {
-  id: string
+  id: string | number
   title?: string | null
   description?: string | null
   category?: TaskCategoryType | null
@@ -114,6 +114,7 @@ export type TaskResponseType = {
   status?: TaskStatusType | null
   anonymousMode?: boolean | null
   userId?: string | null
+  requestedByUserId?: string | null
   helperUserId?: string | null
   createdAt?: string
   updatedAt?: string
@@ -149,6 +150,18 @@ export type TaskFiltersType = {
   category?: TaskCategoryType
   mine?: boolean
   [key: string]: string | number | boolean | null | undefined
+}
+
+export type TaskListMetaType = {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+export type PaginatedTaskListType = {
+  data: TaskResponseType[]
+  meta?: TaskListMetaType | null
 }
 
 export type DeleteTaskDetailsResponseType = {

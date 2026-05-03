@@ -1,4 +1,4 @@
-export type LiveRequestUrgencyLevel = 'LOW' | 'MEDIUM' | 'CRITICAL'
+export type LiveRequestUrgencyLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 export type LiveRequestCategory = 'FACETOFACE' | 'MESSAGES_ONLY'
 
 export interface LiveRequestCardData {
@@ -30,6 +30,10 @@ const urgencyConfig: Record<LiveRequestUrgencyLevel, UrgencyConfig> = {
   MEDIUM: {
     accentClassName: 'bg-brand-orange',
     label: 'Urgenta medie',
+  },
+  HIGH: {
+    accentClassName: 'bg-brand-red/85',
+    label: 'Urgenta ridicata',
   },
   CRITICAL: {
     accentClassName: 'bg-brand-red',

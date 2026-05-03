@@ -11,6 +11,7 @@ type LiveRequestsTab = 'mine' | 'volunteer'
 
 export interface LiveRequestsSectionProps {
   isGuest: boolean
+  isLoading?: boolean
   myRequests?: LiveRequestCardData[] | null
   volunteerRequests?: LiveRequestCardData[] | null
 }
@@ -20,7 +21,7 @@ const TAB_OPTIONS: Array<{ label: string; value: LiveRequestsTab }> = [
   { label: 'Feed Voluntar', value: 'volunteer' },
 ]
 
-const EMPTY_MESSAGE = 'Momentan nu există cereri în această secțiune.'
+const EMPTY_MESSAGE = 'Momentan nu există cereri live în zona ta.'
 
 function normalizeRequests(requests?: LiveRequestCardData[] | null) {
   return requests ?? []
@@ -28,6 +29,7 @@ function normalizeRequests(requests?: LiveRequestCardData[] | null) {
 
 export function LiveRequestsSection({
   isGuest,
+  isLoading = false,
   myRequests,
   volunteerRequests,
 }: LiveRequestsSectionProps) {
@@ -39,7 +41,7 @@ export function LiveRequestsSection({
   }
 
   const selectedRequests = requestsByTab[activeTab]
-  const showEmptyState = isGuest || selectedRequests.length === 0
+  const showEmptyState = !isLoading && (isGuest || selectedRequests.length === 0)
   const activePanelId = `${activeTab}-requests-panel`
 
   return (
@@ -81,7 +83,16 @@ export function LiveRequestsSection({
         id={activePanelId}
         role="tabpanel"
       >
-        {showEmptyState ? (
+        {isLoading ? (
+          <div className="flex min-h-[220px] items-center justify-center rounded-[22px] border border-brand-gray bg-white">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-purple-light border-t-brand-purple" />
+              <p className="text-sm font-medium text-brand-gray-text">
+                Încărcăm cererile live...
+              </p>
+            </div>
+          </div>
+        ) : showEmptyState ? (
           <Empty className="min-h-[220px] rounded-[22px] border border-dashed border-brand-gray bg-white">
             <EmptyHeader>
               <EmptyMedia
