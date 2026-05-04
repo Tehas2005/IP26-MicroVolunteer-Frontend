@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, useLocation, useNavigationType, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import * as Sentry from "@sentry/react"
+import { createAuthClient } from 'better-auth/client'
+import { emailOTPClient } from 'better-auth/client/plugins'
 
 import { AuthSessionBootstrap } from '@/components/shared/AuthSessionBootstrap'
 import router from '@/router'
@@ -32,7 +34,10 @@ Sentry.init({
   // Activează log-urile interne Sentry pentru debugging
   debug: true,
 });
-
+export const authClient = createAuthClient({
+  baseURL: import.meta.env.SERVER_URL,
+  plugins: [emailOTPClient()]
+})
 const queryClient = new QueryClient()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

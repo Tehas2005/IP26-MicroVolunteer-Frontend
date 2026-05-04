@@ -6,6 +6,7 @@ import { Step2Profile } from './steps/Step2Profile';
 import { Step3Identity } from './steps/Step3Identity';
 import { STEP_TITLES } from './constants';
 import type { RegisterFormData, AuthSuccessPayload } from './types';
+import { authClient } from '@/main';
 
 const INITIAL_FORM_DATA: RegisterFormData = {
   email: '', password: '', confirm: '',
@@ -36,17 +37,17 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
     setSignupError('');
 
     try {
-      const response = await backend.auth.signUp.email({
+      const response = await authClient.signUp.email({
         email: formData.email,
         password: formData.password,
         name: `${formData.firstName} ${formData.lastName}`.trim(),
       });
 
-      if (!response.success || !response.data) {
-        setSignupError(response.message ?? 'Eroare la inregistrare. Incearca din nou.');
+      if (response.error) {
+        setSignupError(response.error.message || 'Signup Error');
         return;
-      }
 
+      }
       setStep(2);
     } catch (err) {
       setSignupError(err instanceof Error ? err.message : 'Eroare neasteptata.');
@@ -60,21 +61,32 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
     setVerifyError('');
 
     try {
-      const verificationResponse = await backend.auth.verifyEmail({
+      const verificationResponse = await authClient.emailOtp.checkVerificationOtp({
         email: formData.email,
+        type : 'email-verification',
         otp: code,
       });
 
-      if (!verificationResponse.success || !verificationResponse.data) {
-        setVerifyError(getOtpErrorMessage(verificationResponse.message))
+      const secondVerification = await authClient.emailOtp.verifyEmail({
+        email : formData.email,
+        otp : code,
+      })
+
+      if(verificationResponse.error){
+        setVerifyError(verificationResponse.error.message || 'Error verifying OTP');
+        return;
+      }
+      if(secondVerification.error){
+        setVerifyError(secondVerification.error.message || 'Error verifying OTP');
         return;
       }
 
+
       onSuccess({
         user: {
-          id: verificationResponse.data.user.id,
-          name: verificationResponse.data.user.name,
-          email: verificationResponse.data.user.email,
+          id: secondVerification.data?.user.id,
+          name: secondVerification.data.user.name,
+          email: secondVerification.data.user.email,
         },
       });
     } catch (err) {
