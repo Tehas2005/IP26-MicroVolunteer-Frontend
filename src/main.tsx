@@ -35,9 +35,10 @@ Sentry.init({
   debug: true,
 });
 export const authClient = createAuthClient({
-  baseURL: import.meta.env.SERVER_URL,
+  baseURL: import.meta.env.VITE_SERVER_URL,
   plugins: [emailOTPClient()]
 })
+console.log(import.meta.env.VITE_SERVER_URL)
 const queryClient = new QueryClient()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
