@@ -52,7 +52,14 @@ export class AuthFetcher {
     email: async (
       payload: SignInEmailPayloadType,
     ): Promise<ApiResponse<SignInResponseType>> => {
-      return this.fetcher.post<SignInResponseType>('/api/auth/sign-in/email', payload)
+      const res = await this.fetcher.post<SignInResponseType>('/api/auth/sign-in/email', payload)
+      if(res.data)
+      {
+        this.setAuthToken(res.data.token)
+        
+      }
+      return res
+  
     },
   }
 
@@ -60,7 +67,13 @@ export class AuthFetcher {
     email: async (
       payload: SignUpEmailPayloadType,
     ): Promise<ApiResponse<SignUpResponseType>> => {
-      return this.fetcher.post<SignUpResponseType>('/api/auth/sign-up/email', payload)
+      const res =  await this.fetcher.post<SignUpResponseType>('/api/auth/sign-up/email', payload)
+      if(res.data && res.data.token)
+      {
+        this.setAuthToken(res.data.token)
+        
+      }
+      return res
     },
   }
 
