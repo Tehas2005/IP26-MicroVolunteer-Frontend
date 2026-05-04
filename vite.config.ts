@@ -1,6 +1,7 @@
 import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig, loadEnv } from "vite"
+import { sentryVitePlugin } from "@sentry/vite-plugin"
 
 const DEFAULT_PROXY_TARGET = "http://localhost:3000"
 
@@ -19,11 +20,20 @@ export default defineConfig(({ mode }) => {
     DEFAULT_PROXY_TARGET
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      sentryVitePlugin({
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        org: "micro-volunteer",
+        project: "micro-volunteer-error-tracking-frontend",
+    }),],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
+    },
+    build: {
+      sourcemap: true,
     },
     server: {
       port: 5173,
