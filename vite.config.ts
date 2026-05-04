@@ -11,13 +11,8 @@ function stripApiSuffix(url: string) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
-  const apiProxyTarget =
-    env.VITE_API_PROXY_TARGET ||
-    env.VITE_BACKEND_BASE_URL ||
-    (env.VITE_API_BASE_URL ? stripApiSuffix(env.VITE_API_BASE_URL) : "") ||
-    (env.VITE_AUTH_BASE_URL ? stripApiSuffix(env.VITE_AUTH_BASE_URL) : "") ||
-    env.VITE_API_URL ||
-    DEFAULT_PROXY_TARGET
+  const apiProxyTarget = env.VITE_SERVER_URL || "http://localhost:3000"
+   
 
   return {
     plugins: [
