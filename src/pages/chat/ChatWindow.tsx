@@ -41,7 +41,9 @@ export function ChatWindow({ username, conversationId, status = 'open' }: Props)
     setMessages(thread?.messages ?? [])
   }
 
-  const initial = username[0].toUpperCase()
+  const trimmedUsername = username.trim()
+  const initial = trimmedUsername ? trimmedUsername[0].toUpperCase() : '?'
+  const displayUsername = trimmedUsername || 'Conversație'
 
   return (
     <>
@@ -58,7 +60,7 @@ export function ChatWindow({ username, conversationId, status = 'open' }: Props)
           {initial}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold leading-tight text-brand-black">{username}</p>
+          <p className="truncate text-sm font-semibold leading-tight text-brand-black">{displayUsername}</p>
           <p className="text-xs text-brand-gray-text">Online</p>
         </div>
       </div>

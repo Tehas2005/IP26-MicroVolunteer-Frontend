@@ -10,7 +10,6 @@ import { type LiveRequestCardData, LiveRequestCard } from './LiveRequestCard'
 type LiveRequestsTab = 'mine' | 'volunteer'
 
 export interface LiveRequestsSectionProps {
-  isGuest: boolean
   isLoading?: boolean
   myRequests?: LiveRequestCardData[] | null
   volunteerRequests?: LiveRequestCardData[] | null

@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, MessageCircle } from 'lucide-react'
 
-import { listMockConversations, resolveChatViewerIdentity, subscribeToMockChat } from '@/lib/mockChat'
 import { useAuthStore } from '@/store/authStore'
 
 import { ConversationList } from './chat/ConversationList'
+import { useMockConversations } from './chat/hooks/useMockConversations'
 import { ChatWindow } from './chat/ChatWindow'
-import type { Conversation } from './chat/types'
 
 function EmptyState() {
   return (
@@ -22,19 +20,7 @@ export function ChatPage() {
   const { conversationId } = useParams<{ conversationId?: string }>()
   const navigate = useNavigate()
   const authUser = useAuthStore((state) => state.user)
-  const identity = useMemo(() => resolveChatViewerIdentity(authUser), [authUser])
-  const [conversations, setConversations] = useState<Conversation[]>(() =>
-    listMockConversations(identity),
-  )
-
-  useEffect(() => {
-    const refreshConversations = () => {
-      setConversations(listMockConversations(identity))
-    }
-
-    refreshConversations()
-    return subscribeToMockChat(refreshConversations)
-  }, [identity])
+  const { conversations } = useMockConversations(authUser)
 
   const selectedConversation = conversationId
     ? conversations.find((conversation) => conversation.id === conversationId) ?? null

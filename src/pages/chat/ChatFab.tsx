@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpRight, MessageCircle, MessageCircleOff, X } from 'lucide-react'
 
 import { useIsMobile } from '@/hooks/use-mobile'
-import { listMockConversations, resolveChatViewerIdentity, subscribeToMockChat } from '@/lib/mockChat'
 import { useAuthStore } from '@/store/authStore'
 
+import { useMockConversations } from './hooks/useMockConversations'
 import type { Conversation } from './types'
 
 export function ChatFab() {
@@ -13,19 +13,12 @@ export function ChatFab() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const [isOpen, setIsOpen] = useState(false)
-  const identity = useMemo(() => resolveChatViewerIdentity(user), [user])
-  const [conversations, setConversations] = useState<Conversation[]>(() =>
-    listMockConversations(identity),
-  )
+  const { conversations } = useMockConversations(user)
 
-  useEffect(() => {
-    const refreshConversations = () => {
-      setConversations(listMockConversations(identity))
-    }
-
-    refreshConversations()
-    return subscribeToMockChat(refreshConversations)
-  }, [identity])
+  function getConversationInitial(conversation: Conversation) {
+    const trimmedUsername = conversation.username.trim()
+    return trimmedUsername ? trimmedUsername[0].toUpperCase() : '?'
+  }
 
   function handleFabClick() {
     if (isMobile) {
@@ -82,7 +75,7 @@ export function ChatFab() {
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-brand-cream"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-purple/15 text-sm font-semibold text-brand-purple">
-                    {conv.username[0].toUpperCase()}
+                    {getConversationInitial(conv)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">

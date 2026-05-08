@@ -160,7 +160,6 @@ export function HomePage() {
           </div>
 
           <LiveRequestsSection
-            isGuest={isGuest}
             isLoading={isLoadingLiveRequests}
             myRequests={displayedMyRequests}
             onVolunteerRequestOpen={handleVolunteerRequestOpen}
