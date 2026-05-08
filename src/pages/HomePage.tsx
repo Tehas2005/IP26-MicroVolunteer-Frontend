@@ -1,50 +1,103 @@
+import { useCallback, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
+import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
+import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import { Button } from '@/components/ui/button'
+import { backend } from '@/lib/backend'
+import {
+  extractTasksList,
+  isTaskOwnedByCurrentUser,
+  mapTaskToLiveRequestCard,
+  readCreatedTaskIds,
+} from '@/lib/liveRequests'
+import { ensureMockConversation, resolveChatViewerIdentity } from '@/lib/mockChat'
+import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import { useAuthStore } from '@/store/authStore'
 import { ChatFab } from './chat/ChatFab'
 
-interface PreviewRequest {
-  title: string
-  meta: string
-  accentClassName: string
-}
-
 export function HomePage() {
   const navigate = useNavigate()
-  const { isGuest } = useAuthStore()
+  const isGuest = useAuthStore((state) => state.isGuest)
+  const sessionStatus = useAuthStore((state) => state.sessionStatus)
+  const authUser = useAuthStore((state) => state.user)
 
-  const previewRequests: PreviewRequest[] = isGuest
-    ? [
-        {
-          title: 'Traducere rapidă pentru o programare medicală',
-          meta: 'Online · Urgență medie',
-          accentClassName: 'bg-brand-orange',
-        },
-        {
-          title: 'Sprijin telefonic pentru completarea unui formular',
-          meta: 'Online · Urgență scăzută',
-          accentClassName: 'bg-brand-green',
-        },
-      ]
-    : [
-        {
-          title: 'Traducere rapidă pentru o programare medicală',
-          meta: 'Online · Urgență medie',
-          accentClassName: 'bg-brand-orange',
-        },
-        {
-          title: 'Ridicare medicamente pentru o persoană vulnerabilă',
-          meta: 'Fizic · Urgență ridicată',
-          accentClassName: 'bg-brand-red',
-        },
-        {
-          title: 'Însoțire locală pentru orientare într-o zonă nouă',
-          meta: 'Fizic · Urgență scăzută',
-          accentClassName: 'bg-brand-green',
-        },
-      ]
+  const { data: liveTasks = [], isLoading: isLoadingLiveRequests } = useQuery({
+    queryKey: ['live-requests', authUser?.id],
+    enabled: sessionStatus === 'ready' && !isGuest,
+    queryFn: async () => {
+      const response = await backend.tasks.list({
+        page: 1,
+        pageSize: 50,
+        order: 'DESC',
+      })
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut încărca cererile live.')
+      }
+
+      return extractTasksList(response.data)
+    },
+  })
+
+  const { myRequests, volunteerFeedRequests } = useMemo(() => {
+    if (isGuest || !authUser) {
+      return {
+        myRequests: [],
+        volunteerFeedRequests: [],
+      }
+    }
+
+    const locallyTrackedTaskIds = new Set(readCreatedTaskIds(authUser.id))
+    const ownedTaskIds = new Set<string>()
+
+    const ownedTasks = liveTasks.filter((task) => {
+      const isOwnedByCurrentUser = isTaskOwnedByCurrentUser(task, authUser.id, locallyTrackedTaskIds)
+
+      if (isOwnedByCurrentUser) {
+        ownedTaskIds.add(String(task.id))
+      }
+
+      return isOwnedByCurrentUser
+    })
+
+    const publicTasks = liveTasks.filter((task) => !ownedTaskIds.has(String(task.id)))
+
+    return {
+      myRequests: ownedTasks.map((task) =>
+        mapTaskToLiveRequestCard(task, {
+          currentUserName: authUser.name,
+          isOwnedByCurrentUser: true,
+        }),
+      ),
+      volunteerFeedRequests: publicTasks.map((task) =>
+        mapTaskToLiveRequestCard(task, {
+          currentUserName: authUser.name,
+          isOwnedByCurrentUser: false,
+        }),
+      ),
+    }
+  }, [authUser, isGuest, liveTasks])
+
+  const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
+  const shouldUseMockLiveRequests =
+    !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
+
+  const displayedMyRequests = shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
+  const displayedVolunteerRequests = shouldUseMockLiveRequests
+    ? mockLiveRequests.volunteerRequests
+    : volunteerFeedRequests
+
+  const handleVolunteerRequestOpen = useCallback(
+    (request: LiveRequestCardData) => {
+      const identity = resolveChatViewerIdentity(authUser)
+      const conversation = ensureMockConversation(request, identity)
+      navigate(`/chat/${conversation.id}`)
+    },
+    [authUser, navigate],
+  )
 
   return (
     <div className="bg-brand-cream">
@@ -106,22 +159,13 @@ export function HomePage() {
             </Button>
           </div>
 
-          <div className="mt-6 grid gap-4">
-            {previewRequests.map((request) => (
-              <div
-                key={request.title}
-                className="rounded-[24px] border border-brand-gray bg-[#F8FAFD] px-5 py-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold text-brand-black">{request.title}</h3>
-                    <p className="mt-2 text-sm text-brand-gray-text">{request.meta}</p>
-                  </div>
-                  <span className={`h-3 w-16 rounded-full ${request.accentClassName}`} />
-                </div>
-              </div>
-            ))}
-          </div>
+          <LiveRequestsSection
+            isGuest={isGuest}
+            isLoading={isLoadingLiveRequests}
+            myRequests={displayedMyRequests}
+            onVolunteerRequestOpen={handleVolunteerRequestOpen}
+            volunteerRequests={displayedVolunteerRequests}
+          />
         </div>
       </section>
       <ChatFab />

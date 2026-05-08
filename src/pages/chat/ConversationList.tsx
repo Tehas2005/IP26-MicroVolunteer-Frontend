@@ -1,21 +1,22 @@
-import { MessageCircle } from 'lucide-react';
-import type { Conversation } from './types';
+import { MessageCircle } from 'lucide-react'
+
+import type { Conversation } from './types'
 
 function formatTime(date: Date): string {
-  const diffMin = Math.floor((Date.now() - date.getTime()) / 60_000);
-  if (diffMin < 1) return 'acum';
-  if (diffMin < 60) return `${diffMin}m`;
-  if (diffMin < 1440) return date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
-  return 'Ieri';
+  const diffMin = Math.floor((Date.now() - date.getTime()) / 60_000)
+  if (diffMin < 1) return 'acum'
+  if (diffMin < 60) return `${diffMin}m`
+  if (diffMin < 1440) return date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })
+  return 'Ieri'
 }
 
 interface Props {
-  conversations: Conversation[];
-  selectedUsername?: string;
-  onSelect: (username: string) => void;
+  conversations: Conversation[]
+  selectedConversationId?: string
+  onSelect: (conversationId: string) => void
 }
 
-export function ConversationList({ conversations, selectedUsername, onSelect }: Props) {
+export function ConversationList({ conversations, selectedConversationId, onSelect }: Props) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="shrink-0 border-b border-brand-gray/60 px-6 py-4">
@@ -28,15 +29,15 @@ export function ConversationList({ conversations, selectedUsername, onSelect }: 
           <p className="text-sm text-brand-gray-text">Nicio conversație încă.</p>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-brand-gray/40">
+        <div className="min-h-0 flex-1 divide-y divide-brand-gray/40 overflow-y-auto">
           {conversations.map((conv) => (
             <button
               key={conv.id}
               type="button"
-              onClick={() => onSelect(conv.username)}
+              onClick={() => onSelect(conv.id)}
               className={[
                 'flex w-full items-center gap-3 px-6 py-3 text-left transition-colors',
-                selectedUsername === conv.username
+                selectedConversationId === conv.id
                   ? 'bg-brand-purple/10'
                   : 'hover:bg-brand-cream',
               ].join(' ')}
@@ -77,5 +78,5 @@ export function ConversationList({ conversations, selectedUsername, onSelect }: 
         </div>
       )}
     </div>
-  );
+  )
 }

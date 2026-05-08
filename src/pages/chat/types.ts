@@ -15,6 +15,7 @@ export type Message = {
   id: string;
   content: MessageContent;
   from: 'me' | 'them';
+  senderId: number | string;
   timestamp: Date;
 };
 
@@ -27,4 +28,6 @@ export type Conversation = {
   timestamp: Date;
   unread: number;
   status: ConversationStatus;
+  requestId?: string;
+  requestTitle?: string;
 };

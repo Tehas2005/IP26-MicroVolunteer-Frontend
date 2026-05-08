@@ -1,45 +1,53 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, MessageCircle, MessageCircleOff, X } from 'lucide-react';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { useAuthStore } from '@/store/authStore';
-import type { Conversation } from './types';
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowUpRight, MessageCircle, MessageCircleOff, X } from 'lucide-react'
 
-// Conversations are populated from account data — empty until backend integration.
-const conversations: Conversation[] = [];
+import { useIsMobile } from '@/hooks/use-mobile'
+import { listMockConversations, resolveChatViewerIdentity, subscribeToMockChat } from '@/lib/mockChat'
+import { useAuthStore } from '@/store/authStore'
+
+import type { Conversation } from './types'
 
 export function ChatFab() {
-  const isMobile = useIsMobile();
-  const navigate = useNavigate();
-  const { isGuest } = useAuthStore();
-  const [isOpen, setIsOpen] = useState(false);
+  const isMobile = useIsMobile()
+  const navigate = useNavigate()
+  const user = useAuthStore((state) => state.user)
+  const [isOpen, setIsOpen] = useState(false)
+  const identity = useMemo(() => resolveChatViewerIdentity(user), [user])
+  const [conversations, setConversations] = useState<Conversation[]>(() =>
+    listMockConversations(identity),
+  )
+
+  useEffect(() => {
+    const refreshConversations = () => {
+      setConversations(listMockConversations(identity))
+    }
+
+    refreshConversations()
+    return subscribeToMockChat(refreshConversations)
+  }, [identity])
 
   function handleFabClick() {
-    if (isGuest) {
-      navigate('/auth/login');
-      return;
-    }
     if (isMobile) {
-      navigate('/chat');
+      navigate('/chat')
     } else {
-      setIsOpen((prev) => !prev);
+      setIsOpen((prev) => !prev)
     }
   }
 
   return (
     <>
-      {/* Backdrop */}
-      {isOpen && (
-        <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-      )}
+      {isOpen && <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />}
 
-      {/* History panel — desktop only, logged-in only */}
-      {isOpen && !isGuest && (
+      {isOpen && (
         <div className="fixed bottom-24 right-6 z-50 w-80 overflow-hidden rounded-[28px] border border-brand-gray bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-brand-gray/60 px-4 py-3">
             <button
               type="button"
-              onClick={() => { setIsOpen(false); navigate('/chat'); }}
+              onClick={() => {
+                setIsOpen(false)
+                navigate('/chat')
+              }}
               aria-label="Ecran complet"
               className="flex items-center gap-1 text-brand-gray-text transition-colors hover:text-brand-purple"
             >
@@ -67,7 +75,10 @@ export function ChatFab() {
                 <button
                   key={conv.id}
                   type="button"
-                  onClick={() => { setIsOpen(false); navigate(`/chat/${conv.username}`); }}
+                  onClick={() => {
+                    setIsOpen(false)
+                    navigate(`/chat/${conv.id}`)
+                  }}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-brand-cream"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-purple/15 text-sm font-semibold text-brand-purple">
@@ -91,15 +102,14 @@ export function ChatFab() {
         </div>
       )}
 
-      {/* FAB */}
       <button
         type="button"
         onClick={handleFabClick}
-        aria-label={isGuest ? 'Autentifică-te pentru a accesa conversațiile' : 'Deschide conversații'}
+        aria-label="Deschide conversațiile"
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-brand-purple text-white shadow-lg transition-all hover:scale-105 hover:bg-brand-purple-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2"
       >
         <MessageCircle className="h-6 w-6" />
       </button>
     </>
-  );
+  )
 }

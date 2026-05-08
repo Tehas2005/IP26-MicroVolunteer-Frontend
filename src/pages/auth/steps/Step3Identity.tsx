@@ -6,21 +6,22 @@ import './Step3Identity.css';
 type Props = {
   data: RegisterFormData;
   onBack: () => void;
-  onSubmit: () => void;
+  onSubmit: (code: string) => Promise<void>;
+  onResend: () => Promise<void>;
   loading: boolean;
+  resendLoading: boolean;
   apiError: string;
 };
 
 const OTP_LENGTH = 6;
 
-export function Step3Identity({ data, onBack, onSubmit, loading, apiError }: Props) {
+export function Step3Identity({ data, onBack, onSubmit, onResend, loading, resendLoading, apiError }: Props) {
   const [code, setCode] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const maskedEmail = maskEmail(data.email);
-  const busy = isLoading || loading;
+  const busy = loading || resendLoading;
 
   const handleInputChange = (index: number, value: string) => {
     if (value && !/^\d$/.test(value)) {
@@ -66,25 +67,20 @@ export function Step3Identity({ data, onBack, onSubmit, loading, apiError }: Pro
     return true;
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     if (!validateCode()) {
       return;
     }
 
-    setIsLoading(true);
     setError('');
-
-    setTimeout(() => {
-      setIsLoading(false);
-      onSubmit();
-    }, 2500);
+    await onSubmit(code.join(''));
   };
 
-  const handleResendEmail = () => {
+  const handleResendEmail = async () => {
     setCode(Array(OTP_LENGTH).fill(''));
     setError('');
     inputRefs.current[0]?.focus();
-    console.log('Email retrimis');
+    await onResend();
   };
 
   return (
@@ -136,7 +132,9 @@ export function Step3Identity({ data, onBack, onSubmit, loading, apiError }: Pro
         <button
           type="button"
           className={`identity-step__verify ${busy ? 'identity-step__verify--loading' : ''}`}
-          onClick={handleVerify}
+          onClick={() => {
+            void handleVerify();
+          }}
           disabled={busy}
         >
           {busy ? (
@@ -154,9 +152,12 @@ export function Step3Identity({ data, onBack, onSubmit, loading, apiError }: Pro
           <button
             type="button"
             className="identity-step__resend-link"
-            onClick={handleResendEmail}
+            onClick={() => {
+              void handleResendEmail();
+            }}
+            disabled={busy}
           >
-            Retrimite email-ul
+            {resendLoading ? 'Se retrimite...' : 'Retrimite email-ul'}
           </button>
         </div>
       </div>

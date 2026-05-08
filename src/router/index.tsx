@@ -6,11 +6,13 @@ import AskForHelpPage from '@/pages/AskForHelpPage'
 import AuthPage from '@/pages/AuthPage'
 import ChatPage from '@/pages/ChatPage'
 import HomePage from '@/pages/HomePage'
+import ResetPasswordPage from '@/pages/ResetPasswordPage'
 
 export const router = createBrowserRouter([
   { path: '/auth', element: <AuthPage mode="login" /> },
   { path: '/auth/login', element: <AuthPage mode="login" /> },
   { path: '/auth/signup', element: <AuthPage mode="signup" /> },
+  { path: '/auth/reset-password', element: <ResetPasswordPage /> },
   {
     path: '/',
     element: <RootLayout />,
@@ -18,7 +20,7 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'cere-ajutor', element: <AskForHelpPage /> },
       { path: 'despre-noi', element: <AboutPage /> },
-      { path: 'chat/:username', element: <ChatPage /> },
+      { path: 'chat/:conversationId', element: <ChatPage /> },
       { path: 'chat', element: <ChatPage /> },
     ],
   },

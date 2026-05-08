@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Field, TextInput, StepNavigation } from '../components';
+import { Field, TextInput, StepNavigation, ErrorBanner } from '../components';
 import { validatePhone, validateUsername } from '../validators';
 import type { RegisterFormData } from '../types';
 
@@ -9,9 +9,11 @@ type Props = {
   onBack: () => void;
   onNext: () => void;
   isMobile: boolean;
+  loading?: boolean;
+  apiError?: string;
 };
 
-export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props) {
+export function Step2Profile({ data, onChange, onBack, onNext, isMobile, loading, apiError }: Props) {
   const [touched, setTouched] = useState<Partial<Record<keyof RegisterFormData, boolean>>>({});
 
   const touch = (key: keyof RegisterFormData) => () =>
@@ -32,6 +34,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
 
   return (
     <div>
+      {apiError && <ErrorBanner message={apiError} />}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 16px' }}>
         <Field label="Prenume" error={touched.firstName ? errors.firstName : ''}>
           <TextInput
@@ -75,7 +78,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           hasError={touched.phone && !!errors.phone}
         />
       </Field>
-      <Field label="Oraș (opțional)">
+      <Field label="Oraș">
         <TextInput
           id="city"
           value={data.city}
@@ -83,7 +86,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           placeholder="Cluj-Napoca"
         />
       </Field>
-      <StepNavigation onBack={onBack} onNext={handleNext} nextLabel="Continuă" />
+      <StepNavigation onBack={onBack} onNext={handleNext} nextLabel="Continuă" loading={loading} />
     </div>
   );
 }
