@@ -21,9 +21,6 @@ export function InteractionHistoryPage() {
               <h1 className="text-2xl font-bold text-brand-black sm:text-3xl">
                 Istoric Interactiuni si Rating-uri
               </h1>
-              <p className="mt-1 text-sm text-brand-gray-text sm:text-base">
-                Vezi interactiunile incheiate si evaluarea asociata fiecarei experiente.
-              </p>
             </div>
           </div>
 
