@@ -17,6 +17,7 @@ interface NavAction {
 
 const navActions: NavAction[] = [
   { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link', visibility: 'all' },
+  { label: 'Profil', path: '/profil', type: 'link', visibility: 'authenticated-only' },
   { label: 'Despre Noi', path: '/despre-noi', type: 'link', visibility: 'all' },
   {
     label: 'Istoric',

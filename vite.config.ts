@@ -6,7 +6,6 @@ import { sentryVitePlugin } from "@sentry/vite-plugin"
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
   const apiProxyTarget = env.VITE_SERVER_URL || "http://localhost:3000"
-   
 
   return {
     plugins: [
