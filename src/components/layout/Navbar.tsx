@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
+import { backend } from '@/lib/backend'
 import { MvcrLogo } from '@/components/shared/MvcrLogo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -85,18 +86,27 @@ function MobileAction({ action, onNavigate }: ActionRendererProps) {
 
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const navigate = useNavigate()
-  const { isGuest, logout } = useAuthStore()
+  const { isGuest, clearAuthSession } = useAuthStore()
 
   function handleNavigate(path: string) {
     setIsMenuOpen(false)
     navigate(path)
   }
 
-  function handleLogout() {
+  async function handleLogout() {
     setIsMenuOpen(false)
-    logout()
-    navigate('/')
+    setIsLoggingOut(true)
+
+    try {
+      await backend.auth.signOut()
+    } finally {
+      backend.auth.clearAuthToken()
+      clearAuthSession()
+      setIsLoggingOut(false)
+      navigate('/')
+    }
   }
 
   return (
@@ -119,8 +129,8 @@ export function Navbar() {
             ))}
           {!isGuest ? (
             <div className="ml-2 flex items-center gap-3">
-              <Button onClick={handleLogout} variant="ghost">
-                Ieși din cont
+              <Button disabled={isLoggingOut} onClick={handleLogout} variant="ghost">
+                {isLoggingOut ? 'Se închide sesiunea...' : 'Ieși din cont'}
               </Button>
             </div>
           ) : null}
@@ -155,8 +165,13 @@ export function Navbar() {
             ))}
           {!isGuest ? (
             <>
-              <Button className="w-full justify-center" onClick={handleLogout} variant="ghost">
-                Ieși din cont
+              <Button
+                className="w-full justify-center"
+                disabled={isLoggingOut}
+                onClick={handleLogout}
+                variant="ghost"
+              >
+                {isLoggingOut ? 'Se închide sesiunea...' : 'Ieși din cont'}
               </Button>
             </>
           ) : null}

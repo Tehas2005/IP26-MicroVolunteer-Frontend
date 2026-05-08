@@ -1,0 +1,126 @@
+import { useState } from 'react'
+import { Inbox } from 'lucide-react'
+
+import { cn } from '@/lib/utils'
+
+import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+
+import { type LiveRequestCardData, LiveRequestCard } from './LiveRequestCard'
+
+type LiveRequestsTab = 'mine' | 'volunteer'
+
+export interface LiveRequestsSectionProps {
+  isGuest: boolean
+  isLoading?: boolean
+  myRequests?: LiveRequestCardData[] | null
+  volunteerRequests?: LiveRequestCardData[] | null
+}
+
+const TAB_OPTIONS: Array<{ label: string; value: LiveRequestsTab }> = [
+  { label: 'Cererile Mele', value: 'mine' },
+  { label: 'Feed Voluntar', value: 'volunteer' },
+]
+
+const EMPTY_MESSAGE = 'Momentan nu există cereri live în zona ta.'
+
+function normalizeRequests(requests?: LiveRequestCardData[] | null) {
+  return requests ?? []
+}
+
+export function LiveRequestsSection({
+  isGuest,
+  isLoading = false,
+  myRequests,
+  volunteerRequests,
+}: LiveRequestsSectionProps) {
+  const [activeTab, setActiveTab] = useState<LiveRequestsTab>('mine')
+
+  const requestsByTab: Record<LiveRequestsTab, LiveRequestCardData[]> = {
+    mine: normalizeRequests(myRequests),
+    volunteer: normalizeRequests(volunteerRequests),
+  }
+
+  const selectedRequests = requestsByTab[activeTab]
+  const showEmptyState = !isLoading && (isGuest || selectedRequests.length === 0)
+  const activePanelId = `${activeTab}-requests-panel`
+
+  return (
+    <div className="mt-6">
+      <div
+        className="grid grid-cols-2 gap-2 border-b border-brand-gray pb-3"
+        role="tablist"
+      >
+        {TAB_OPTIONS.map((tab) => {
+          const isActive = tab.value === activeTab
+          const tabId = `${tab.value}-requests-tab`
+          const panelId = `${tab.value}-requests-panel`
+
+          return (
+            <button
+              key={tab.value}
+              aria-controls={panelId}
+              aria-selected={isActive}
+              className={cn(
+                'rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ease-out',
+                isActive
+                  ? 'border-brand-purple bg-brand-purple-light text-brand-purple-dark'
+                  : 'border-brand-gray bg-white text-brand-gray-text hover:border-brand-purple/40 hover:text-brand-black',
+              )}
+              id={tabId}
+              onClick={() => setActiveTab(tab.value)}
+              role="tab"
+              type="button"
+            >
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      <div
+        aria-labelledby={`${activeTab}-requests-tab`}
+        className="mt-5 rounded-[28px] border border-brand-gray/80 bg-brand-cream/35 p-3 transition-all duration-200 sm:p-4"
+        id={activePanelId}
+        role="tabpanel"
+      >
+        {isLoading ? (
+          <div className="flex min-h-[220px] items-center justify-center rounded-[22px] border border-brand-gray bg-white">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-purple-light border-t-brand-purple" />
+              <p className="text-sm font-medium text-brand-gray-text">
+                Încărcăm cererile live...
+              </p>
+            </div>
+          </div>
+        ) : showEmptyState ? (
+          <Empty className="min-h-[220px] rounded-[22px] border border-dashed border-brand-gray bg-white">
+            <EmptyHeader>
+              <EmptyMedia
+                className="flex size-11 items-center justify-center rounded-full bg-brand-purple-light text-brand-purple-dark [&_svg:not([class*='size-'])]:size-5"
+                variant="default"
+              >
+                <Inbox />
+              </EmptyMedia>
+              <EmptyTitle className="text-base font-semibold text-brand-black">
+                {EMPTY_MESSAGE}
+              </EmptyTitle>
+            </EmptyHeader>
+            <EmptyContent className="text-sm text-brand-gray-text">
+              Schimbă tab-ul sau revino mai târziu pentru cereri noi.
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <div className="max-h-[520px] overflow-y-auto px-3 py-3 scroll-smooth sm:px-4">
+            <div className="grid grid-cols-1 gap-4">
+              {selectedRequests.map((request) => (
+                <LiveRequestCard key={request.id} request={request} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default LiveRequestsSection

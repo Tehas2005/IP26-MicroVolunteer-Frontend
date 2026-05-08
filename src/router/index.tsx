@@ -6,11 +6,13 @@ import AskForHelpPage from '@/pages/AskForHelpPage'
 import AuthPage from '@/pages/AuthPage'
 import HomePage from '@/pages/HomePage'
 import ProfilePage from '@/pages/ProfilePage'
+import ResetPasswordPage from '@/pages/ResetPasswordPage'
 
 export const router = createBrowserRouter([
   { path: '/auth', element: <AuthPage mode="login" /> },
   { path: '/auth/login', element: <AuthPage mode="login" /> },
   { path: '/auth/signup', element: <AuthPage mode="signup" /> },
+  { path: '/auth/reset-password', element: <ResetPasswordPage /> },
   {
     path: '/',
     element: <RootLayout />,

@@ -10,7 +10,7 @@ import { RegisterFlow } from './auth/RegisterFlow'
 import { SuccessScreen } from './auth/SuccessScreen'
 import { TabSwitcher } from './auth/components'
 import { useIsMobile } from './auth/hooks/useIsMobile'
-import type { AuthMode, RegisterFormData } from './auth/types'
+import type { AuthMode, AuthSuccessPayload } from './auth/types'
 
 const GLOBAL_STYLES = `
   html, body {
@@ -37,7 +37,7 @@ export interface AuthPageProps {
 export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
-  const { setAuthSession } = useAuthStore()
+  const { isGuest, sessionStatus, setAuthSession } = useAuthStore()
   const [mode, setMode] = useState<AuthMode>(routeMode === 'signup' ? 'register' : 'login')
   const [success, setSuccess] = useState(false)
 
@@ -46,42 +46,25 @@ export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
     setSuccess(false)
   }, [routeMode])
 
+  useEffect(() => {
+    if (!success && sessionStatus === 'ready' && !isGuest) {
+      navigate('/')
+    }
+  }, [isGuest, navigate, sessionStatus, success])
+
   function syncMode(nextMode: AuthMode) {
     setMode(nextMode)
     navigate(nextMode === 'login' ? '/auth/login' : '/auth/signup')
   }
 
-  function handleLoginSuccess(payload: { email: string }) {
-    const trimmedEmail = payload.email.trim() || 'utilizator@example.com'
-    const inferredName = trimmedEmail.split('@')[0].replace(/[._-]+/g, ' ')
-    const normalizedName =
-      inferredName.charAt(0).toUpperCase() + inferredName.slice(1) || 'Utilizator'
-
-    setAuthSession({
-      token: 'demo-session-token',
-      user: {
-        id: 'demo-login-user',
-        name: normalizedName,
-        email: trimmedEmail,
-      },
-    })
-
+  function handleLoginSuccess(payload: AuthSuccessPayload) {
+    setAuthSession({ user: payload.user })
     setSuccess(true)
     setTimeout(() => navigate('/'), 2700)
   }
 
-  function handleRegisterSuccess(payload: RegisterFormData) {
-    const fullName = `${payload.firstName} ${payload.lastName}`.trim() || 'Utilizator nou'
-
-    setAuthSession({
-      token: 'demo-session-token',
-      user: {
-        id: 'demo-register-user',
-        name: fullName,
-        email: payload.email.trim() || 'utilizator@example.com',
-      },
-    })
-
+  function handleRegisterSuccess(payload: AuthSuccessPayload) {
+    setAuthSession({ user: payload.user })
     setSuccess(true)
     setTimeout(() => navigate('/'), 2700)
   }
