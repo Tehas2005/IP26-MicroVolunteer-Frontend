@@ -12,13 +12,20 @@ interface NavAction {
   label: string
   path: string
   type: 'link' | 'ghost' | 'auth'
+  visibility?: 'all' | 'guest-only' | 'authenticated-only'
 }
 
 const navActions: NavAction[] = [
-  { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link' },
-  { label: 'Despre Noi', path: '/despre-noi', type: 'link' },
-  { label: 'Log In', path: '/auth/login', type: 'ghost' },
-  { label: 'Sign Up', path: '/auth/signup', type: 'auth' },
+  { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link', visibility: 'all' },
+  { label: 'Despre Noi', path: '/despre-noi', type: 'link', visibility: 'all' },
+  {
+    label: 'Istoric',
+    path: '/istoric-interactiuni',
+    type: 'link',
+    visibility: 'authenticated-only',
+  },
+  { label: 'Log In', path: '/auth/login', type: 'ghost', visibility: 'guest-only' },
+  { label: 'Sign Up', path: '/auth/signup', type: 'auth', visibility: 'guest-only' },
 ]
 
 const linkClasses =
@@ -83,6 +90,18 @@ function MobileAction({ action, onNavigate }: ActionRendererProps) {
   )
 }
 
+function shouldDisplayAction(action: NavAction, isGuest: boolean) {
+  if (action.visibility === 'guest-only') {
+    return isGuest
+  }
+
+  if (action.visibility === 'authenticated-only') {
+    return !isGuest
+  }
+
+  return true
+}
+
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -121,11 +140,9 @@ export function Navbar() {
         </button>
 
         <nav aria-label="Navigare principală" className="hidden items-center gap-2 md:flex">
-          {navActions
-            .filter((action) => action.type === 'link' || isGuest)
-            .map((action) => (
-              <DesktopAction key={action.label} action={action} onNavigate={handleNavigate} />
-            ))}
+          {navActions.filter((action) => shouldDisplayAction(action, isGuest)).map((action) => (
+            <DesktopAction key={action.label} action={action} onNavigate={handleNavigate} />
+          ))}
           {!isGuest ? (
             <div className="ml-2 flex items-center gap-3">
               <Button disabled={isLoggingOut} onClick={handleLogout} variant="ghost">
@@ -157,11 +174,9 @@ export function Navbar() {
           aria-label="Navigare principală mobilă"
           className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6"
         >
-          {navActions
-            .filter((action) => action.type === 'link' || isGuest)
-            .map((action) => (
-              <MobileAction key={action.label} action={action} onNavigate={handleNavigate} />
-            ))}
+          {navActions.filter((action) => shouldDisplayAction(action, isGuest)).map((action) => (
+            <MobileAction key={action.label} action={action} onNavigate={handleNavigate} />
+          ))}
           {!isGuest ? (
             <>
               <Button

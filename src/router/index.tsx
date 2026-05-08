@@ -5,6 +5,7 @@ import AboutPage from '@/pages/AboutPage'
 import AskForHelpPage from '@/pages/AskForHelpPage'
 import AuthPage from '@/pages/AuthPage'
 import HomePage from '@/pages/HomePage'
+import InteractionHistoryPage from '@/pages/InteractionHistoryPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 
 export const router = createBrowserRouter([
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'cere-ajutor', element: <AskForHelpPage /> },
       { path: 'despre-noi', element: <AboutPage /> },
+      { path: 'istoric-interactiuni', element: <InteractionHistoryPage /> },
     ],
   },
 ])
