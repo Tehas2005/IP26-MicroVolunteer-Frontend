@@ -73,11 +73,11 @@ export function RegisterFlow({ onSuccess, onSwitch, isMobile }: Props) {
       })
 
       if(verificationResponse.error){
-        setVerifyError(verificationResponse.error.message || 'Error verifying OTP');
+        setVerifyError(getOtpErrorMessage(verificationResponse.error.message));
         return;
       }
       if(secondVerification.error){
-        setVerifyError(secondVerification.error.message || 'Error verifying OTP');
+        setVerifyError(getOtpErrorMessage(secondVerification.error.message));
         return;
       }
 

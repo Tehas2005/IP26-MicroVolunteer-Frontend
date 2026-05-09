@@ -1,16 +1,114 @@
-import { useState } from 'react'
+import { backend } from '@/lib/backend'
+import { useAuthStore } from '@/store/authStore'
+import { useEffect, useMemo, useState } from 'react'
 
 const SAVE_DELAY_MS = 1200
+const SKILLS_STORAGE_KEY_PREFIX = 'mvcr-profile-skills'
 
 const SKILL_SUGGESTIONS = ['traducere', 'transport', 'insotire', 'cumparaturi', 'suport emotional']
 
+function readHiddenIdentityFromResponse(payload: unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return false
+  }
+
+  if ('hiddenIdentity' in payload) {
+    return Boolean(payload.hiddenIdentity)
+  }
+
+  if ('data' in payload && payload.data && typeof payload.data === 'object') {
+    const nestedPayload = payload.data as Record<string, unknown>
+
+    if ('hiddenIdentity' in nestedPayload) {
+      return Boolean(nestedPayload.hiddenIdentity)
+    }
+  }
+
+  return false
+}
+
 export function ProfilePage() {
+  const authUser = useAuthStore((state) => state.user)
   const [hiddenIdentity, setHiddenIdentity] = useState(false)
   const [skillInput, setSkillInput] = useState('')
-  const [skills, setSkills] = useState<string[]>(['traducere'])
+  const [skills, setSkills] = useState<string[]>([])
+  const [hasHydratedProfile, setHasHydratedProfile] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [saveMessage, setSaveMessage] = useState('')
+
+  const skillsStorageKey = useMemo(() => {
+    if (!authUser?.id) {
+      return null
+    }
+
+    return `${SKILLS_STORAGE_KEY_PREFIX}:${authUser.id}`
+  }, [authUser?.id])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function hydrateProfile() {
+      if (isMounted) {
+        setHasHydratedProfile(false)
+      }
+
+      if (skillsStorageKey) {
+        const storedSkills = window.localStorage.getItem(skillsStorageKey)
+
+        if (storedSkills) {
+          try {
+            const parsedSkills = JSON.parse(storedSkills)
+
+            if (isMounted && Array.isArray(parsedSkills)) {
+              setSkills(parsedSkills.filter((value): value is string => typeof value === 'string'))
+            }
+          } catch {
+            window.localStorage.removeItem(skillsStorageKey)
+          }
+        }
+      }
+
+      if (!authUser?.id) {
+        if (isMounted) {
+          setHasHydratedProfile(true)
+          setIsLoadingProfile(false)
+        }
+
+        return
+      }
+
+      const profileResponse = await backend.profile.getByUserId(authUser.id)
+
+      if (!isMounted) {
+        return
+      }
+
+      if (profileResponse.success) {
+        setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
+      } else if (!profileResponse.isNotFound && profileResponse.message) {
+        setSaveError('Nu am reusit sa incarcam setarile profilului.')
+      }
+
+      setHasHydratedProfile(true)
+      setIsLoadingProfile(false)
+    }
+
+    void hydrateProfile()
+
+    return () => {
+      isMounted = false
+    }
+  }, [authUser?.id, skillsStorageKey])
+
+  useEffect(() => {
+    if (!skillsStorageKey || !hasHydratedProfile) {
+      return
+    }
+
+    window.localStorage.setItem(skillsStorageKey, JSON.stringify(skills))
+  }, [hasHydratedProfile, skills, skillsStorageKey])
 
   function addSkill(rawSkill: string) {
     const normalizedSkill = rawSkill.trim()
@@ -31,12 +129,40 @@ export function ProfilePage() {
     setSkills((currentSkills) => [...currentSkills, normalizedSkill])
     setSkillInput('')
     setSaveError('')
+    setSaveMessage('')
   }
 
   function removeSkill(skillToRemove: string) {
     setSkills((currentSkills) =>
       currentSkills.filter((existingSkill) => existingSkill !== skillToRemove),
     )
+    setSaveError('')
+    setSaveMessage('')
+  }
+
+  async function handleHiddenIdentityToggle() {
+    const nextValue = !hiddenIdentity
+
+    setHiddenIdentity(nextValue)
+    setSaveError('')
+    setSaveMessage('')
+
+    const response = await backend.profile.updateMe({ hiddenIdentity: nextValue })
+
+    if (response.success) {
+      return
+    }
+
+    if (response.isNotFound) {
+      const createResponse = await backend.profile.create({ hiddenIdentity: nextValue })
+
+      if (createResponse.success) {
+        return
+      }
+    }
+
+    setHiddenIdentity((currentValue) => !currentValue)
+    setSaveError('Nu am reusit sa salvam setarea de confidentialitate.')
   }
 
   async function handleSaveProfile() {
@@ -50,12 +176,32 @@ export function ProfilePage() {
     setSaveMessage('')
     setIsSaving(true)
 
+    if (skillsStorageKey) {
+      window.localStorage.setItem(skillsStorageKey, JSON.stringify(skills))
+    }
+
+    const response = await backend.profile.updateMe({ hiddenIdentity })
+
+    if (!response.success && response.isNotFound) {
+      const createResponse = await backend.profile.create({ hiddenIdentity })
+
+      if (!createResponse.success) {
+        setIsSaving(false)
+        setSaveError('Nu am reusit sa salvam profilul. Incearca din nou.')
+        return
+      }
+    } else if (!response.success) {
+      setIsSaving(false)
+      setSaveError('Nu am reusit sa salvam profilul. Incearca din nou.')
+      return
+    }
+
     await new Promise((resolve) => {
       window.setTimeout(resolve, SAVE_DELAY_MS)
     })
 
     setIsSaving(false)
-    setSaveMessage('Setarile profilului au fost pregatite local pentru salvare.')
+    setSaveMessage('Setarile profilului au fost salvate.')
   }
 
   return (
@@ -156,9 +302,12 @@ export function ProfilePage() {
                 <button
                   type="button"
                   className={`profile-switch ${hiddenIdentity ? 'profile-switch-active' : ''}`}
-                  onClick={() => setHiddenIdentity((currentValue) => !currentValue)}
+                  onClick={() => {
+                    void handleHiddenIdentityToggle()
+                  }}
                   aria-pressed={hiddenIdentity}
                   aria-label="Ascunde identitatea"
+                  disabled={isLoadingProfile}
                 >
                   <span />
                 </button>
