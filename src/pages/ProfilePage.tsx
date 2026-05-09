@@ -1,4 +1,5 @@
 import { backend } from '@/lib/backend'
+import { addSkillToList, readHiddenIdentityFromResponse } from '@/pages/profile/utils'
 import { useAuthStore } from '@/store/authStore'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -6,26 +7,6 @@ const SAVE_DELAY_MS = 1200
 const SKILLS_STORAGE_KEY_PREFIX = 'mvcr-profile-skills'
 
 const SKILL_SUGGESTIONS = ['traducere', 'transport', 'insotire', 'cumparaturi', 'suport emotional']
-
-function readHiddenIdentityFromResponse(payload: unknown) {
-  if (!payload || typeof payload !== 'object') {
-    return false
-  }
-
-  if ('hiddenIdentity' in payload) {
-    return Boolean(payload.hiddenIdentity)
-  }
-
-  if ('data' in payload && payload.data && typeof payload.data === 'object') {
-    const nestedPayload = payload.data as Record<string, unknown>
-
-    if ('hiddenIdentity' in nestedPayload) {
-      return Boolean(nestedPayload.hiddenIdentity)
-    }
-  }
-
-  return false
-}
 
 export function ProfilePage() {
   const authUser = useAuthStore((state) => state.user)
@@ -111,22 +92,18 @@ export function ProfilePage() {
   }, [hasHydratedProfile, skills, skillsStorageKey])
 
   function addSkill(rawSkill: string) {
-    const normalizedSkill = rawSkill.trim()
+    const nextSkills = addSkillToList(skills, rawSkill)
 
-    if (!normalizedSkill) {
+    if (nextSkills === skills && !rawSkill.trim()) {
       return
     }
 
-    const alreadyExists = skills.some(
-      (existingSkill) => existingSkill.toLowerCase() === normalizedSkill.toLowerCase(),
-    )
-
-    if (alreadyExists) {
+    if (nextSkills === skills) {
       setSkillInput('')
       return
     }
 
-    setSkills((currentSkills) => [...currentSkills, normalizedSkill])
+    setSkills(nextSkills)
     setSkillInput('')
     setSaveError('')
     setSaveMessage('')
