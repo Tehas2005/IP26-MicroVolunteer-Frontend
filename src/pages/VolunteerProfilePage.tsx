@@ -1,6 +1,15 @@
 import React, { useState, type FormEvent, type KeyboardEvent } from 'react'
 
-const CITIES = ['Chișinău', 'Bălți', 'Ialoveni', 'Orhei', 'Cahul', 'Ungheni']
+const CITIES = [
+    'Alba Iulia', 'Alexandria', 'Arad', 'Bacau', 'Baia Mare', 'Bistrita',
+    'Botosani', 'Brasov', 'Braila', 'Bucuresti', 'Buzau', 'Calarasi',
+    'Cluj-Napoca', 'Constanta', 'Craiova', 'Deva', 'Drobeta-Turnu Severin',
+    'Focsani', 'Galati', 'Giurgiu', 'Iasi', 'Miercurea-Ciuc', 'Oradea',
+    'Piatra-Neamt', 'Pitesti', 'Ploiesti', 'Ramnicu Valcea', 'Resita',
+    'Satu Mare', 'Sfantu Gheorghe', 'Sibiu', 'Slatina', 'Slobozia',
+    'Suceava', 'Targu Jiu', 'Targu Mures', 'Targoviste', 'Timisoara',
+    'Tulcea', 'Vaslui', 'Zalau',
+]
 
 const profileStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
