@@ -1,10 +1,11 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
+import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
@@ -15,6 +16,11 @@ import {
 } from '@/lib/liveRequests'
 import { ensureMockConversation, resolveChatViewerIdentity } from '@/lib/mockChat'
 import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
+import {
+  createVolunteerNotification,
+  getVolunteerNotificationId,
+  type VolunteerNotificationItem,
+} from '@/lib/volunteerNotifications'
 import { useAuthStore } from '@/store/authStore'
 import { ChatFab } from './chat/ChatFab'
 
@@ -23,10 +29,14 @@ export function HomePage() {
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
+  const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
+  const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
 
   const { data: liveTasks = [], isLoading: isLoadingLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
     enabled: sessionStatus === 'ready' && !isGuest,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
     queryFn: async () => {
       const response = await backend.tasks.list({
         page: 1,
@@ -90,6 +100,39 @@ export function HomePage() {
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
 
+  useEffect(() => {
+    if (isGuest) {
+      seenVolunteerRequestIdsRef.current.clear()
+      setActiveNotifications([])
+      return
+    }
+
+    if (displayedVolunteerRequests.length === 0) {
+      return
+    }
+
+    const unseenRequests = displayedVolunteerRequests.filter(
+      (request) => !seenVolunteerRequestIdsRef.current.has(request.id),
+    )
+
+    if (unseenRequests.length === 0) {
+      return
+    }
+
+    unseenRequests.forEach((request) => {
+      seenVolunteerRequestIdsRef.current.add(request.id)
+    })
+
+    setActiveNotifications((currentNotifications) => {
+      const currentNotificationIds = new Set(currentNotifications.map((item) => item.id))
+      const nextNotifications = unseenRequests
+        .map((request) => createVolunteerNotification(request))
+        .filter((notification) => !currentNotificationIds.has(notification.id))
+
+      return [...currentNotifications, ...nextNotifications].slice(-4)
+    })
+  }, [displayedVolunteerRequests, isGuest])
+
   const handleVolunteerRequestOpen = useCallback(
     (request: LiveRequestCardData) => {
       const identity = resolveChatViewerIdentity(authUser)
@@ -99,8 +142,28 @@ export function HomePage() {
     [authUser, navigate],
   )
 
+  const handleNotificationDismiss = useCallback((notificationId: string) => {
+    setActiveNotifications((currentNotifications) =>
+      currentNotifications.filter((notification) => notification.id !== notificationId),
+    )
+  }, [])
+
+  const handleNotificationOpen = useCallback(
+    (request: LiveRequestCardData) => {
+      handleNotificationDismiss(getVolunteerNotificationId(request.id))
+      handleVolunteerRequestOpen(request)
+    },
+    [handleNotificationDismiss, handleVolunteerRequestOpen],
+  )
+
   return (
     <div className="bg-brand-cream">
+      <VolunteerNotificationStack
+        notifications={activeNotifications}
+        onDismiss={handleNotificationDismiss}
+        onViewDetails={handleNotificationOpen}
+      />
+
       <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="overflow-hidden rounded-[52px] border border-brand-gray/80 bg-brand-purple-light">
           <div className="grid gap-8 px-6 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:px-10 lg:py-14">
