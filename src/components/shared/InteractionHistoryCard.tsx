@@ -23,7 +23,7 @@ export function InteractionHistoryCard({ item }: InteractionHistoryCardProps) {
           </p>
         </div>
 
-        <div className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="inline-flex shrink-0 self-start rounded-full border border-slate-200 bg-slate-50 px-3 py-2 sm:self-auto">
           <RatingStars value={item.rating} />
         </div>
       </div>

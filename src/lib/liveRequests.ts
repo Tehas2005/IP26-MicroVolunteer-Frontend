@@ -180,5 +180,14 @@ export function mapTaskToLiveRequestCard(
     anonymousMode: isAnonymous,
     username: isAnonymous ? ANONYMOUS_DISPLAY_NAME : null,
     name: isOwnedByCurrentUser ? currentUserName?.trim() || GENERIC_REQUESTER_NAME : GENERIC_REQUESTER_NAME,
+    requesterKey: task.requestedByUserId
+      ? `user:${task.requestedByUserId}`
+      : `guest-request:${normalizeTaskId(task.id) ?? crypto.randomUUID()}`,
+    requesterKind: task.requestedByUserId ? 'user' : 'guest',
+    requesterLabel: isAnonymous
+      ? ANONYMOUS_DISPLAY_NAME
+      : isOwnedByCurrentUser
+        ? currentUserName?.trim() || GENERIC_REQUESTER_NAME
+        : GENERIC_REQUESTER_NAME,
   }
 }

@@ -22,7 +22,7 @@ export function RatingStars({ value, className, showValue = true }: RatingStarsP
   const normalizedRating = normalizeRating(value)
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div className={cn('inline-flex items-center gap-2 align-middle', className)}>
       <div className="flex items-center gap-1">
         {Array.from({ length: MAX_STARS }, (_, index) => {
           const isFilled = index < normalizedRating
@@ -40,7 +40,9 @@ export function RatingStars({ value, className, showValue = true }: RatingStarsP
       </div>
 
       {showValue ? (
-        <span className="text-sm font-medium text-brand-gray-text">{normalizedRating}/5</span>
+        <span className="text-sm font-medium leading-none text-brand-gray-text">
+          {normalizedRating}/5
+        </span>
       ) : null}
     </div>
   )
