@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
+import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
@@ -12,7 +13,10 @@ import {
   mapTaskToLiveRequestCard,
   readCreatedTaskIds,
 } from '@/lib/liveRequests'
+import { ensureMockConversation, resolveChatViewerIdentity } from '@/lib/mockChat'
+import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import { useAuthStore } from '@/store/authStore'
+import { ChatFab } from './chat/ChatFab'
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -77,6 +81,24 @@ export function HomePage() {
     }
   }, [authUser, isGuest, liveTasks])
 
+  const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
+  const shouldUseMockLiveRequests =
+    !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
+
+  const displayedMyRequests = shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
+  const displayedVolunteerRequests = shouldUseMockLiveRequests
+    ? mockLiveRequests.volunteerRequests
+    : volunteerFeedRequests
+
+  const handleVolunteerRequestOpen = useCallback(
+    (request: LiveRequestCardData) => {
+      const identity = resolveChatViewerIdentity(authUser)
+      const conversation = ensureMockConversation(request, identity)
+      navigate(`/chat/${conversation.id}`)
+    },
+    [authUser, navigate],
+  )
+
   return (
     <div className="bg-brand-cream">
       <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -138,13 +160,14 @@ export function HomePage() {
           </div>
 
           <LiveRequestsSection
-            isGuest={isGuest}
             isLoading={isLoadingLiveRequests}
-            myRequests={myRequests}
-            volunteerRequests={volunteerFeedRequests}
+            myRequests={displayedMyRequests}
+            onVolunteerRequestOpen={handleVolunteerRequestOpen}
+            volunteerRequests={displayedVolunteerRequests}
           />
         </div>
       </section>
+      <ChatFab />
     </div>
   )
 }

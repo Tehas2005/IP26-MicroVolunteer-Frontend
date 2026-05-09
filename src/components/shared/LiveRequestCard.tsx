@@ -9,10 +9,14 @@ export interface LiveRequestCardData {
   anonymousMode?: boolean | null
   username?: string | null
   name?: string | null
+  requesterKey?: string | null
+  requesterKind?: 'guest' | 'user'
+  requesterLabel?: string | null
 }
 
 export interface LiveRequestCardProps {
   request: LiveRequestCardData
+  onClick?: () => void
 }
 
 interface UrgencyConfig {
@@ -66,13 +70,29 @@ function getUrgencyMeta(urgencyLevel?: LiveRequestUrgencyLevel | null): UrgencyC
   return urgencyConfig[urgencyLevel]
 }
 
-export function LiveRequestCard({ request }: LiveRequestCardProps) {
+export function LiveRequestCard({ request, onClick }: LiveRequestCardProps) {
   const urgency = getUrgencyMeta(request.urgencyLevel)
   const categoryLabel = getCategoryLabel(request.category)
   const displayName = getDisplayName(request)
+  const isInteractive = typeof onClick === 'function'
 
   return (
-    <article className="group cursor-pointer rounded-[24px] border border-brand-gray/90 bg-[#F8FAFD] px-5 py-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-200 hover:border-brand-purple/35 hover:bg-white hover:shadow-[0_0_0_1px_rgba(123,47,190,0.08),0_2px_5px_rgba(26,26,26,0.08)]">
+    <article
+      className="group cursor-pointer rounded-[24px] border border-brand-gray/90 bg-[#F8FAFD] px-5 py-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-200 hover:border-brand-purple/35 hover:bg-white hover:shadow-[0_0_0_1px_rgba(123,47,190,0.08),0_2px_5px_rgba(26,26,26,0.08)]"
+      onClick={onClick}
+      onKeyDown={
+        isInteractive
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onClick?.()
+              }
+            }
+          : undefined
+      }
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <h3 className="text-base font-semibold text-brand-black transition-colors duration-200 group-hover:text-brand-purple-dark sm:text-[1.05rem]">
