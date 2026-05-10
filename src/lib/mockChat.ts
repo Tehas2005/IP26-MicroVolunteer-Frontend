@@ -39,6 +39,11 @@ export type ChatViewerIdentity = {
   isGuest: boolean
 }
 
+export type MatchedVolunteerSeed = {
+  volunteerKey: string
+  volunteerName: string
+}
+
 export type ChatRequestSeed = {
   id: string
   title?: string | null
@@ -291,6 +296,51 @@ export function ensureMockConversation(
   })
 
   return mapStoredConversation(nextConversation, identity.key)
+}
+
+export function ensureMockConversationForAcceptedOffer(
+  seed: ChatRequestSeed,
+  requesterIdentity: ChatViewerIdentity,
+  volunteer: MatchedVolunteerSeed,
+): Conversation {
+  const state = readState()
+  const requesterKey = requesterIdentity.key
+  const existingConversation = state.conversations.find(
+    (conversation) =>
+      conversation.requestId === seed.id &&
+      conversation.requesterKey === requesterKey &&
+      conversation.volunteerKey === volunteer.volunteerKey,
+  )
+
+  if (existingConversation) {
+    return mapStoredConversation(existingConversation, requesterIdentity.key)
+  }
+
+  const now = new Date().toISOString()
+  const nextConversation: StoredConversation = {
+    id: crypto.randomUUID(),
+    requestId: seed.id,
+    requestTitle: seed.title?.trim() || 'Cerere fără titlu',
+    requesterKey,
+    requesterName: normalizeRequesterLabel({
+      ...seed,
+      requesterLabel: seed.requesterLabel?.trim() || requesterIdentity.displayName,
+      name: seed.name?.trim() || requesterIdentity.displayName,
+    }),
+    requesterIsGuest: requesterIdentity.isGuest,
+    volunteerKey: volunteer.volunteerKey,
+    volunteerName: volunteer.volunteerName.trim() || DEFAULT_VOLUNTEER_NAME,
+    status: seed.status ?? 'open',
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+  }
+
+  writeState({
+    conversations: [nextConversation, ...state.conversations],
+  })
+
+  return mapStoredConversation(nextConversation, requesterIdentity.key)
 }
 
 export function appendMockMessage(
