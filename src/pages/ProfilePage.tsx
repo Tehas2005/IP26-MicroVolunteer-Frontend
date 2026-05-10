@@ -136,14 +136,6 @@ export function ProfilePage() {
       return
     }
 
-    if (response.isNotFound) {
-      const createResponse = await backend.profile.create({ hiddenIdentity: nextValue })
-
-      if (createResponse.success) {
-        return
-      }
-    }
-
     setHiddenIdentity((currentValue) => !currentValue)
     setSaveError('Nu am reusit sa salvam setarea de confidentialitate.')
   }
@@ -165,15 +157,7 @@ export function ProfilePage() {
 
     const response = await backend.profile.updateMe({ hiddenIdentity })
 
-    if (!response.success && response.isNotFound) {
-      const createResponse = await backend.profile.create({ hiddenIdentity })
-
-      if (!createResponse.success) {
-        setIsSaving(false)
-        setSaveError('Nu am reusit sa salvam profilul. Incearca din nou.')
-        return
-      }
-    } else if (!response.success) {
+    if (!response.success) {
       setIsSaving(false)
       setSaveError('Nu am reusit sa salvam profilul. Incearca din nou.')
       return
