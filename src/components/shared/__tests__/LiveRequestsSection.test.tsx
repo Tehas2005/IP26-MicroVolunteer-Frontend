@@ -45,7 +45,7 @@ describe('LiveRequestsSection', () => {
     expect(screen.getByText('Cererea mea')).toBeInTheDocument()
     expect(screen.queryByText('Cerere voluntar')).not.toBeInTheDocument()
 
-    await user.click(screen.getAllByRole('tab', { name: 'Feed Voluntar' })[0])
+    await user.click(screen.getByRole('tab', { name: 'Feed Voluntar' }))
 
     expect(screen.getByText('Cerere voluntar')).toBeInTheDocument()
     expect(screen.queryByText('Cererea mea')).not.toBeInTheDocument()
@@ -63,7 +63,7 @@ describe('LiveRequestsSection', () => {
       />,
     )
 
-    await user.click(screen.getAllByRole('tab', { name: 'Feed Voluntar' })[0])
+    await user.click(screen.getByRole('tab', { name: 'Feed Voluntar' }))
     await user.click(screen.getByRole('button', { name: /cerere voluntar/i }))
 
     expect(openVolunteerRequest).toHaveBeenCalledWith(
