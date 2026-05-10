@@ -2,11 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 
-import { appendMockMessage, getMockConversationThread, resolveChatViewerIdentity, subscribeToMockChat } from '@/lib/mockChat'
+import {
+  appendMockMessage,
+  getMockConversationThread,
+  resolveChatViewerIdentity,
+  skipMockConversationRating,
+  submitMockConversationRating,
+  subscribeToMockChat,
+} from '@/lib/mockChat'
 import { useAuthStore } from '@/store/authStore'
 
-import { MessageBubble } from './MessageBubble'
 import { ChatInput } from './ChatInput'
+import { ConversationRatingModal } from './ConversationRatingModal'
+import { MessageBubble } from './MessageBubble'
 import type { ConversationStatus, Message, MessageContent } from './types'
 
 interface Props {
@@ -21,11 +29,20 @@ export function ChatWindow({ username, conversationId, status = 'open' }: Props)
   const user = useAuthStore((state) => state.user)
   const identity = useMemo(() => resolveChatViewerIdentity(user), [user])
   const [messages, setMessages] = useState<Message[]>([])
+  const [targetUserId, setTargetUserId] = useState<string | null>(null)
+  const [ratingTargetName, setRatingTargetName] = useState('')
+  const [viewerRole, setViewerRole] = useState<'requester' | 'volunteer'>('requester')
+  const [isRatingModalOpen, setIsRatingModalOpen] = useState(false)
 
   useEffect(() => {
     const refreshConversation = () => {
       const thread = getMockConversationThread(conversationId, identity)
+
       setMessages(thread?.messages ?? [])
+      setTargetUserId(thread?.ratingPrompt?.targetUserId ?? null)
+      setRatingTargetName(thread?.ratingPrompt?.targetName ?? '')
+      setViewerRole(thread?.ratingPrompt?.viewerRole ?? 'requester')
+      setIsRatingModalOpen(Boolean(thread?.ratingPrompt?.shouldPrompt))
     }
 
     refreshConversation()
@@ -41,17 +58,46 @@ export function ChatWindow({ username, conversationId, status = 'open' }: Props)
     setMessages(thread?.messages ?? [])
   }
 
+  function handleRatingSubmit(stars: number, ratingTargetUserId: string) {
+    const result = submitMockConversationRating(conversationId, stars, identity)
+
+    if (!result || result.targetUserId !== ratingTargetUserId) {
+      return
+    }
+
+    setIsRatingModalOpen(false)
+  }
+
+  function handleRatingSkip() {
+    const skipped = skipMockConversationRating(conversationId, identity)
+
+    if (!skipped) {
+      return
+    }
+
+    setIsRatingModalOpen(false)
+  }
+
   const trimmedUsername = username.trim()
   const initial = trimmedUsername ? trimmedUsername[0].toUpperCase() : '?'
-  const displayUsername = trimmedUsername || 'Conversație'
+  const displayUsername = trimmedUsername || 'Conversatie'
 
   return (
     <>
+      <ConversationRatingModal
+        isOpen={isRatingModalOpen}
+        targetName={ratingTargetName}
+        targetUserId={targetUserId}
+        viewerRole={viewerRole}
+        onSkip={handleRatingSkip}
+        onSubmit={handleRatingSubmit}
+      />
+
       <div className="flex shrink-0 items-center gap-3 border-b border-brand-gray/60 px-6 py-3 sm:px-8">
         <button
           type="button"
           onClick={() => navigate('/chat')}
-          aria-label="Înapoi la conversații"
+          aria-label="Inapoi la conversatii"
           className="shrink-0 text-brand-gray-text transition-colors hover:text-brand-black md:hidden"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -60,7 +106,9 @@ export function ChatWindow({ username, conversationId, status = 'open' }: Props)
           {initial}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold leading-tight text-brand-black">{displayUsername}</p>
+          <p className="truncate text-sm font-semibold leading-tight text-brand-black">
+            {displayUsername}
+          </p>
           <p className="text-xs text-brand-gray-text">Online</p>
         </div>
       </div>

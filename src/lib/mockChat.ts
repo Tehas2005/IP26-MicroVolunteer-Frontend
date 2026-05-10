@@ -14,6 +14,13 @@ type StoredMessage = {
   sentAt: string
 }
 
+type StoredConversationRating = {
+  authorKey: string
+  targetUserId: string
+  stars: number
+  submittedAt: string
+}
+
 type StoredConversation = {
   id: string
   requestId: string
@@ -27,6 +34,8 @@ type StoredConversation = {
   createdAt: string
   updatedAt: string
   messages: StoredMessage[]
+  ratings: StoredConversationRating[]
+  skippedRatingBy: string[]
 }
 
 type StoredChatState = {
@@ -54,10 +63,45 @@ export type ChatRequestSeed = {
 type ChatThread = {
   conversation: Conversation
   messages: Message[]
+  ratingPrompt: {
+    targetUserId: string
+    targetName: string
+    viewerRole: 'requester' | 'volunteer'
+    shouldPrompt: boolean
+  } | null
 }
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+}
+
+function isStoredConversationRating(value: unknown): value is StoredConversationRating {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const candidate = value as Record<string, unknown>
+
+  return (
+    typeof candidate.authorKey === 'string' &&
+    typeof candidate.targetUserId === 'string' &&
+    typeof candidate.stars === 'number' &&
+    candidate.stars >= 1 &&
+    candidate.stars <= 5 &&
+    typeof candidate.submittedAt === 'string'
+  )
+}
+
+function normalizeStoredConversation(conversation: StoredConversation) {
+  return {
+    ...conversation,
+    ratings: Array.isArray(conversation.ratings)
+      ? conversation.ratings.filter(isStoredConversationRating)
+      : [],
+    skippedRatingBy: Array.isArray(conversation.skippedRatingBy)
+      ? conversation.skippedRatingBy.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+  }
 }
 
 function readState(): StoredChatState {
@@ -107,7 +151,7 @@ function readState(): StoredChatState {
             Array.isArray(candidate.messages)
           )
         },
-      ),
+      ).map((conversation: StoredConversation) => normalizeStoredConversation(conversation)),
     }
   } catch {
     return { conversations: [] }
@@ -159,6 +203,31 @@ function mapStoredConversation(
     status: conversation.status,
     requestId: conversation.requestId,
     requestTitle: conversation.requestTitle,
+  }
+}
+
+function buildRatingPrompt(
+  conversation: StoredConversation,
+  viewerKey: string,
+): ChatThread['ratingPrompt'] {
+  const isRequesterViewing = conversation.requesterKey === viewerKey
+  const isVolunteerViewing = conversation.volunteerKey === viewerKey
+
+  if (!isRequesterViewing && !isVolunteerViewing) {
+    return null
+  }
+
+  const targetUserId = isRequesterViewing ? conversation.volunteerKey : conversation.requesterKey
+  const targetName = isRequesterViewing ? conversation.volunteerName : conversation.requesterName
+  const viewerRole = isRequesterViewing ? 'requester' : 'volunteer'
+  const alreadyRated = conversation.ratings.some((rating) => rating.authorKey === viewerKey)
+  const alreadySkipped = conversation.skippedRatingBy.includes(viewerKey)
+
+  return {
+    targetUserId,
+    targetName,
+    viewerRole,
+    shouldPrompt: conversation.status === 'closed' && !alreadyRated && !alreadySkipped,
   }
 }
 
@@ -250,6 +319,7 @@ export function getMockConversationThread(
       senderId: message.senderKey,
       timestamp: new Date(message.sentAt),
     })),
+    ratingPrompt: buildRatingPrompt(conversation, identity.key),
   }
 }
 
@@ -284,6 +354,8 @@ export function ensureMockConversation(
     createdAt: now,
     updatedAt: now,
     messages: [],
+    ratings: [],
+    skippedRatingBy: [],
   }
 
   writeState({
@@ -334,4 +406,95 @@ export function appendMockMessage(
   writeState({ conversations: nextConversations })
 
   return getMockConversationThread(conversationId, identity)
+}
+
+export function submitMockConversationRating(
+  conversationId: string,
+  stars: number,
+  identity: ChatViewerIdentity,
+) {
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+    return null
+  }
+
+  const state = readState()
+  const conversationIndex = state.conversations.findIndex(
+    (conversation) => conversation.id === conversationId,
+  )
+
+  if (conversationIndex === -1) {
+    return null
+  }
+
+  const conversation = state.conversations[conversationIndex]
+
+  if (conversation.requesterKey !== identity.key && conversation.volunteerKey !== identity.key) {
+    return null
+  }
+
+  const ratingPrompt = buildRatingPrompt(conversation, identity.key)
+
+  if (!ratingPrompt || !ratingPrompt.shouldPrompt) {
+    return null
+  }
+
+  const nextConversation: StoredConversation = {
+    ...conversation,
+    ratings: [
+      ...conversation.ratings,
+      {
+        authorKey: identity.key,
+        targetUserId: ratingPrompt.targetUserId,
+        stars,
+        submittedAt: new Date().toISOString(),
+      },
+    ],
+  }
+
+  const nextConversations = [...state.conversations]
+  nextConversations[conversationIndex] = nextConversation
+  writeState({ conversations: nextConversations })
+
+  return {
+    conversationId,
+    stars,
+    targetUserId: ratingPrompt.targetUserId,
+  }
+}
+
+export function skipMockConversationRating(
+  conversationId: string,
+  identity: ChatViewerIdentity,
+) {
+  const state = readState()
+  const conversationIndex = state.conversations.findIndex(
+    (conversation) => conversation.id === conversationId,
+  )
+
+  if (conversationIndex === -1) {
+    return false
+  }
+
+  const conversation = state.conversations[conversationIndex]
+
+  if (conversation.requesterKey !== identity.key && conversation.volunteerKey !== identity.key) {
+    return false
+  }
+
+  const ratingPrompt = buildRatingPrompt(conversation, identity.key)
+
+  if (!ratingPrompt || !ratingPrompt.shouldPrompt) {
+    return false
+  }
+
+  const nextConversation: StoredConversation = {
+    ...conversation,
+    skippedRatingBy: [...conversation.skippedRatingBy, identity.key],
+  }
+
+  const nextConversations = [...state.conversations]
+  nextConversations[conversationIndex] = nextConversation
+  writeState({ conversations: nextConversations })
+
+  return true
 }
