@@ -31,6 +31,7 @@ export function HomePage() {
   const authUser = useAuthStore((state) => state.user)
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
+  const hasInitializedVolunteerFeedRef = useRef(false)
 
   const { data: liveTasks = [], isLoading: isLoadingLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
@@ -101,17 +102,33 @@ export function HomePage() {
     : volunteerFeedRequests
 
   useEffect(() => {
-    if (isGuest) {
+    if (isGuest || sessionStatus !== 'ready') {
       seenVolunteerRequestIdsRef.current.clear()
+      hasInitializedVolunteerFeedRef.current = false
       setActiveNotifications([])
       return
     }
 
-    if (displayedVolunteerRequests.length === 0) {
+    if (shouldUseMockLiveRequests) {
+      seenVolunteerRequestIdsRef.current.clear()
+      hasInitializedVolunteerFeedRef.current = false
+      setActiveNotifications([])
       return
     }
 
-    const unseenRequests = displayedVolunteerRequests.filter(
+    if (!hasInitializedVolunteerFeedRef.current) {
+      volunteerFeedRequests.forEach((request) => {
+        seenVolunteerRequestIdsRef.current.add(request.id)
+      })
+      hasInitializedVolunteerFeedRef.current = true
+      return
+    }
+
+    if (volunteerFeedRequests.length === 0) {
+      return
+    }
+
+    const unseenRequests = volunteerFeedRequests.filter(
       (request) => !seenVolunteerRequestIdsRef.current.has(request.id),
     )
 
@@ -131,7 +148,7 @@ export function HomePage() {
 
       return [...currentNotifications, ...nextNotifications].slice(-4)
     })
-  }, [displayedVolunteerRequests, isGuest])
+  }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
 
   const handleVolunteerRequestOpen = useCallback(
     (request: LiveRequestCardData) => {
