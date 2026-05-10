@@ -33,47 +33,53 @@ export function ProfilePage() {
     async function hydrateProfile() {
       if (isMounted) {
         setHasHydratedProfile(false)
+        setIsLoadingProfile(true)
+        setSkills([])
+        setHiddenIdentity(false)
       }
 
-      if (skillsStorageKey) {
-        const storedSkills = window.localStorage.getItem(skillsStorageKey)
+      try {
+        if (skillsStorageKey) {
+          const storedSkills = window.localStorage.getItem(skillsStorageKey)
 
-        if (storedSkills) {
-          try {
-            const parsedSkills = JSON.parse(storedSkills)
+          if (storedSkills) {
+            try {
+              const parsedSkills = JSON.parse(storedSkills)
 
-            if (isMounted && Array.isArray(parsedSkills)) {
-              setSkills(parsedSkills.filter((value): value is string => typeof value === 'string'))
+              if (isMounted && Array.isArray(parsedSkills)) {
+                setSkills(parsedSkills.filter((value): value is string => typeof value === 'string'))
+              }
+            } catch {
+              window.localStorage.removeItem(skillsStorageKey)
             }
-          } catch {
-            window.localStorage.removeItem(skillsStorageKey)
           }
         }
-      }
 
-      if (!authUser?.id) {
+        if (!authUser?.id) {
+          return
+        }
+
+        const profileResponse = await backend.profile.getByUserId(authUser.id)
+
+        if (!isMounted) {
+          return
+        }
+
+        if (profileResponse.success) {
+          setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
+        } else if (!profileResponse.isNotFound && profileResponse.message) {
+          setSaveError('Nu am reusit sa incarcam setarile profilului.')
+        }
+      } catch {
+        if (isMounted) {
+          setSaveError('Nu am reusit sa incarcam setarile profilului.')
+        }
+      } finally {
         if (isMounted) {
           setHasHydratedProfile(true)
           setIsLoadingProfile(false)
         }
-
-        return
       }
-
-      const profileResponse = await backend.profile.getByUserId(authUser.id)
-
-      if (!isMounted) {
-        return
-      }
-
-      if (profileResponse.success) {
-        setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
-      } else if (!profileResponse.isNotFound && profileResponse.message) {
-        setSaveError('Nu am reusit sa incarcam setarile profilului.')
-      }
-
-      setHasHydratedProfile(true)
-      setIsLoadingProfile(false)
     }
 
     void hydrateProfile()
