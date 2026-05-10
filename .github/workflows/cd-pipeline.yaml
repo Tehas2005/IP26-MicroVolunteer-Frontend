@@ -39,6 +39,9 @@ jobs:
       #Building
       - name: Build Project
         run: npm run build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
 
       #Railway CLI on VM for deployment
       - name: Install Railway CLI

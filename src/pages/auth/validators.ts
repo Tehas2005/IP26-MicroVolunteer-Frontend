@@ -18,6 +18,13 @@ export function validateConfirm(password: string, confirm: string): string {
   return '';
 }
 
+export function validateUsername(value: string): string {
+  if (!value.trim()) return 'Username-ul este obligatoriu.';
+  if (value.length < 3) return 'Minim 3 caractere.';
+  if (!/^[a-zA-Z0-9_-]+$/.test(value)) return 'Doar litere, cifre, _ și -.';
+  return '';
+}
+
 export function validatePhone(value: string): string {
   if (!value.trim()) return 'Telefonul este obligatoriu.';
   if (!/^0\d{9}$/.test(value)) return 'Format invalid (07XXXXXXXX).';

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { backend } from '@/lib/backend'
+import { extractCreatedTaskId, rememberCreatedTaskId } from '@/lib/liveRequests'
 import {
   ROMANIA_CITY_COORDINATES,
   ROMANIA_DEFAULT_COORDINATES,
@@ -713,6 +714,7 @@ function InformatiiSuplimentare({
 
 export function AskForHelpPage() {
   const authIsGuest = useAuthStore((state) => state.isGuest)
+  const authUserId = useAuthStore((state) => state.user?.id)
   const [isGuest, setIsGuest] = useState(true)
   const [titlu, setTitlu] = useState('')
   const [requestType, setRequestType] = useState<'Online' | 'Fizic'>('Online')
@@ -967,6 +969,11 @@ export function AskForHelpPage() {
 
         setError(response.message || 'Nu am putut trimite cererea catre backend. Incearca din nou.')
         return
+      }
+
+      if (authUserId) {
+        const createdTaskId = extractCreatedTaskId(response.data)
+        rememberCreatedTaskId(authUserId, createdTaskId)
       }
 
       setSuccessMessage('Cererea ta a fost trimisa voluntarilor!')

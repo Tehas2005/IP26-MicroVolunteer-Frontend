@@ -2,6 +2,7 @@ import type { Fetcher } from './Fetcher'
 import type {
   ApiResponse,
   DeleteTaskDetailsResponseType,
+  PaginatedTaskListType,
   TaskDetailsPayloadType,
   TaskFiltersType,
   TaskResponseType,
@@ -16,8 +17,8 @@ export class TasksFetcher {
     return this.fetcher.post<TaskResponseType>('/api/tasks', payload)
   }
 
-  public list(filters?: TaskFiltersType): Promise<ApiResponse<TaskResponseType[]>> {
-    return this.fetcher.get<TaskResponseType[]>('/api/tasks', { query: filters })
+  public list(filters?: TaskFiltersType): Promise<ApiResponse<PaginatedTaskListType>> {
+    return this.fetcher.get<PaginatedTaskListType>('/api/tasks', { query: filters })
   }
 
   public getById(id: string): Promise<ApiResponse<TaskResponseType>> {

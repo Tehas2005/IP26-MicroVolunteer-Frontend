@@ -2,6 +2,7 @@ import { type ReactNode, useEffect } from 'react'
 
 import { backend } from '@/lib/backend'
 import { useAuthStore } from '@/store/authStore'
+import { authClient } from '@/main'
 
 interface AuthSessionBootstrapProps {
   children: ReactNode
@@ -20,11 +21,15 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
       setSessionStatus('loading')
 
       try {
-        const response = await backend.auth.getSession()
+        const response = await authClient.getSession();
 
-        if (!isMounted) return
+        if (!isMounted) return;
 
-        if (response.success && response.data?.user && response.data.session) {
+        if(response.error){
+          console.log(response.error.message || 'get-session failed');
+        }
+
+        if (response.data) {
           setAuthSession({
             user: {
               id: response.data.user.id,
@@ -32,15 +37,10 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
               email: response.data.user.email,
             },
           })
-          return
+          return;
         }
-
-        backend.auth.clearAuthToken()
-        clearAuthSession()
       } catch {
         if (!isMounted) return
-        backend.auth.clearAuthToken()
-        clearAuthSession()
       } finally {
         if (isMounted) {
           setSessionStatus('ready')

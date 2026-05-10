@@ -5,6 +5,7 @@ import { Field, TextInput, PasswordInput, ErrorBanner } from './components';
 import { validateEmail } from './validators';
 import { primaryButtonStyle } from './constants';
 import type { AuthSuccessPayload } from './types';
+import { authClient } from '@/main';
 
 type Props = {
   onSuccess: (payload: AuthSuccessPayload) => void;
@@ -40,14 +41,14 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
     setApiError('');
 
     try {
-      const response = await backend.auth.signIn.email({
+      
+      const response = await authClient.signIn.email({
         email,
         password,
-        rememberMe: remember,
-      });
+      })
 
-      if (!response.success || !response.data) {
-        setApiError(response.message ?? 'Autentificarea a esuat.');
+      if (response.error) {
+        setApiError(response.error.message || 'Autentificarea a esuat.');
         return;
       }
 
