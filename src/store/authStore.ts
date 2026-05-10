@@ -9,16 +9,17 @@ export interface AuthUser {
 
 export interface AuthSession {
   user: AuthUser
-  token: string | null
 }
+
+export type AuthSessionStatus = 'loading' | 'ready'
 
 export interface AuthState {
   user: AuthUser | null
   isGuest: boolean
-  token: string | null
-  setUser: (user: AuthUser) => void
+  sessionStatus: AuthSessionStatus
   setAuthSession: (session: AuthSession) => void
-  logout: () => void
+  clearAuthSession: () => void
+  setSessionStatus: (status: AuthSessionStatus) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -26,17 +27,16 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       isGuest: true,
-      token: null,
-      setUser: (user) => set({ user, isGuest: false }),
-      setAuthSession: ({ user, token }) => set({ user, token, isGuest: false }),
-      logout: () => set({ user: null, token: null, isGuest: true }),
+      sessionStatus: 'loading',
+      setAuthSession: ({ user }) => set({ user, isGuest: false }),
+      clearAuthSession: () => set({ user: null, isGuest: true }),
+      setSessionStatus: (sessionStatus) => set({ sessionStatus }),
     }),
     {
       name: 'mvcr-auth-session',
-      partialize: ({ user, isGuest, token }) => ({ user, isGuest, token }),
+      partialize: ({ user, isGuest }) => ({ user, isGuest }),
     },
   ),
 )
 
 export default useAuthStore
-

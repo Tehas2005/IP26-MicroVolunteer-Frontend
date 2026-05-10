@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
+import { backend } from '@/lib/backend'
 import { MvcrLogo } from '@/components/shared/MvcrLogo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -11,10 +12,12 @@ interface NavAction {
   label: string
   path: string
   type: 'link' | 'ghost' | 'auth'
+  requiresAuth?: boolean
 }
 
 const navActions: NavAction[] = [
   { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link' },
+  { label: 'Profil', path: '/profil', type: 'link', requiresAuth: true },
   { label: 'Despre Noi', path: '/despre-noi', type: 'link' },
   { label: 'Profil', path: '/profil', type: 'link' }, // <-- Вот наша новая ссылка
   { label: 'Log In', path: '/auth/login', type: 'ghost' },
@@ -85,18 +88,39 @@ function MobileAction({ action, onNavigate }: ActionRendererProps) {
 
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const navigate = useNavigate()
-  const { isGuest, logout } = useAuthStore()
+  const { isGuest, clearAuthSession } = useAuthStore()
 
   function handleNavigate(path: string) {
     setIsMenuOpen(false)
     navigate(path)
   }
 
-  function handleLogout() {
+  async function handleLogout() {
     setIsMenuOpen(false)
-    logout()
-    navigate('/')
+    setIsLoggingOut(true)
+
+    try {
+      await backend.auth.signOut()
+    } finally {
+      backend.auth.clearAuthToken()
+      clearAuthSession()
+      setIsLoggingOut(false)
+      navigate('/')
+    }
+  }
+
+  function shouldShowAction(action: NavAction) {
+    if (action.requiresAuth) {
+      return !isGuest
+    }
+
+    if (action.type === 'link') {
+      return true
+    }
+
+    return isGuest
   }
 
   return (
@@ -112,15 +136,13 @@ export function Navbar() {
         </button>
 
         <nav aria-label="Navigare principală" className="hidden items-center gap-2 md:flex">
-          {navActions
-            .filter((action) => action.type === 'link' || isGuest)
-            .map((action) => (
-              <DesktopAction key={action.label} action={action} onNavigate={handleNavigate} />
-            ))}
+          {navActions.filter(shouldShowAction).map((action) => (
+            <DesktopAction key={action.label} action={action} onNavigate={handleNavigate} />
+          ))}
           {!isGuest ? (
             <div className="ml-2 flex items-center gap-3">
-              <Button onClick={handleLogout} variant="ghost">
-                Ieși din cont
+              <Button disabled={isLoggingOut} onClick={handleLogout} variant="ghost">
+                {isLoggingOut ? 'Se închide sesiunea...' : 'Ieși din cont'}
               </Button>
             </div>
           ) : null}
@@ -148,15 +170,18 @@ export function Navbar() {
           aria-label="Navigare principală mobilă"
           className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6"
         >
-          {navActions
-            .filter((action) => action.type === 'link' || isGuest)
-            .map((action) => (
-              <MobileAction key={action.label} action={action} onNavigate={handleNavigate} />
-            ))}
+          {navActions.filter(shouldShowAction).map((action) => (
+            <MobileAction key={action.label} action={action} onNavigate={handleNavigate} />
+          ))}
           {!isGuest ? (
             <>
-              <Button className="w-full justify-center" onClick={handleLogout} variant="ghost">
-                Ieși din cont
+              <Button
+                className="w-full justify-center"
+                disabled={isLoggingOut}
+                onClick={handleLogout}
+                variant="ghost"
+              >
+                {isLoggingOut ? 'Se închide sesiunea...' : 'Ieși din cont'}
               </Button>
             </>
           ) : null}
