@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowUpRight, MessageCircle, MessageCircleOff, X } from 'lucide-react'
 
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -10,10 +10,19 @@ import type { Conversation } from './types'
 
 export function ChatFab() {
   const isMobile = useIsMobile()
+  const location = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const [isOpen, setIsOpen] = useState(false)
   const { conversations } = useMockConversations(user)
+
+  useEffect(() => {
+    setIsOpen(false)
+  }, [location.pathname])
+
+  if (location.pathname.startsWith('/chat')) {
+    return null
+  }
 
   function getConversationInitial(conversation: Conversation) {
     const trimmedUsername = conversation.username.trim()
