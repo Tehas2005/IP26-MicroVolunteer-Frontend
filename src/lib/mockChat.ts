@@ -282,7 +282,7 @@ export function ensureMockConversation(
     requestTitle: seed.title?.trim() || 'Cerere fără titlu',
     requesterKey,
     requesterName: normalizeRequesterLabel(seed),
-    requesterIsGuest: seed.requesterKind === 'guest',
+    requesterIsGuest: identity.isGuest,
     volunteerKey: identity.key,
     volunteerName: identity.displayName || DEFAULT_VOLUNTEER_NAME,
     status: seed.status ?? 'open',
@@ -304,7 +304,7 @@ export function ensureMockConversationForAcceptedOffer(
   volunteer: MatchedVolunteerSeed,
 ): Conversation {
   const state = readState()
-  const requesterKey = requesterIdentity.key
+  const requesterKey = seed.requesterKey?.trim() || `guest-request:${seed.id}`
   const existingConversation = state.conversations.find(
     (conversation) =>
       conversation.requestId === seed.id &&
@@ -327,7 +327,8 @@ export function ensureMockConversationForAcceptedOffer(
       requesterLabel: seed.requesterLabel?.trim() || requesterIdentity.displayName,
       name: seed.name?.trim() || requesterIdentity.displayName,
     }),
-    requesterIsGuest: requesterIdentity.isGuest,
+    requesterIsGuest:
+      seed.requesterKind === 'guest' || (!seed.requesterKind && requesterIdentity.isGuest),
     volunteerKey: volunteer.volunteerKey,
     volunteerName: volunteer.volunteerName.trim() || DEFAULT_VOLUNTEER_NAME,
     status: seed.status ?? 'open',

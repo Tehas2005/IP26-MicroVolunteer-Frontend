@@ -25,7 +25,12 @@ type OfferTemplate = {
   localMessage: string
 }
 
-type StoredOfferStatuses = Record<string, Record<string, HelpOfferStatus>>
+type StoredOfferRecord = {
+  createdAt: string
+  status: HelpOfferStatus
+}
+
+type StoredOfferStatuses = Record<string, Record<string, StoredOfferRecord>>
 
 const OFFER_TEMPLATES: OfferTemplate[] = [
   {
@@ -67,6 +72,10 @@ function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 }
 
+function isValidHelpOfferStatus(value: unknown): value is HelpOfferStatus {
+  return value === 'pending' || value === 'accepted' || value === 'rejected'
+}
+
 function readStoredStatuses(): StoredOfferStatuses {
   if (!canUseStorage()) {
     return {}
@@ -90,13 +99,37 @@ function readStoredStatuses(): StoredOfferStatuses {
         return accumulator
       }
 
-      accumulator[requestId] = Object.entries(value).reduce<Record<string, HelpOfferStatus>>(
-        (requestAccumulator, [offerId, status]) => {
+      accumulator[requestId] = Object.entries(value).reduce<Record<string, StoredOfferRecord>>(
+        (requestAccumulator, [offerId, storedValue]) => {
+          if (typeof offerId !== 'string') {
+            return requestAccumulator
+          }
+
+          if (isValidHelpOfferStatus(storedValue)) {
+            requestAccumulator[offerId] = {
+              createdAt: '',
+              status: storedValue,
+            }
+            return requestAccumulator
+          }
+
           if (
-            typeof offerId === 'string' &&
-            (status === 'pending' || status === 'accepted' || status === 'rejected')
+            typeof storedValue === 'object' &&
+            storedValue !== null
           ) {
-            requestAccumulator[offerId] = status
+            const candidate = storedValue as Partial<StoredOfferRecord>
+
+            if (
+              !isValidHelpOfferStatus(candidate.status) ||
+              typeof candidate.createdAt !== 'string'
+            ) {
+              return requestAccumulator
+            }
+
+            requestAccumulator[offerId] = {
+              createdAt: candidate.createdAt,
+              status: candidate.status,
+            }
           }
 
           return requestAccumulator
@@ -184,21 +217,64 @@ export function formatHelpOfferRelativeTime(
 }
 
 export function listMockHelpOffers(request: LiveRequestCardData): HelpOfferData[] {
-  const storedStatuses = readStoredStatuses()[request.id] ?? {}
+  const currentState = readStoredStatuses()
+  const storedStatuses = currentState[request.id] ?? {}
+  const nextStoredStatuses: Record<string, StoredOfferRecord> = {
+    ...storedStatuses,
+  }
+  let shouldPersist = false
 
-  return createBaseOffers(request).map((offer) => ({
-    ...offer,
-    status: storedStatuses[offer.id] ?? 'pending',
-  }))
+  const offers = createBaseOffers(request).map((offer) => {
+    const storedOffer = storedStatuses[offer.id]
+
+    if (!storedOffer) {
+      nextStoredStatuses[offer.id] = {
+        createdAt: offer.createdAt,
+        status: 'pending',
+      }
+      shouldPersist = true
+      return offer
+    }
+
+    const createdAt = storedOffer.createdAt || offer.createdAt
+
+    if (!storedOffer.createdAt) {
+      nextStoredStatuses[offer.id] = {
+        createdAt,
+        status: storedOffer.status,
+      }
+      shouldPersist = true
+    }
+
+    return {
+      ...offer,
+      createdAt,
+      status: storedOffer.status,
+    }
+  })
+
+  if (shouldPersist) {
+    writeStoredStatuses({
+      ...currentState,
+      [request.id]: nextStoredStatuses,
+    })
+  }
+
+  return offers
 }
 
 export function getReceivedOffersSummary(request: LiveRequestCardData) {
   const offers = listMockHelpOffers(request)
   const acceptedOffer = offers.find((offer) => offer.status === 'accepted')
   const pendingCount = offers.filter((offer) => offer.status === 'pending').length
+  const rejectedCount = offers.filter((offer) => offer.status === 'rejected').length
 
   if (acceptedOffer) {
     return `Ajutor acceptat de la ${acceptedOffer.volunteerName}`
+  }
+
+  if (offers.length > 0 && rejectedCount === offers.length) {
+    return `Toate cele ${offers.length} oferte au fost refuzate.`
   }
 
   if (pendingCount === 1) {
@@ -215,12 +291,16 @@ export function updateMockHelpOfferStatus(
 ) {
   const currentState = readStoredStatuses()
   const currentRequestState = currentState[requestId] ?? {}
+  const currentOfferState = currentRequestState[offerId]
 
   writeStoredStatuses({
     ...currentState,
     [requestId]: {
       ...currentRequestState,
-      [offerId]: status,
+      [offerId]: {
+        createdAt: currentOfferState?.createdAt || new Date().toISOString(),
+        status,
+      },
     },
   })
 }

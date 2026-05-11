@@ -28,6 +28,8 @@ import { listMockConversations, resolveChatViewerIdentity } from '@/lib/mockChat
 import HomePage from '@/pages/HomePage'
 import { useAuthStore } from '@/store/authStore'
 
+const OPEN_OFFERS_BUTTON_NAME = /Am nevoie de ajutor pentru completarea unor formulare/i
+
 function renderHomePage() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -43,6 +45,14 @@ function renderHomePage() {
         <HomePage />
       </MemoryRouter>
     </QueryClientProvider>,
+  )
+}
+
+async function openFirstMockRequestOffers() {
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: OPEN_OFFERS_BUTTON_NAME,
+    }),
   )
 }
 
@@ -80,11 +90,7 @@ describe('HomePage help offers flow', () => {
   it('afiseaza ofertele primite cu mesaj, timp si rating', async () => {
     renderHomePage()
 
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: /Am nevoie de ajutor pentru completarea unor formulare/i,
-      }),
-    )
+    await openFirstMockRequestOffers()
 
     expect(await screen.findByText('Oferte primite')).toBeInTheDocument()
     expect(screen.getByText('Ilinca Pop')).toBeInTheDocument()
@@ -102,11 +108,7 @@ describe('HomePage help offers flow', () => {
 
     renderHomePage()
 
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: /Am nevoie de ajutor pentru completarea unor formulare/i,
-      }),
-    )
+    await openFirstMockRequestOffers()
 
     const rejectButtons = await screen.findAllByRole('button', { name: 'Refuză' })
     await user.click(rejectButtons[0])
@@ -120,11 +122,7 @@ describe('HomePage help offers flow', () => {
 
     renderHomePage()
 
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: /Am nevoie de ajutor pentru completarea unor formulare/i,
-      }),
-    )
+    await openFirstMockRequestOffers()
 
     const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
     await user.click(acceptButtons[1])
@@ -152,5 +150,50 @@ describe('HomePage help offers flow', () => {
     const conversations = listMockConversations(viewerIdentity)
     expect(conversations).toHaveLength(1)
     expect(conversations[0]?.username).toBe('Radu Pavel')
+  })
+
+  it('pastreaza sumarul corect si statusurile dupa redeschiderea unei cereri cu toate ofertele refuzate', async () => {
+    const user = userEvent.setup()
+
+    renderHomePage()
+    await openFirstMockRequestOffers()
+
+    await user.click((await screen.findAllByRole('button', { name: 'Refuză' }))[0])
+    await user.click((await screen.findAllByRole('button', { name: 'Refuză' }))[0])
+    await user.click((await screen.findAllByRole('button', { name: 'Refuză' }))[0])
+
+    await user.click(screen.getByRole('button', { name: 'Închide ofertele' }))
+
+    expect(await screen.findByText('Toate cele 3 oferte au fost refuzate.')).toBeInTheDocument()
+
+    await openFirstMockRequestOffers()
+
+    const rejectedButtons = await screen.findAllByRole('button', { name: 'Refuzată' })
+    expect(rejectedButtons).toHaveLength(3)
+    rejectedButtons.forEach((button) => {
+      expect(button).toBeDisabled()
+    })
+  })
+
+  it('redeschide aceeasi cerere cu oferta acceptata deja persistata', async () => {
+    const user = userEvent.setup()
+
+    renderHomePage()
+    await openFirstMockRequestOffers()
+
+    const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
+    await user.click(acceptButtons[0])
+    await user.click(screen.getByRole('button', { name: 'Închide ofertele' }))
+
+    expect(
+      await screen.findByText('Ajutor acceptat de la Ilinca Pop'),
+    ).toBeInTheDocument()
+
+    await openFirstMockRequestOffers()
+
+    expect(await screen.findByRole('button', { name: 'Acceptată' })).toBeDisabled()
+    expect(
+      screen.getAllByText('O altă ofertă a fost deja acceptată pentru această cerere.'),
+    ).toHaveLength(2)
   })
 })
