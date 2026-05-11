@@ -54,10 +54,10 @@ export function HelpOffersInboxDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[min(88vh,760px)] max-w-[calc(100%-1rem)] overflow-hidden rounded-[32px] border border-brand-gray/80 bg-white p-0 shadow-2xl sm:max-w-3xl"
+        className="flex max-h-[min(88vh,760px)] max-w-[calc(100%-1rem)] flex-col overflow-hidden rounded-[32px] border border-brand-gray/80 bg-white p-0 shadow-2xl sm:max-w-3xl"
         showCloseButton={false}
       >
-        <DialogHeader className="border-b border-brand-gray/70 bg-brand-purple-light/45 px-5 py-5 sm:px-7">
+        <DialogHeader className="shrink-0 border-b border-brand-gray/70 bg-brand-purple-light/45 px-5 py-5 sm:px-7">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
               <DialogTitle className="text-xl font-bold text-brand-black sm:text-2xl">
@@ -89,7 +89,10 @@ export function HelpOffersInboxDialog({
           ) : null}
         </DialogHeader>
 
-        <div className="max-h-[calc(min(88vh,760px)-152px)] overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
+          data-testid="help-offers-scroll-area"
+        >
           {offers.length === 0 ? (
             <div className="rounded-[28px] border border-dashed border-brand-gray bg-brand-cream/50 px-6 py-10 text-center">
               <p className="text-base font-semibold text-brand-black">Nu ai oferte încă.</p>
