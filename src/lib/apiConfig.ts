@@ -10,7 +10,8 @@ function readEnvValue(value: string | undefined) {
 
 const backendOriginEnv =
   readEnvValue(import.meta.env.VITE_BACKEND_BASE_URL as string | undefined) ||
-  readEnvValue(import.meta.env.VITE_API_URL as string | undefined)
+  readEnvValue(import.meta.env.VITE_API_URL as string | undefined) ||
+  readEnvValue(import.meta.env.VITE_SERVER_URL as string | undefined)
 
 export const backendOrigin = backendOriginEnv
   ? normalizeOrigin(backendOriginEnv)
