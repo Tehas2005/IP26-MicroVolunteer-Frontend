@@ -13,9 +13,6 @@ const CITIES = [
     'Tulcea', 'Vaslui', 'Zalau',
 ]
 
-const SKILL_SUGGESTIONS = ['traducere', 'transport', 'insotire', 'cumparaturi', 'suport emotional']
-const SKILLS_STORAGE_KEY_PREFIX = 'mvcr-profile-skills'
-
 interface LocationEntry {
     city: string
     address: string
@@ -24,53 +21,79 @@ interface LocationEntry {
 export default function VolunteerProfilePage() {
     const authUser = useAuthStore((state) => state.user)
 
-    // --- State Part A (Locație) ---
     const [maxDistanceKm, setMaxDistanceKm] = useState<string>('')
     const [currentLocation, setCurrentLocation] = useState<string>('')
     const [selectedCity, setSelectedCity] = useState<string>('')
     const [specificAddress, setSpecificAddress] = useState<string>('')
     const [knownLocations, setKnownLocations] = useState<LocationEntry[]>([])
-
-    // --- State Part B (Skills & Privacy) ---
     const [skills, setSkills] = useState<string[]>([])
     const [skillInput, setSkillInput] = useState('')
     const [hiddenIdentity, setHiddenIdentity] = useState(false)
 
-    // --- UI & Sync State ---
     const [isSaving, setIsSaving] = useState(false)
     const [saveError, setSaveError] = useState('')
     const [saveMessage, setSaveMessage] = useState('')
-    const [isLoadingProfile, setIsLoadingProfile] = useState(true)
+    const [isLoaded, setIsLoaded] = useState(false)
 
-    const skillsStorageKey = useMemo(() =>
-            authUser?.id ? `${SKILLS_STORAGE_KEY_PREFIX}:${authUser.id}` : null,
+    const draftKey = useMemo(() =>
+            authUser?.id ? `mvcr-profile-draft:${authUser.id}` : null,
         [authUser?.id])
 
-    // --- Hydration (Încărcare date) ---
     useEffect(() => {
         async function hydrateProfile() {
-            if (skillsStorageKey) {
-                const stored = localStorage.getItem(skillsStorageKey)
-                if (stored) {
-                    try { setSkills(JSON.parse(stored)) } catch { localStorage.removeItem(skillsStorageKey) }
+            let usedDraft = false
+            try {
+                if (draftKey) {
+                    const stored = localStorage.getItem(draftKey)
+                    if (stored) {
+                        const draft = JSON.parse(stored)
+                        setMaxDistanceKm(draft.maxDistanceKm || '')
+                        setCurrentLocation(draft.currentLocation || '')
+                        setKnownLocations(draft.knownLocations || [])
+                        setSkills(draft.skills || [])
+                        setHiddenIdentity(!!draft.hiddenIdentity)
+                        setSelectedCity(draft.selectedCity || '')
+                        setSpecificAddress(draft.specificAddress || '')
+                        setSkillInput(draft.skillInput || '')
+                        usedDraft = true
+                    }
                 }
-            }
 
-            if (authUser?.id) {
-                const response = await backend.profile.getByUserId(authUser.id)
-                if (response.success && response.data) {
-                    const data = response.data as any
-                    setHiddenIdentity(!!data.hiddenIdentity)
-                    setMaxDistanceKm(data.maxDistanceKm?.toString() || '')
-                    setCurrentLocation(data.currentLocation || '')
+                if (!usedDraft && authUser?.id) {
+                    // Adăugăm un .catch() ca să nu se blocheze codul dacă backend-ul e picat
+                    const response = await backend.profile.getByUserId(authUser.id).catch(() => null)
+                    if (response?.success && response.data) {
+                        const data = response.data as Record<string, unknown>
+                        setHiddenIdentity(!!data.hiddenIdentity)
+                        setMaxDistanceKm(data.maxDistanceKm?.toString() || '')
+                        setCurrentLocation((data.currentLocation as string) || '')
+                    }
                 }
+            } catch (e) {
+                console.error("Eroare la încărcare:", e)
+            } finally {
+                setIsLoaded(true) // Această linie pornește salvarea automată
             }
-            setIsLoadingProfile(false)
         }
         hydrateProfile()
-    }, [authUser?.id, skillsStorageKey])
+    }, [authUser?.id, draftKey])
 
-    // --- Logică Part A ---
+    useEffect(() => {
+        if (isLoaded && draftKey) {
+            const draft = {
+                maxDistanceKm,
+                currentLocation,
+                knownLocations,
+                skills,
+                hiddenIdentity,
+                selectedCity,
+                specificAddress,
+                skillInput
+            }
+            localStorage.setItem(draftKey, JSON.stringify(draft))
+        }
+    }, [maxDistanceKm, currentLocation, knownLocations, skills, hiddenIdentity, selectedCity, specificAddress, skillInput, isLoaded, draftKey])
+
     const handleAddLocation = () => {
         if (selectedCity && specificAddress.trim()) {
             setKnownLocations([...knownLocations, { city: selectedCity, address: specificAddress.trim() }])
@@ -78,7 +101,10 @@ export default function VolunteerProfilePage() {
         }
     }
 
-    // --- Logică Part B ---
+    const handleDeleteLocation = (city: string, address: string) => {
+        setKnownLocations(knownLocations.filter(loc => !(loc.city === city && loc.address === address)))
+    }
+
     const addSkill = (skill: string) => {
         const normalized = skill.trim()
         if (normalized && !skills.includes(normalized)) {
@@ -88,11 +114,24 @@ export default function VolunteerProfilePage() {
         }
     }
 
-    // --- Final Save (Merge A + B) ---
+    const handleReset = () => {
+        if (window.confirm('Sigur vrei să resetezi toate modificările nesalvate?')) {
+            setMaxDistanceKm('')
+            setCurrentLocation('')
+            setSelectedCity('')
+            setSpecificAddress('')
+            setKnownLocations([])
+            setSkills([])
+            setSkillInput('')
+            setHiddenIdentity(false)
+            if (draftKey) localStorage.removeItem(draftKey)
+        }
+    }
+
     const handleSaveProfile = async (e: FormEvent) => {
         e.preventDefault()
         if (skills.length === 0) {
-            setSaveError('adauga cel putin o abilitate') // [cite: 46]
+            setSaveError('Adaugă cel puțin o abilitate')
             return
         }
 
@@ -108,56 +147,43 @@ export default function VolunteerProfilePage() {
             hiddenIdentity
         }
 
-        const response = await backend.profile.updateMe(payload)
+        const response = await backend.profile.updateMe(payload).catch(() => ({ success: false }))
 
-        if (!response.success && response.isNotFound) {
-            await backend.profile.create(payload)
+        if (response.success) {
+            if (draftKey) localStorage.removeItem(draftKey)
+            setSaveMessage('Profil salvat cu succes!')
+        } else {
+            setSaveError('Eroare la salvare (Backend offline), dar datele sunt păstrate local.')
         }
 
-        if (skillsStorageKey) {
-            localStorage.setItem(skillsStorageKey, JSON.stringify(skills))
-        }
-
-        setTimeout(() => {
-            setIsSaving(false)
-            setSaveMessage('Profilul tău a fost salvat cu succes!')
-        }, 1000)
+        setIsSaving(false)
     }
 
     return (
         <div className="min-h-screen bg-brand-cream pb-12">
             <section className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
                 <div className="overflow-hidden rounded-[36px] border border-brand-gray bg-white shadow-sm">
-
-                    {/* Header */}
                     <div className="border-b border-brand-gray bg-brand-purple-light px-6 py-7 sm:px-8">
                         <h1 className="text-3xl font-bold tracking-tight text-brand-black">Setări Profil Voluntar</h1>
                         <p className="mt-2 text-sm text-brand-gray-text">Configurează zona de acoperire și abilitățile tale.</p>
                     </div>
 
                     <form onSubmit={handleSaveProfile} className="space-y-8 px-6 py-8 sm:px-8">
-
-                        {/* Secțiunea 1: Locație (Part A) */}
                         <div className="space-y-6">
                             <h2 className="text-xl font-bold text-brand-black border-b pb-2">1. Zonă și Distanță</h2>
-
                             <div className="grid gap-6 sm:grid-cols-2">
                                 <div>
-                                    <label className="block text-sm font-bold text-brand-black mb-2">
-                                        Distanța maximă (km) *
-                                    </label>
+                                    <label className="block text-sm font-bold text-brand-black mb-2">Distanța maximă (km) *</label>
                                     <input
                                         type="number"
                                         required
                                         min="0"
                                         value={maxDistanceKm}
                                         onChange={(e) => setMaxDistanceKm(e.target.value)}
-                                        className="w-full rounded-[18px] border border-brand-gray px-4 py-3 text-sm focus:border-brand-purple outline-none"
+                                        className="w-full rounded-[18px] border border-brand-gray px-4 py-3 text-sm outline-none focus:border-brand-purple"
                                         placeholder="Ex: 15"
                                     />
-                                    {parseFloat(maxDistanceKm) < 0 && <p className="text-red-500 text-xs mt-1">Distanța trebuie să fie un număr pozitiv</p>}
                                 </div>
-
                                 <div>
                                     <label className="block text-sm font-bold text-brand-black mb-2">Locația curentă *</label>
                                     <input
@@ -165,13 +191,12 @@ export default function VolunteerProfilePage() {
                                         required
                                         value={currentLocation}
                                         onChange={(e) => setCurrentLocation(e.target.value)}
-                                        className="w-full rounded-[18px] border border-brand-gray px-4 py-3 text-sm focus:border-brand-purple outline-none"
+                                        className="w-full rounded-[18px] border border-brand-gray px-4 py-3 text-sm outline-none focus:border-brand-purple"
                                         placeholder="Oraș, Stradă..."
                                     />
                                 </div>
                             </div>
 
-                            {/* Zone Cunoscute */}
                             <div className="rounded-[24px] bg-brand-cream/40 p-5 border border-brand-gray">
                                 <label className="block text-sm font-bold mb-3">Adaugă zone cunoscute</label>
                                 <div className="flex flex-col gap-3 sm:flex-row">
@@ -190,25 +215,19 @@ export default function VolunteerProfilePage() {
                                         placeholder="Stradă/Zonă"
                                         className="flex-1 rounded-[15px] border border-brand-gray px-4 py-2 text-sm outline-none"
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={handleAddLocation}
-                                        className="rounded-[15px] bg-brand-black px-4 py-2 text-sm font-bold text-white"
-                                    >
-                                        Adaugă
-                                    </button>
+                                    <button type="button" onClick={handleAddLocation} className="rounded-[15px] bg-brand-black px-4 py-2 text-sm font-bold text-white">Adaugă</button>
                                 </div>
                                 <div className="mt-4 flex flex-wrap gap-2">
                                     {knownLocations.map((loc) => (
-                                        <span key={`${loc.city}-${loc.address}`} className="bg-brand-purple-light px-3 py-1 rounded-full text-xs font-bold border border-brand-purple/20">
-                      {loc.city} | {loc.address}
-                    </span>
+                                        <span key={`${loc.city}-${loc.address}`} className="bg-brand-purple-light px-3 py-1 rounded-full text-xs font-bold border border-brand-purple/20 flex items-center gap-2">
+                                            {loc.city} | {loc.address}
+                                            <button type="button" onClick={() => handleDeleteLocation(loc.city, loc.address)} className="text-lg leading-none hover:text-red-500">×</button>
+                                        </span>
                                     ))}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Secțiunea 2: Abilități (Part B) */}
                         <div className="space-y-6">
                             <h2 className="text-xl font-bold text-brand-black border-b pb-2">2. Abilități și Experiență</h2>
                             <div className="rounded-[24px] border border-brand-gray bg-brand-cream/40 p-5">
@@ -218,7 +237,7 @@ export default function VolunteerProfilePage() {
                                         value={skillInput}
                                         onChange={(e) => setSkillInput(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill(skillInput))}
-                                        placeholder="Adaugă abilitate (ex: transport)"
+                                        placeholder="Adaugă abilitate"
                                         className="flex-1 rounded-[15px] border border-brand-gray px-4 py-2 text-sm outline-none"
                                     />
                                     <button type="button" onClick={() => addSkill(skillInput)} className="bg-brand-black text-white px-4 py-2 rounded-[15px] text-sm font-bold">Adaugă</button>
@@ -226,31 +245,19 @@ export default function VolunteerProfilePage() {
                                 <div className="mt-4 flex flex-wrap gap-2">
                                     {skills.map(s => (
                                         <span key={s} className="bg-white border border-brand-purple px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                      {s} <button type="button" onClick={() => setSkills(skills.filter(x => x !== s))}>×</button>
-                    </span>
-                                    ))}
-                                </div>
-                                <div className="mt-4 flex gap-2 flex-wrap">
-                                    {SKILL_SUGGESTIONS.map(s => (
-                                        <button key={s} type="button" onClick={() => addSkill(s)} className="text-xs bg-white border border-brand-gray px-2 py-1 rounded-full hover:border-brand-purple transition">
-                                            + {s}
-                                        </button>
+                                            {s} <button type="button" onClick={() => setSkills(skills.filter(x => x !== s))}>×</button>
+                                        </span>
                                     ))}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Secțiunea 3: Confidențialitate (Part B) */}
                         <div className="space-y-6">
                             <h2 className="text-xl font-bold text-brand-black border-b pb-2">3. Confidențialitate</h2>
                             <div className="flex items-center justify-between rounded-[24px] border border-brand-gray bg-brand-cream/40 p-5">
                                 <div>
                                     <p className="font-bold text-brand-black text-sm">Ascunde identitatea</p>
-                                    {hiddenIdentity && (
-                                        <p className="text-xs text-brand-gray-text mt-1 transition-opacity">
-                                            Cei pe care îi ajuți vor vedea doar username-ul tău.
-                                        </p>
-                                    )}
+                                    {hiddenIdentity && <p className="text-xs text-brand-gray-text mt-1">Vei apărea anonim.</p>}
                                 </div>
                                 <button
                                     type="button"
@@ -262,19 +269,16 @@ export default function VolunteerProfilePage() {
                             </div>
                         </div>
 
-                        {/* Mesaje și Buton Save */}
-                        <div className="pt-6 border-t border-brand-gray">
-                            {saveError && <p className="text-red-600 text-sm font-bold mb-4">{saveError}</p>}
-                            {saveMessage && <p className="text-emerald-700 text-sm font-bold mb-4">{saveMessage}</p>}
-
-                            <button
-                                type="submit"
-                                disabled={isSaving}
-                                className="w-full sm:w-auto min-w-[220px] bg-brand-black text-white font-bold py-4 px-8 rounded-[20px] hover:opacity-90 disabled:opacity-50 transition"
-                            >
+                        <div className="pt-6 border-t border-brand-gray flex flex-col sm:flex-row gap-4">
+                            <button type="submit" disabled={isSaving} className="min-w-[220px] bg-brand-black text-white font-bold py-4 px-8 rounded-[20px] hover:opacity-90 disabled:opacity-50 transition">
                                 {isSaving ? 'Se salvează...' : 'Salvează Profilul'}
                             </button>
+                            <button type="button" onClick={handleReset} className="py-4 px-8 rounded-[20px] border border-brand-gray text-brand-gray-text font-bold hover:bg-gray-50 transition">
+                                Resetează modificările
+                            </button>
                         </div>
+                        {saveError && <p className="text-red-600 text-sm font-bold mt-2">{saveError}</p>}
+                        {saveMessage && <p className="text-emerald-700 text-sm font-bold mt-2">{saveMessage}</p>}
                     </form>
                 </div>
             </section>

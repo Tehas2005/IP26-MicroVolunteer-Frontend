@@ -19,7 +19,7 @@ const navActions: NavAction[] = [
   { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link' },
   { label: 'Profil', path: '/profil', type: 'link', requiresAuth: true },
   { label: 'Despre Noi', path: '/despre-noi', type: 'link' },
-  { label: 'Profil', path: '/profil', type: 'link' }, // <-- Вот наша новая ссылка
+  // { label: 'Profil', path: '/profil', type: 'link' },
   { label: 'Log In', path: '/auth/login', type: 'ghost' },
   { label: 'Sign Up', path: '/auth/signup', type: 'auth' },
 ]
