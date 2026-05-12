@@ -1,7 +1,8 @@
 import path from "path"
 import react from "@vitejs/plugin-react"
-import { defineConfig, loadEnv } from "vite"
 import { sentryVitePlugin } from "@sentry/vite-plugin"
+import { loadEnv } from "vite"
+import { defineConfig } from "vitest/config"
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
@@ -35,6 +36,11 @@ export default defineConfig(({ mode }) => {
             },
           }
         : undefined,
+    },
+    test: {
+      environment: "jsdom",
+      setupFiles: ["./src/test/setup.ts"],
+      globals: false,
     },
   }
 })

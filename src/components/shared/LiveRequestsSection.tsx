@@ -10,10 +10,10 @@ import { type LiveRequestCardData, LiveRequestCard } from './LiveRequestCard'
 type LiveRequestsTab = 'mine' | 'volunteer'
 
 export interface LiveRequestsSectionProps {
-  isGuest: boolean
   isLoading?: boolean
   myRequests?: LiveRequestCardData[] | null
   volunteerRequests?: LiveRequestCardData[] | null
+  onVolunteerRequestOpen?: (request: LiveRequestCardData) => void
 }
 
 const TAB_OPTIONS: Array<{ label: string; value: LiveRequestsTab }> = [
@@ -28,10 +28,10 @@ function normalizeRequests(requests?: LiveRequestCardData[] | null) {
 }
 
 export function LiveRequestsSection({
-  isGuest,
   isLoading = false,
   myRequests,
   volunteerRequests,
+  onVolunteerRequestOpen,
 }: LiveRequestsSectionProps) {
   const [activeTab, setActiveTab] = useState<LiveRequestsTab>('mine')
 
@@ -41,7 +41,7 @@ export function LiveRequestsSection({
   }
 
   const selectedRequests = requestsByTab[activeTab]
-  const showEmptyState = !isLoading && (isGuest || selectedRequests.length === 0)
+  const showEmptyState = !isLoading && selectedRequests.length === 0
   const activePanelId = `${activeTab}-requests-panel`
 
   return (
@@ -113,7 +113,15 @@ export function LiveRequestsSection({
           <div className="max-h-[520px] overflow-y-auto px-3 py-3 scroll-smooth sm:px-4">
             <div className="grid grid-cols-1 gap-4">
               {selectedRequests.map((request) => (
-                <LiveRequestCard key={request.id} request={request} />
+                <LiveRequestCard
+                  key={request.id}
+                  onClick={
+                    activeTab === 'volunteer' && onVolunteerRequestOpen
+                      ? () => onVolunteerRequestOpen(request)
+                      : undefined
+                  }
+                  request={request}
+                />
               ))}
             </div>
           </div>
