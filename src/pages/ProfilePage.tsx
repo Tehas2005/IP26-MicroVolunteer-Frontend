@@ -124,19 +124,24 @@ export function ProfilePage() {
   }
 
   async function handleHiddenIdentityToggle() {
+    const previousValue = hiddenIdentity
     const nextValue = !hiddenIdentity
 
     setHiddenIdentity(nextValue)
     setSaveError('')
     setSaveMessage('')
 
-    const response = await backend.profile.updateMe({ hiddenIdentity: nextValue })
+    try {
+      const response = await backend.profile.updateMe({ hiddenIdentity: nextValue })
 
-    if (response.success) {
-      return
+      if (response.success) {
+        return
+      }
+    } catch {
+      // Network and server errors should also roll back the optimistic toggle.
     }
 
-    setHiddenIdentity((currentValue) => !currentValue)
+    setHiddenIdentity(previousValue)
     setSaveError('Nu am reusit sa salvam setarea de confidentialitate.')
   }
 
@@ -311,7 +316,7 @@ export function ProfilePage() {
                 onClick={() => {
                   void handleSaveProfile()
                 }}
-                disabled={isSaving}
+                disabled={isSaving || isLoadingProfile}
               >
                 {isSaving ? 'Se salveaza profilul...' : 'Salveaza Profilul'}
               </button>
