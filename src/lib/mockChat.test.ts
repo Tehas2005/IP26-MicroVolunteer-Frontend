@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  dismissMockConversationRatingPrompt,
   ensureMockConversation,
   getMockConversationThread,
-  skipMockConversationRating,
   submitMockConversationRating,
   type ChatViewerIdentity,
 } from '@/lib/mockChat'
@@ -41,15 +41,15 @@ describe('mockChat rating flow', () => {
     const volunteerThread = getMockConversationThread(conversation.id, volunteerIdentity)
     const requesterThread = getMockConversationThread(conversation.id, requesterIdentity)
 
-    expect(volunteerThread?.ratingPrompt).toMatchObject({
+    expect(volunteerThread?.conversation).toMatchObject({
       targetUserId: requesterIdentity.key,
       viewerRole: 'volunteer',
-      shouldPrompt: true,
+      ratingPromptPending: true,
     })
-    expect(requesterThread?.ratingPrompt).toMatchObject({
+    expect(requesterThread?.conversation).toMatchObject({
       targetUserId: volunteerIdentity.key,
       viewerRole: 'requester',
-      shouldPrompt: true,
+      ratingPromptPending: true,
     })
   })
 
@@ -67,9 +67,9 @@ describe('mockChat rating flow', () => {
     )
 
     submitMockConversationRating(conversation.id, 5, requesterIdentity)
-    skipMockConversationRating(conversation.id, volunteerIdentity)
+    dismissMockConversationRatingPrompt(conversation.id, volunteerIdentity)
 
-    expect(getMockConversationThread(conversation.id, requesterIdentity)?.ratingPrompt?.shouldPrompt).toBe(false)
-    expect(getMockConversationThread(conversation.id, volunteerIdentity)?.ratingPrompt?.shouldPrompt).toBe(false)
+    expect(getMockConversationThread(conversation.id, requesterIdentity)?.conversation.ratingPromptPending).toBe(false)
+    expect(getMockConversationThread(conversation.id, volunteerIdentity)?.conversation.ratingPromptPending).toBe(false)
   })
 })
