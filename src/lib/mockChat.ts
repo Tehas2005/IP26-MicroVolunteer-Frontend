@@ -1,4 +1,11 @@
-import type { Conversation, ConversationStatus, Message, MessageContent } from '@/pages/chat/types'
+import type {
+  Conversation,
+  ConversationStatus,
+  ConversationThread,
+  MessageContent,
+  Rating,
+  RatingValue,
+} from '@/pages/chat/types'
 import { getGuestSessionId } from './guestSession'
 
 const STORAGE_KEY = 'mvcr-mock-chat-store'
@@ -14,11 +21,12 @@ type StoredMessage = {
   sentAt: string
 }
 
-type StoredConversationRating = {
+type StoredRating = {
+  id: string
   authorKey: string
   targetUserId: string
-  stars: number
-  submittedAt: string
+  value: RatingValue
+  createdAt: string
 }
 
 type StoredConversation = {
@@ -34,8 +42,8 @@ type StoredConversation = {
   createdAt: string
   updatedAt: string
   messages: StoredMessage[]
-  ratings: StoredConversationRating[]
-  skippedRatingBy: string[]
+  ratings: StoredRating[]
+  ratingPromptDismissedBy: string[]
 }
 
 type StoredChatState = {
@@ -60,48 +68,8 @@ export type ChatRequestSeed = {
   status?: ConversationStatus
 }
 
-type ChatThread = {
-  conversation: Conversation
-  messages: Message[]
-  ratingPrompt: {
-    targetUserId: string
-    targetName: string
-    viewerRole: 'requester' | 'volunteer'
-    shouldPrompt: boolean
-  } | null
-}
-
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-}
-
-function isStoredConversationRating(value: unknown): value is StoredConversationRating {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  const candidate = value as Record<string, unknown>
-
-  return (
-    typeof candidate.authorKey === 'string' &&
-    typeof candidate.targetUserId === 'string' &&
-    typeof candidate.stars === 'number' &&
-    candidate.stars >= 1 &&
-    candidate.stars <= 5 &&
-    typeof candidate.submittedAt === 'string'
-  )
-}
-
-function normalizeStoredConversation(conversation: StoredConversation) {
-  return {
-    ...conversation,
-    ratings: Array.isArray(conversation.ratings)
-      ? conversation.ratings.filter(isStoredConversationRating)
-      : [],
-    skippedRatingBy: Array.isArray(conversation.skippedRatingBy)
-      ? conversation.skippedRatingBy.filter((entry): entry is string => typeof entry === 'string')
-      : [],
-  }
 }
 
 function readState(): StoredChatState {
@@ -128,33 +96,76 @@ function readState(): StoredChatState {
     }
 
     return {
-      conversations: parsed.conversations.filter(
-        (conversation: unknown): conversation is StoredConversation => {
-          if (typeof conversation !== 'object' || conversation === null) {
-            return false
-          }
-
-          const candidate = conversation as Record<string, unknown>
-
-          return (
-            typeof candidate.id === 'string' &&
-            typeof candidate.requestId === 'string' &&
-            typeof candidate.requestTitle === 'string' &&
-            typeof candidate.requesterKey === 'string' &&
-            typeof candidate.requesterName === 'string' &&
-            typeof candidate.requesterIsGuest === 'boolean' &&
-            typeof candidate.volunteerKey === 'string' &&
-            typeof candidate.volunteerName === 'string' &&
-            (candidate.status === 'open' || candidate.status === 'closed') &&
-            typeof candidate.createdAt === 'string' &&
-            typeof candidate.updatedAt === 'string' &&
-            Array.isArray(candidate.messages)
-          )
-        },
-      ).map((conversation: StoredConversation) => normalizeStoredConversation(conversation)),
+      conversations: parsed.conversations
+        .map((conversation: unknown) => normalizeStoredConversation(conversation))
+        .filter(
+          (conversation: StoredConversation | null): conversation is StoredConversation =>
+            conversation !== null,
+        ),
     }
   } catch {
     return { conversations: [] }
+  }
+}
+
+function normalizeStoredConversation(rawConversation: unknown): StoredConversation | null {
+  if (typeof rawConversation !== 'object' || rawConversation === null) {
+    return null
+  }
+
+  const candidate = rawConversation as Record<string, unknown>
+
+  if (
+    typeof candidate.id !== 'string' ||
+    typeof candidate.requestId !== 'string' ||
+    typeof candidate.requestTitle !== 'string' ||
+    typeof candidate.requesterKey !== 'string' ||
+    typeof candidate.requesterName !== 'string' ||
+    typeof candidate.requesterIsGuest !== 'boolean' ||
+    typeof candidate.volunteerKey !== 'string' ||
+    typeof candidate.volunteerName !== 'string' ||
+    (candidate.status !== 'open' && candidate.status !== 'closed') ||
+    typeof candidate.createdAt !== 'string' ||
+    typeof candidate.updatedAt !== 'string' ||
+    !Array.isArray(candidate.messages)
+  ) {
+    return null
+  }
+
+  const ratings = Array.isArray(candidate.ratings)
+    ? candidate.ratings.filter(
+        (rating): rating is StoredRating =>
+          typeof rating === 'object' &&
+          rating !== null &&
+          typeof (rating as StoredRating).id === 'string' &&
+          typeof (rating as StoredRating).authorKey === 'string' &&
+          typeof (rating as StoredRating).targetUserId === 'string' &&
+          [1, 2, 3, 4, 5].includes((rating as StoredRating).value) &&
+          typeof (rating as StoredRating).createdAt === 'string',
+      )
+    : []
+
+  const ratingPromptDismissedBy = Array.isArray(candidate.ratingPromptDismissedBy)
+    ? candidate.ratingPromptDismissedBy.filter(
+        (viewerKey): viewerKey is string => typeof viewerKey === 'string',
+      )
+    : []
+
+  return {
+    id: candidate.id,
+    requestId: candidate.requestId,
+    requestTitle: candidate.requestTitle,
+    requesterKey: candidate.requesterKey,
+    requesterName: candidate.requesterName,
+    requesterIsGuest: candidate.requesterIsGuest,
+    volunteerKey: candidate.volunteerKey,
+    volunteerName: candidate.volunteerName,
+    status: candidate.status,
+    createdAt: candidate.createdAt,
+    updatedAt: candidate.updatedAt,
+    messages: candidate.messages as StoredMessage[],
+    ratings,
+    ratingPromptDismissedBy,
   }
 }
 
@@ -185,49 +196,63 @@ function getConversationPreview(messages: StoredMessage[], requestTitle: string)
   return lastMessage.content.type === 'audio' ? AUDIO_PREVIEW_TEXT : lastMessage.content.text
 }
 
+function getViewerConversationMeta(conversation: StoredConversation, viewerKey: string) {
+  const isRequesterViewing = conversation.requesterKey === viewerKey
+  const targetUserId = isRequesterViewing ? conversation.volunteerKey : conversation.requesterKey
+  const targetUserName = isRequesterViewing ? conversation.volunteerName : conversation.requesterName
+  const viewerRating = conversation.ratings.find((rating) => rating.authorKey === viewerKey)
+  const viewerHasRated = Boolean(viewerRating)
+  const ratingPromptPending =
+    conversation.status === 'closed' &&
+    !viewerHasRated &&
+    !conversation.ratingPromptDismissedBy.includes(viewerKey)
+
+  return {
+    isRequesterViewing,
+    targetUserId,
+    targetUserName: targetUserName.trim() || DEFAULT_REQUESTER_NAME,
+    viewerHasRated,
+    ratingPromptPending,
+    viewerRating:
+      viewerRating === undefined
+        ? null
+        : ({
+            id: viewerRating.id,
+            targetUserId: viewerRating.targetUserId,
+            value: viewerRating.value,
+            createdAt: new Date(viewerRating.createdAt),
+          } satisfies Rating),
+  }
+}
+
 function mapStoredConversation(
   conversation: StoredConversation,
   viewerKey: string,
 ): Conversation {
-  const isRequesterViewing = conversation.requesterKey === viewerKey
-  const counterpartName = isRequesterViewing
-    ? conversation.volunteerName
-    : conversation.requesterName
+  const {
+    isRequesterViewing,
+    targetUserId,
+    targetUserName,
+    viewerHasRated,
+    ratingPromptPending,
+    viewerRating,
+  } = getViewerConversationMeta(conversation, viewerKey)
 
   return {
     id: conversation.id,
-    username: counterpartName,
+    username: targetUserName,
     lastMessage: getConversationPreview(conversation.messages, conversation.requestTitle),
     timestamp: new Date(conversation.updatedAt),
     unread: 0,
     status: conversation.status,
     requestId: conversation.requestId,
     requestTitle: conversation.requestTitle,
-  }
-}
-
-function buildRatingPrompt(
-  conversation: StoredConversation,
-  viewerKey: string,
-): ChatThread['ratingPrompt'] {
-  const isRequesterViewing = conversation.requesterKey === viewerKey
-  const isVolunteerViewing = conversation.volunteerKey === viewerKey
-
-  if (!isRequesterViewing && !isVolunteerViewing) {
-    return null
-  }
-
-  const targetUserId = isRequesterViewing ? conversation.volunteerKey : conversation.requesterKey
-  const targetName = isRequesterViewing ? conversation.volunteerName : conversation.requesterName
-  const viewerRole = isRequesterViewing ? 'requester' : 'volunteer'
-  const alreadyRated = conversation.ratings.some((rating) => rating.authorKey === viewerKey)
-  const alreadySkipped = conversation.skippedRatingBy.includes(viewerKey)
-
-  return {
     targetUserId,
-    targetName,
-    viewerRole,
-    shouldPrompt: conversation.status === 'closed' && !alreadyRated && !alreadySkipped,
+    targetUserName,
+    viewerRole: isRequesterViewing ? 'requester' : 'volunteer',
+    viewerHasRated,
+    ratingPromptPending,
+    viewerRating,
   }
 }
 
@@ -247,7 +272,9 @@ function normalizeRequesterLabel(seed: ChatRequestSeed) {
   return DEFAULT_REQUESTER_NAME
 }
 
-export function resolveChatViewerIdentity(user?: { id: string; name: string } | null): ChatViewerIdentity {
+export function resolveChatViewerIdentity(
+  user?: { id: string; name: string } | null,
+): ChatViewerIdentity {
   if (user?.id) {
     return {
       key: `user:${user.id}`,
@@ -300,7 +327,7 @@ export function listMockConversations(identity: ChatViewerIdentity): Conversatio
 export function getMockConversationThread(
   conversationId: string,
   identity: ChatViewerIdentity,
-): ChatThread | null {
+): ConversationThread | null {
   const conversation = readState().conversations.find((item) => item.id === conversationId)
 
   if (
@@ -319,7 +346,6 @@ export function getMockConversationThread(
       senderId: message.senderKey,
       timestamp: new Date(message.sentAt),
     })),
-    ratingPrompt: buildRatingPrompt(conversation, identity.key),
   }
 }
 
@@ -337,6 +363,23 @@ export function ensureMockConversation(
   )
 
   if (existingConversation) {
+    const nextStatus = seed.status ?? existingConversation.status
+
+    if (nextStatus !== existingConversation.status) {
+      const nextConversation: StoredConversation = {
+        ...existingConversation,
+        status: nextStatus,
+        ratingPromptDismissedBy:
+          nextStatus === 'closed' ? [] : existingConversation.ratingPromptDismissedBy,
+      }
+      const nextConversations = state.conversations.map((conversation) =>
+        conversation.id === existingConversation.id ? nextConversation : conversation,
+      )
+
+      writeState({ conversations: nextConversations })
+      return mapStoredConversation(nextConversation, identity.key)
+    }
+
     return mapStoredConversation(existingConversation, identity.key)
   }
 
@@ -355,7 +398,7 @@ export function ensureMockConversation(
     updatedAt: now,
     messages: [],
     ratings: [],
-    skippedRatingBy: [],
+    ratingPromptDismissedBy: [],
   }
 
   writeState({
@@ -369,7 +412,7 @@ export function appendMockMessage(
   conversationId: string,
   content: MessageContent,
   identity: ChatViewerIdentity,
-): ChatThread | null {
+): ConversationThread | null {
   const state = readState()
   const conversationIndex = state.conversations.findIndex(
     (conversation) => conversation.id === conversationId,
@@ -408,15 +451,10 @@ export function appendMockMessage(
   return getMockConversationThread(conversationId, identity)
 }
 
-export function submitMockConversationRating(
+export function closeMockConversation(
   conversationId: string,
-  stars: number,
   identity: ChatViewerIdentity,
-) {
-  if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
-    return null
-  }
-
+): ConversationThread | null {
   const state = readState()
   const conversationIndex = state.conversations.findIndex(
     (conversation) => conversation.id === conversationId,
@@ -432,69 +470,115 @@ export function submitMockConversationRating(
     return null
   }
 
-  const ratingPrompt = buildRatingPrompt(conversation, identity.key)
-
-  if (!ratingPrompt || !ratingPrompt.shouldPrompt) {
-    return null
+  if (conversation.status === 'closed') {
+    return getMockConversationThread(conversationId, identity)
   }
 
   const nextConversation: StoredConversation = {
     ...conversation,
-    ratings: [
-      ...conversation.ratings,
-      {
-        authorKey: identity.key,
-        targetUserId: ratingPrompt.targetUserId,
-        stars,
-        submittedAt: new Date().toISOString(),
-      },
-    ],
+    status: 'closed',
+    ratingPromptDismissedBy: [],
+    updatedAt: new Date().toISOString(),
   }
 
   const nextConversations = [...state.conversations]
-  nextConversations[conversationIndex] = nextConversation
+  nextConversations.splice(conversationIndex, 1, nextConversation)
   writeState({ conversations: nextConversations })
 
-  return {
-    conversationId,
-    stars,
-    targetUserId: ratingPrompt.targetUserId,
-  }
+  return getMockConversationThread(conversationId, identity)
 }
 
-export function skipMockConversationRating(
+export function submitMockConversationRating(
   conversationId: string,
+  value: RatingValue,
   identity: ChatViewerIdentity,
-) {
+): ConversationThread | null {
   const state = readState()
   const conversationIndex = state.conversations.findIndex(
     (conversation) => conversation.id === conversationId,
   )
 
   if (conversationIndex === -1) {
-    return false
+    return null
   }
 
   const conversation = state.conversations[conversationIndex]
 
   if (conversation.requesterKey !== identity.key && conversation.volunteerKey !== identity.key) {
-    return false
+    return null
   }
 
-  const ratingPrompt = buildRatingPrompt(conversation, identity.key)
+  const { targetUserId } = getViewerConversationMeta(conversation, identity.key)
+  const now = new Date().toISOString()
+  const existingRatingIndex = conversation.ratings.findIndex(
+    (rating) => rating.authorKey === identity.key,
+  )
+  const nextRating: StoredRating = {
+    id:
+      existingRatingIndex === -1
+        ? crypto.randomUUID()
+        : conversation.ratings[existingRatingIndex].id,
+    authorKey: identity.key,
+    targetUserId,
+    value,
+    createdAt: now,
+  }
 
-  if (!ratingPrompt || !ratingPrompt.shouldPrompt) {
-    return false
+  const nextRatings =
+    existingRatingIndex === -1
+      ? [...conversation.ratings, nextRating]
+      : conversation.ratings.map((rating, index) =>
+          index === existingRatingIndex ? nextRating : rating,
+        )
+
+  const nextConversation: StoredConversation = {
+    ...conversation,
+    ratings: nextRatings,
+    ratingPromptDismissedBy: conversation.ratingPromptDismissedBy.filter(
+      (viewerKey) => viewerKey !== identity.key,
+    ),
+    updatedAt: now,
+  }
+
+  const nextConversations = [...state.conversations]
+  nextConversations.splice(conversationIndex, 1)
+  nextConversations.unshift(nextConversation)
+  writeState({ conversations: nextConversations })
+
+  return getMockConversationThread(conversationId, identity)
+}
+
+export function dismissMockConversationRatingPrompt(
+  conversationId: string,
+  identity: ChatViewerIdentity,
+): ConversationThread | null {
+  const state = readState()
+  const conversationIndex = state.conversations.findIndex(
+    (conversation) => conversation.id === conversationId,
+  )
+
+  if (conversationIndex === -1) {
+    return null
+  }
+
+  const conversation = state.conversations[conversationIndex]
+
+  if (conversation.requesterKey !== identity.key && conversation.volunteerKey !== identity.key) {
+    return null
+  }
+
+  if (conversation.ratingPromptDismissedBy.includes(identity.key)) {
+    return getMockConversationThread(conversationId, identity)
   }
 
   const nextConversation: StoredConversation = {
     ...conversation,
-    skippedRatingBy: [...conversation.skippedRatingBy, identity.key],
+    ratingPromptDismissedBy: [...conversation.ratingPromptDismissedBy, identity.key],
   }
 
   const nextConversations = [...state.conversations]
-  nextConversations[conversationIndex] = nextConversation
+  nextConversations.splice(conversationIndex, 1, nextConversation)
   writeState({ conversations: nextConversations })
 
-  return true
+  return getMockConversationThread(conversationId, identity)
 }

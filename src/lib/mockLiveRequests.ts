@@ -28,6 +28,7 @@ export function getMockLiveRequestSections(user?: { id: string; name: string } |
       {
         id: 'mock-volunteer-request-user',
         title: 'Ridicare medicamente de la farmacie',
+        status: 'closed',
         category: 'FACETOFACE',
         urgencyLevel: 'HIGH',
         anonymousMode: false,
