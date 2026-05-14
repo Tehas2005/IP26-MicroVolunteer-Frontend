@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BLOCKED_LOGIN_MESSAGE, isRestrictedAccountStatus, readAccountStatusFromUser } from '@/lib/accountStatus';
 import { backend } from '@/lib/backend';
+import { useAuthStore } from '@/store/authStore';
 import { Field, TextInput, PasswordInput, ErrorBanner } from './components';
 import { validateEmail } from './validators';
 import { primaryButtonStyle } from './constants';
@@ -14,6 +16,7 @@ type Props = {
 
 export function LoginForm({ onSuccess, onSwitch }: Props) {
   const navigate = useNavigate();
+  const setAuthSession = useAuthStore((state) => state.setAuthSession);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -32,6 +35,19 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
     email: validateEmail(email),
     password: password ? '' : 'Parola obligatorie.',
   };
+
+  function simulateBlockedSession() {
+    setApiError('');
+    setAuthSession({
+      user: {
+        id: 'demo-blocked-user',
+        name: 'Cont Bloccat Demo',
+        email: 'blocked-demo@example.com',
+        accountStatus: 'BLOCKED',
+      },
+    });
+    navigate('/');
+  }
 
   async function handleLogin() {
     setTouched({ email: true, password: true });
@@ -52,11 +68,27 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
         return;
       }
 
+      const accountStatus = readAccountStatusFromUser(response.data.user)
+
+      if (isRestrictedAccountStatus(accountStatus)) {
+        try {
+          await backend.auth.signOut()
+        } catch {
+          // Clear the local auth token even if sign-out fails.
+        } finally {
+          backend.auth.clearAuthToken()
+        }
+
+        setApiError(BLOCKED_LOGIN_MESSAGE)
+        return
+      }
+
       onSuccess({
         user: {
           id: response.data.user.id,
           name: response.data.user.name,
           email: response.data.user.email,
+          accountStatus,
         },
       });
     } catch (err: unknown) {
@@ -232,6 +264,55 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
           Sign Up
         </button>
       </p>
+      {import.meta.env.DEV && (
+        <div
+          style={{
+            marginTop: '1rem',
+            padding: '12px 14px',
+            borderRadius: 12,
+            background: '#faf5ff',
+            border: '1px solid #ddd6fe',
+          }}
+        >
+          <p style={{ fontSize: 12, fontWeight: 600, color: '#6d28d9', marginBottom: '0.75rem' }}>
+            Demo FE-013
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setApiError(BLOCKED_LOGIN_MESSAGE)}
+              style={{
+                border: '1px solid #c4b5fd',
+                borderRadius: 10,
+                background: 'white',
+                color: '#4c1d95',
+                padding: '10px 12px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Simuleaza eroarea de login pentru cont blocat
+            </button>
+            <button
+              type="button"
+              onClick={simulateBlockedSession}
+              style={{
+                border: '1px solid #7C3AED',
+                borderRadius: 10,
+                background: '#7C3AED',
+                color: 'white',
+                padding: '10px 12px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Simuleaza sesiune blocata si testeaza guard-ul
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

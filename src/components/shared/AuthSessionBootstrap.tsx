@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect } from 'react'
 
+import { readAccountStatusFromUser } from '@/lib/accountStatus'
 import { backend } from '@/lib/backend'
 import { useAuthStore } from '@/store/authStore'
 import { authClient } from '@/main'
@@ -35,6 +36,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
               id: response.data.user.id,
               name: response.data.user.name,
               email: response.data.user.email,
+              accountStatus: readAccountStatusFromUser(response.data.user),
             },
           })
           return;
