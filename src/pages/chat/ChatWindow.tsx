@@ -14,8 +14,8 @@ import {
 import { useAuthStore } from '@/store/authStore'
 
 import { ChatInput } from './ChatInput'
+import { ConversationRatingModal } from './ConversationRatingModal'
 import { MessageBubble } from './MessageBubble'
-import { RatingModal } from './RatingModal'
 import type { Conversation, ConversationThread, MessageContent, RatingValue } from './types'
 
 interface Props {
@@ -121,11 +121,11 @@ export function ChatWindow({ conversation }: Props) {
         onSend={handleSend}
         conversationClosed={activeConversation.status === 'closed'}
       />
-      <RatingModal
-        open={activeConversation.ratingPromptPending}
+      <ConversationRatingModal
+        isOpen={activeConversation.ratingPromptPending}
         viewerRole={activeConversation.viewerRole}
         targetUserId={targetUserId}
-        targetUserName={activeConversation.targetUserName}
+        targetName={activeConversation.targetUserName}
         onSkip={handleSkipRating}
         onSubmit={(value) => handleSubmitRating(value)}
       />

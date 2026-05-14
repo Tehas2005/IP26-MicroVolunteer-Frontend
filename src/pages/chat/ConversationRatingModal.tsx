@@ -10,17 +10,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import type { RatingValue } from './types'
 
 interface ConversationRatingModalProps {
   isOpen: boolean
   targetName: string
   targetUserId: string | null
   viewerRole: 'requester' | 'volunteer'
-  onSubmit: (stars: number, targetUserId: string) => void
+  onSubmit: (stars: RatingValue, targetUserId: string) => void
   onSkip: () => void
 }
 
-const STAR_COUNT = 5
+const STAR_VALUES: RatingValue[] = [1, 2, 3, 4, 5]
 
 function getDialogTitle(viewerRole: 'requester' | 'volunteer', targetName: string) {
   return viewerRole === 'requester'
@@ -37,7 +38,7 @@ export function ConversationRatingModal({
   onSkip,
 }: ConversationRatingModalProps) {
   const [hoveredStars, setHoveredStars] = useState(0)
-  const [selectedStars, setSelectedStars] = useState(0)
+  const [selectedStars, setSelectedStars] = useState<0 | RatingValue>(0)
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
@@ -95,8 +96,7 @@ export function ConversationRatingModal({
               className="flex items-center justify-center gap-2"
               onMouseLeave={() => setHoveredStars(0)}
             >
-              {Array.from({ length: STAR_COUNT }, (_, index) => {
-                const starValue = index + 1
+              {STAR_VALUES.map((starValue) => {
                 const isActive = starValue <= previewStars
 
                 return (
