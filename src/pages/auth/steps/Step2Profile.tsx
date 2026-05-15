@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Field, TextInput, StepNavigation } from '../components';
-import { validatePhone } from '../validators';
+import { Field, TextInput, StepNavigation, ErrorBanner } from '../components';
+import { validatePhone, validateUsername } from '../validators';
 import type { RegisterFormData } from '../types';
 
 type Props = {
@@ -9,9 +9,11 @@ type Props = {
   onBack: () => void;
   onNext: () => void;
   isMobile: boolean;
+  loading?: boolean;
+  apiError?: string;
 };
 
-export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props) {
+export function Step2Profile({ data, onChange, onBack, onNext, isMobile, loading, apiError }: Props) {
   const [touched, setTouched] = useState<Partial<Record<keyof RegisterFormData, boolean>>>({});
 
   const touch = (key: keyof RegisterFormData) => () =>
@@ -20,17 +22,19 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
   const errors = {
     firstName: !data.firstName.trim() ? 'Prenumele este obligatoriu.' : '',
     lastName: !data.lastName.trim() ? 'Numele este obligatoriu.' : '',
+    username: validateUsername(data.username),
     phone: validatePhone(data.phone),
   };
 
   function handleNext() {
-    setTouched({ firstName: true, lastName: true, phone: true });
+    setTouched({ firstName: true, lastName: true, username: true, phone: true });
     if (Object.values(errors).some(Boolean)) return;
     onNext();
   }
 
   return (
     <div>
+      {apiError && <ErrorBanner message={apiError} />}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 16px' }}>
         <Field label="Prenume" error={touched.firstName ? errors.firstName : ''}>
           <TextInput
@@ -53,6 +57,16 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           />
         </Field>
       </div>
+      <Field label="Username" error={touched.username ? errors.username : ''}>
+        <TextInput
+          id="username"
+          value={data.username}
+          onChange={(v) => onChange('username', v.replace(/[^a-zA-Z0-9_-]/g, ''))}
+          onBlur={touch('username')}
+          placeholder="ion_popescu"
+          hasError={touched.username && !!errors.username}
+        />
+      </Field>
       <Field label="Telefon" error={touched.phone ? errors.phone : ''}>
         <TextInput
           id="phone"
@@ -64,7 +78,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           hasError={touched.phone && !!errors.phone}
         />
       </Field>
-      <Field label="Oraș (opțional)">
+      <Field label="Oraș">
         <TextInput
           id="city"
           value={data.city}
@@ -72,7 +86,7 @@ export function Step2Profile({ data, onChange, onBack, onNext, isMobile }: Props
           placeholder="Cluj-Napoca"
         />
       </Field>
-      <StepNavigation onBack={onBack} onNext={handleNext} nextLabel="Continuă" />
+      <StepNavigation onBack={onBack} onNext={handleNext} nextLabel="Continuă" loading={loading} />
     </div>
   );
 }
