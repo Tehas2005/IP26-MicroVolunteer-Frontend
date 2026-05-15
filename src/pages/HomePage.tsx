@@ -22,6 +22,10 @@ import {
   type VolunteerNotificationItem,
 } from '@/lib/volunteerNotifications'
 import { useAuthStore } from '@/store/authStore'
+import type { TaskResponseType } from '@/sdk/types'
+
+const EMPTY_TASKS: TaskResponseType[] = []
+const EMPTY_REQUESTS: LiveRequestCardData[] = []
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -32,7 +36,7 @@ export function HomePage() {
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
 
-  const { data: liveTasks = [], isLoading: isLoadingLiveRequests } = useQuery({
+  const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
     enabled: sessionStatus === 'ready' && !isGuest,
     refetchInterval: 15000,
@@ -51,12 +55,13 @@ export function HomePage() {
       return extractTasksList(response.data)
     },
   })
+  const liveTasks = liveTasksData ?? EMPTY_TASKS
 
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
     if (isGuest || !authUser) {
       return {
-        myRequests: [],
-        volunteerFeedRequests: [],
+        myRequests: EMPTY_REQUESTS,
+        volunteerFeedRequests: EMPTY_REQUESTS,
       }
     }
 
@@ -104,14 +109,18 @@ export function HomePage() {
     if (isGuest || sessionStatus !== 'ready') {
       seenVolunteerRequestIdsRef.current.clear()
       hasInitializedVolunteerFeedRef.current = false
-      setActiveNotifications([])
+      setActiveNotifications((currentNotifications) =>
+        currentNotifications.length === 0 ? currentNotifications : [],
+      )
       return
     }
 
     if (shouldUseMockLiveRequests) {
       seenVolunteerRequestIdsRef.current.clear()
       hasInitializedVolunteerFeedRef.current = false
-      setActiveNotifications([])
+      setActiveNotifications((currentNotifications) =>
+        currentNotifications.length === 0 ? currentNotifications : [],
+      )
       return
     }
 
