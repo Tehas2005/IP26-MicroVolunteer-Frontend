@@ -47,7 +47,14 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'despre-noi', element: <AboutPage /> },
-      { path: 'istoric-interactiuni', element: <InteractionHistoryPage /> },
+      {
+        path: 'istoric-interactiuni',
+        element: (
+          <RequireAuthenticatedUser>
+            <InteractionHistoryPage />
+          </RequireAuthenticatedUser>
+        ),
+      },
       { path: 'chat/:conversationId', element: <ChatPage /> },
       { path: 'chat', element: <ChatPage /> },
     ],

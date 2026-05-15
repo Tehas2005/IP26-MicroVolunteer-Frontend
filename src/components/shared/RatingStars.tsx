@@ -12,7 +12,7 @@ const MAX_STARS = 5
 
 function normalizeRating(value?: number | null) {
   if (typeof value !== 'number' || Number.isNaN(value)) {
-    return 0
+    return null
   }
 
   return Math.max(0, Math.min(MAX_STARS, Math.round(value)))
@@ -20,6 +20,14 @@ function normalizeRating(value?: number | null) {
 
 export function RatingStars({ value, className, showValue = true }: RatingStarsProps) {
   const normalizedRating = normalizeRating(value)
+
+  if (normalizedRating === null) {
+    return (
+      <span className={cn('text-sm font-medium leading-none text-brand-gray-text', className)}>
+        Fără rating
+      </span>
+    )
+  }
 
   return (
     <div className={cn('inline-flex items-center gap-2 align-middle', className)}>
