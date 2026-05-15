@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 
 import {
   ROMANIA_CITY_COORDINATES,
@@ -222,9 +223,12 @@ export function ProfilePage() {
                     <span className={location ? 'text-brand-black' : 'text-brand-gray-text'}>
                       {location || 'Alege orasul'}
                     </span>
-                    <span aria-hidden="true" className="text-xs font-bold text-brand-gray-text">
-                      v
-                    </span>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={`h-4 w-4 shrink-0 text-brand-gray-text transition-transform ${
+                        isLocationListOpen ? 'rotate-180' : ''
+                      }`}
+                    />
                   </button>
 
                   {isLocationListOpen ? (
