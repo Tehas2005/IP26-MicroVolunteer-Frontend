@@ -4,6 +4,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import RootLayout from '@/components/layout/RootLayout'
 import AboutPage from '@/pages/AboutPage'
+import AcceptVolunteerModalPreviewPage from '@/pages/AcceptVolunteerModalPreviewPage'
 import AskForHelpPage from '@/pages/AskForHelpPage'
 import AuthPage from '@/pages/AuthPage'
 import ChatPage from '@/pages/ChatPage'
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'cere-ajutor', element: <AskForHelpPage /> },
+      { path: 'dev/fe-008-modal', element: <AcceptVolunteerModalPreviewPage /> },
       {
         path: 'profil',
         element: (
