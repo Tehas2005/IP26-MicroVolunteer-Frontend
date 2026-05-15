@@ -7,6 +7,7 @@ import { MvcrLogo } from '@/components/shared/MvcrLogo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
+import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
 interface NavAction {
   label: string
@@ -17,7 +18,6 @@ interface NavAction {
 
 const navActions: NavAction[] = [
   { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link' },
-  { label: 'Profil', path: '/profil', type: 'link', requiresAuth: true },
   { label: 'Despre Noi', path: '/despre-noi', type: 'link' },
   { label: 'Log In', path: '/auth/login', type: 'ghost' },
   { label: 'Sign Up', path: '/auth/signup', type: 'auth' },
@@ -89,7 +89,21 @@ export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const navigate = useNavigate()
-  const { isGuest, clearAuthSession } = useAuthStore()
+  const { isGuest, user, clearAuthSession } = useAuthStore()
+  const volunteerProfile = useVolunteerProfileStore((state) =>
+    user?.id ? state.profilesByUserId[user.id] : undefined,
+  )
+
+  const displayedNavActions: NavAction[] = [
+    navActions[0],
+    {
+      label: volunteerProfile ? 'Setari profil voluntar' : 'Vreau sa devin voluntar!',
+      path: '/devino-voluntar',
+      type: 'link',
+      requiresAuth: true,
+    },
+    ...navActions.slice(1),
+  ]
 
   function handleNavigate(path: string) {
     setIsMenuOpen(false)
@@ -135,7 +149,7 @@ export function Navbar() {
         </button>
 
         <nav aria-label="Navigare principală" className="hidden items-center gap-2 md:flex">
-          {navActions.filter(shouldShowAction).map((action) => (
+          {displayedNavActions.filter(shouldShowAction).map((action) => (
             <DesktopAction key={action.label} action={action} onNavigate={handleNavigate} />
           ))}
           {!isGuest ? (
@@ -169,7 +183,7 @@ export function Navbar() {
           aria-label="Navigare principală mobilă"
           className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6"
         >
-          {navActions.filter(shouldShowAction).map((action) => (
+          {displayedNavActions.filter(shouldShowAction).map((action) => (
             <MobileAction key={action.label} action={action} onNavigate={handleNavigate} />
           ))}
           {!isGuest ? (
