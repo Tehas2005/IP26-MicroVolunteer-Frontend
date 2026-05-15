@@ -450,6 +450,8 @@ export function ensureMockConversationForAcceptedOffer(
     createdAt: now,
     updatedAt: now,
     messages: [],
+    ratings: [],
+    ratingPromptDismissedBy: [],
   }
 
   writeState({
