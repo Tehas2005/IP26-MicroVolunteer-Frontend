@@ -24,6 +24,11 @@ export default defineConfig(({ mode }) => {
     build: {
       sourcemap: true,
     },
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: ["./src/test/setup.ts"],
+    },
     server: {
       port: 5173,
       strictPort: true,
@@ -36,11 +41,6 @@ export default defineConfig(({ mode }) => {
             },
           }
         : undefined,
-    },
-    test: {
-      environment: "jsdom",
-      setupFiles: ["./src/test/setup.ts"],
-      globals: false,
     },
   }
 })

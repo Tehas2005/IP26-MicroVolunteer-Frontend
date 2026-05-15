@@ -32,6 +32,7 @@ export function getMockLiveRequestSections(user?: { id: string; name: string } |
         id: 'mock-volunteer-request-user',
         title: 'Ridicare medicamente de la farmacie',
         description: 'O persoana in varsta are nevoie de ajutor rapid pentru ridicarea tratamentului prescris.',
+        status: 'closed',
         category: 'FACETOFACE',
         urgencyLevel: 'HIGH',
         anonymousMode: false,

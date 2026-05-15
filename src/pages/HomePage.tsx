@@ -22,7 +22,6 @@ import {
   type VolunteerNotificationItem,
 } from '@/lib/volunteerNotifications'
 import { useAuthStore } from '@/store/authStore'
-import { ChatFab } from './chat/ChatFab'
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -247,7 +246,6 @@ export function HomePage() {
           />
         </div>
       </section>
-      <ChatFab />
     </div>
   )
 }
