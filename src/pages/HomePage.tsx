@@ -16,7 +16,6 @@ import {
 import { ensureMockConversation, resolveChatViewerIdentity } from '@/lib/mockChat'
 import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import { useAuthStore } from '@/store/authStore'
-import { ChatFab } from './chat/ChatFab'
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -167,7 +166,6 @@ export function HomePage() {
           />
         </div>
       </section>
-      <ChatFab />
     </div>
   )
 }
