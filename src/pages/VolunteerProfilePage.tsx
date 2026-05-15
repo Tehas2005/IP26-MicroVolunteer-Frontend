@@ -100,7 +100,7 @@ export default function VolunteerProfilePage() {
   const [skillInput, setSkillInput] = useState(EMPTY_DRAFT.skillInput)
   const [hiddenIdentity, setHiddenIdentity] = useState(EMPTY_DRAFT.hiddenIdentity)
   const [distanceTouched, setDistanceTouched] = useState(false)
-  const [hasHydratedProfile, setHasHydratedProfile] = useState(false)
+  const [hasHydratedDraft, setHasHydratedDraft] = useState(false)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -120,8 +120,10 @@ export default function VolunteerProfilePage() {
     let isMounted = true
 
     async function hydrateProfile() {
+      let parsedDraft: Partial<ProfileDraft> | null = null
+
       if (isMounted) {
-        setHasHydratedProfile(false)
+        setHasHydratedDraft(false)
         setIsLoadingProfile(true)
         setSaveError('')
         setSaveMessage('')
@@ -132,7 +134,7 @@ export default function VolunteerProfilePage() {
           const storedDraft = window.localStorage.getItem(draftKey)
 
           if (storedDraft) {
-            const parsedDraft = JSON.parse(storedDraft) as Partial<ProfileDraft>
+            parsedDraft = JSON.parse(storedDraft) as Partial<ProfileDraft>
 
             if (isMounted) {
               setMaxDistanceKm(parsedDraft.maxDistanceKm ?? EMPTY_DRAFT.maxDistanceKm)
@@ -158,6 +160,10 @@ export default function VolunteerProfilePage() {
           }
         }
 
+        if (isMounted) {
+          setHasHydratedDraft(true)
+        }
+
         if (!authUser?.id) {
           return
         }
@@ -169,7 +175,11 @@ export default function VolunteerProfilePage() {
         }
 
         if (profileResponse.success) {
-          setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
+          // Preserve the local draft choice during refreshes; otherwise the late
+          // profile response can overwrite the user's unsaved toggle selection.
+          if (parsedDraft?.hiddenIdentity === undefined) {
+            setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
+          }
         } else if (!profileResponse.isNotFound && profileResponse.message) {
           setSaveError('Nu am reusit sa incarcam setarile profilului.')
         }
@@ -179,7 +189,6 @@ export default function VolunteerProfilePage() {
         }
       } finally {
         if (isMounted) {
-          setHasHydratedProfile(true)
           setIsLoadingProfile(false)
         }
       }
@@ -193,7 +202,7 @@ export default function VolunteerProfilePage() {
   }, [authUser?.id, draftKey])
 
   useEffect(() => {
-    if (!draftKey || !hasHydratedProfile) {
+    if (!draftKey || !hasHydratedDraft) {
       return
     }
 
@@ -212,7 +221,7 @@ export default function VolunteerProfilePage() {
   }, [
     currentLocation,
     draftKey,
-    hasHydratedProfile,
+    hasHydratedDraft,
     hiddenIdentity,
     knownLocations,
     maxDistanceKm,
