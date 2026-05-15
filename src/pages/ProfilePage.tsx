@@ -61,6 +61,19 @@ export function ProfilePage() {
     setSkillInput('')
   }, [volunteerProfile])
 
+  useEffect(() => {
+    if (!isConfirmModalOpen) {
+      return
+    }
+
+    const previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+    }
+  }, [isConfirmModalOpen])
+
   const normalizedSkills = useMemo(
     () => skills.map((skill) => skill.trim()).filter(Boolean),
     [skills],

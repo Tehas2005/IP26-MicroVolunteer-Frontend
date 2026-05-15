@@ -33,6 +33,7 @@ describe("ProfilePage volunteer opt-in / opt-out", () => {
   afterEach(() => {
     resetStores()
     localStorage.clear()
+    document.body.style.overflow = ""
     cleanup()
   })
 
@@ -114,10 +115,12 @@ describe("ProfilePage volunteer opt-in / opt-out", () => {
     expect(
       screen.getByText("Esti sigur ca vrei sa stergi profilul tau de voluntar?"),
     ).toBeInTheDocument()
+    expect(document.body.style.overflow).toBe("hidden")
 
     await user.click(screen.getByRole("button", { name: "Anuleaza" }))
 
     expect(useVolunteerProfileStore.getState().profilesByUserId["user-1"]).toBeDefined()
+    expect(document.body.style.overflow).toBe("")
 
     await user.click(screen.getByRole("button", { name: "Renunta la statutul de voluntar" }))
     await user.click(screen.getByRole("button", { name: "Da, renunt" }))
@@ -125,6 +128,7 @@ describe("ProfilePage volunteer opt-in / opt-out", () => {
     await waitFor(() => {
       expect(useVolunteerProfileStore.getState().profilesByUserId["user-1"]).toBeUndefined()
     })
+    expect(document.body.style.overflow).toBe("")
     expect(screen.getByRole("button", { name: "Incepe acum" })).toBeInTheDocument()
   })
 })
