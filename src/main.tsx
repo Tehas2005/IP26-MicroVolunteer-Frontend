@@ -37,9 +37,6 @@ Sentry.init({
 export const authClient = createAuthClient({
   baseURL: import.meta.env.VITE_SERVER_URL,
   plugins: [emailOTPClient()],
-  fetchOptions: {
-        credentials: "include",
-    },
 })
 console.log(import.meta.env.VITE_SERVER_URL)
 const queryClient = new QueryClient()
