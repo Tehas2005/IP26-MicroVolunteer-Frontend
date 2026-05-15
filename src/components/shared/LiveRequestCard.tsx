@@ -6,6 +6,7 @@ export interface LiveRequestCardData {
   title?: string | null
   category?: LiveRequestCategory | null
   urgencyLevel?: LiveRequestUrgencyLevel | null
+  status?: 'open' | 'closed'
   anonymousMode?: boolean | null
   username?: string | null
   name?: string | null

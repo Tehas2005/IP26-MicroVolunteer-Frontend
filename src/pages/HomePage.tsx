@@ -241,7 +241,6 @@ export function HomePage() {
           />
         </div>
       </section>
-
       <HelpOffersInboxDialog
         offers={selectedMyRequestOffers}
         onAccept={handleOfferAccept}

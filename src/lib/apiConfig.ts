@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_ORIGIN = 'https://nginx-repo-production.up.railway.app'
+const DEFAULT_BACKEND_ORIGIN = 'https://micro-volunteer-crisis-router.up.railway.app'
 
 function normalizeOrigin(url: string) {
   return url.replace(/\/+$/, '').replace(/\/api(?:\/auth)?$/, '')

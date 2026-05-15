@@ -60,11 +60,7 @@ export function ChatPage() {
           ].join(' ')}
         >
           {selectedConversation ? (
-            <ChatWindow
-              conversationId={selectedConversation.id}
-              status={selectedConversation.status}
-              username={selectedConversation.username}
-            />
+            <ChatWindow conversation={selectedConversation} />
           ) : (
             <EmptyState />
           )}
