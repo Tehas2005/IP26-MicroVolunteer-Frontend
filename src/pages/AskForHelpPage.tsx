@@ -372,7 +372,8 @@ const askForHelpStyles = `
     color: #111827;
     font-size: 14px;
     font-weight: 700;
-    padding: 0 16px;
+    min-height: 48px;
+    padding: 12px 18px;
     cursor: pointer;
     transition: all 0.2s ease;
   }
@@ -470,8 +471,10 @@ const askForHelpStyles = `
     color: #6b7280;
     font-size: 12px;
     font-weight: 700;
-    padding: 7px 10px;
-    white-space: nowrap;
+    min-height: 36px;
+    padding: 9px 14px;
+    text-align: center;
+    white-space: normal;
   }
 
   .ask-help-switch {
@@ -695,6 +698,11 @@ const askForHelpStyles = `
 
     .ask-help-submit-row {
       align-items: stretch;
+    }
+
+    .ask-help-secondary-btn,
+    .ask-help-locked-badge {
+      width: 100%;
     }
 
     .ask-help-section-title-row,
