@@ -14,11 +14,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
   const apiProxyTarget =
     env.VITE_API_PROXY_TARGET ||
-    env.VITE_BACKEND_BASE_URL ||
+    (env.VITE_BACKEND_BASE_URL ? stripApiSuffix(env.VITE_BACKEND_BASE_URL) : "") ||
     (env.VITE_API_BASE_URL ? stripApiSuffix(env.VITE_API_BASE_URL) : "") ||
     (env.VITE_AUTH_BASE_URL ? stripApiSuffix(env.VITE_AUTH_BASE_URL) : "") ||
-    env.VITE_API_URL ||
-    env.VITE_SERVER_URL ||
+    (env.VITE_API_URL ? stripApiSuffix(env.VITE_API_URL) : "") ||
+    (env.VITE_SERVER_URL ? stripApiSuffix(env.VITE_SERVER_URL) : "") ||
     DEFAULT_PROXY_TARGET
 
   return {
