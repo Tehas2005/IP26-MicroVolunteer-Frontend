@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 import AcceptVolunteerModal from '@/components/modals/AcceptVolunteerModal'
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
+import CancelRequestDialog from '@/components/shared/CancelRequestDialog'
 import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
@@ -17,6 +18,7 @@ import {
   readCreatedTaskIds,
 } from '@/lib/liveRequests'
 import {
+  cancelMockRequestConversations,
   ensureMockConversation,
   ensureMockConversationForAcceptedOffer,
   resolveChatViewerIdentity,
@@ -27,7 +29,7 @@ import {
   updateMockHelpOfferStatus,
   type HelpOfferData,
 } from '@/lib/mockHelpOffers'
-import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
+import { cancelMockLiveRequest, getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import {
   createVolunteerNotification,
   getVolunteerNotificationId,
@@ -49,14 +51,20 @@ export function HomePage() {
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
+  const viewerIdentity = useMemo(() => resolveChatViewerIdentity(authUser), [authUser])
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
+  const [cancelErrorMessage, setCancelErrorMessage] = useState<string | null>(null)
+  const [cancelledRequestIds, setCancelledRequestIds] = useState<string[]>([])
+  const [isCancellingRequest, setIsCancellingRequest] = useState(false)
   const [offerDecisionState, setOfferDecisionState] = useState<OfferDecisionState | null>(null)
+  const [requestPendingCancellation, setRequestPendingCancellation] = useState<LiveRequestCardData | null>(null)
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
+  const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null)
   const [offersRevision, setOffersRevision] = useState(0)
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
 
-  const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
+  const { data: liveTasksData, isLoading: isLoadingLiveRequests, refetch: refetchLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
     enabled: sessionStatus === 'ready' && !isGuest,
     refetchInterval: 15000,
@@ -119,8 +127,14 @@ export function HomePage() {
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
     !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
+  const cancelledRequestIdsSet = useMemo(
+    () => new Set(cancelledRequestIds),
+    [cancelledRequestIds],
+  )
 
-  const displayedMyRequests = shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
+  const displayedMyRequests = (
+    shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
+  ).filter((request) => !cancelledRequestIdsSet.has(request.id))
   const displayedVolunteerRequests = shouldUseMockLiveRequests
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
@@ -177,6 +191,20 @@ export function HomePage() {
       return [...currentNotifications, ...nextNotifications].slice(-4)
     })
   }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
+
+  useEffect(() => {
+    if (!successToastMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccessToastMessage(null)
+    }, 3500)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [successToastMessage])
 
   const displayedMyRequestsWithOfferSummary = useMemo(() => {
     void offersRevision
@@ -286,6 +314,67 @@ export function HomePage() {
     [handleNotificationDismiss, handleVolunteerRequestOpen],
   )
 
+  const canCancelRequest = useCallback(
+    (request: LiveRequestCardData) =>
+      Boolean(request.requesterKey && request.requesterKey === viewerIdentity.key),
+    [viewerIdentity.key],
+  )
+
+  const handleCancelRequestStart = useCallback((request: LiveRequestCardData) => {
+    setCancelErrorMessage(null)
+    setRequestPendingCancellation(request)
+  }, [])
+
+  const handleCancelRequestConfirm = useCallback(async () => {
+    if (!requestPendingCancellation) {
+      return
+    }
+
+    setIsCancellingRequest(true)
+
+    try {
+      if (shouldUseMockLiveRequests) {
+        cancelMockLiveRequest(requestPendingCancellation.id)
+      } else {
+        const response = await backend.tasks.delete(requestPendingCancellation.id)
+
+        if (!response.success) {
+          setCancelErrorMessage(response.message || 'Nu am putut anula cererea selectată.')
+          return
+        }
+      }
+
+      cancelMockRequestConversations(requestPendingCancellation.id, viewerIdentity)
+      setCancelledRequestIds((currentIds) =>
+        currentIds.includes(requestPendingCancellation.id)
+          ? currentIds
+          : [...currentIds, requestPendingCancellation.id],
+      )
+      setActiveNotifications((currentNotifications) =>
+        currentNotifications.filter(
+          (notification) =>
+            notification.request.id !== requestPendingCancellation.id &&
+            notification.id !== getVolunteerNotificationId(requestPendingCancellation.id),
+        ),
+      )
+      setCancelErrorMessage(null)
+      setOfferDecisionState((currentState) =>
+        currentState?.request.id === requestPendingCancellation.id ? null : currentState,
+      )
+      setSelectedMyRequestId((currentRequestId) =>
+        currentRequestId === requestPendingCancellation.id ? null : currentRequestId,
+      )
+      setRequestPendingCancellation(null)
+      setSuccessToastMessage('Cererea ta a fost anulată.')
+
+      if (!shouldUseMockLiveRequests) {
+        void refetchLiveRequests()
+      }
+    } finally {
+      setIsCancellingRequest(false)
+    }
+  }, [refetchLiveRequests, requestPendingCancellation, shouldUseMockLiveRequests, viewerIdentity])
+
   return (
     <div className="bg-brand-cream">
       <VolunteerNotificationStack
@@ -357,6 +446,17 @@ export function HomePage() {
             myRequests={displayedMyRequestsWithOfferSummary}
             onMyRequestOpen={handleMyRequestOpen}
             onVolunteerRequestOpen={handleVolunteerRequestOpen}
+            renderMyRequestActions={(request) =>
+              canCancelRequest(request) ? (
+                <Button
+                  className="w-full text-brand-red hover:text-brand-red sm:w-auto"
+                  onClick={() => handleCancelRequestStart(request)}
+                  variant="ghost"
+                >
+                  Anulează Cererea
+                </Button>
+              ) : null
+            }
             volunteerRequests={displayedVolunteerRequests}
           />
         </div>
@@ -391,6 +491,27 @@ export function HomePage() {
         onDecline={handleOfferDecisionReject}
         volunteerName={offerDecisionState?.offer.volunteerName ?? ''}
       />
+
+      <CancelRequestDialog
+        errorMessage={cancelErrorMessage}
+        isSubmitting={isCancellingRequest}
+        onConfirm={() => void handleCancelRequestConfirm()}
+        onOpenChange={(open) => {
+          if (!open && !isCancellingRequest) {
+            setCancelErrorMessage(null)
+            setRequestPendingCancellation(null)
+          }
+        }}
+        open={requestPendingCancellation !== null}
+      />
+
+      {successToastMessage ? (
+        <div className="pointer-events-none fixed inset-x-4 top-20 z-[65] flex justify-center sm:top-24">
+          <div className="rounded-full border border-brand-green/25 bg-white px-4 py-2 text-sm font-medium text-brand-black shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
+            {successToastMessage}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

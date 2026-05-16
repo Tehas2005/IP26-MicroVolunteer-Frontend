@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -76,5 +77,28 @@ describe('LiveRequestCard', () => {
     expect(title).toHaveClass('group-hover:text-brand-purple-dark')
     expect(urgencyLabel).toHaveClass('group-hover:text-brand-black/75')
     expect(accentBar).toHaveClass('group-hover:opacity-85')
+  })
+
+  it('permite actiuni in footer fara sa declanseze deschiderea cardului', async () => {
+    const user = userEvent.setup()
+    const onCardClick = vi.fn()
+    const onActionClick = vi.fn()
+
+    render(
+      <LiveRequestCard
+        footerActions={
+          <button onClick={onActionClick} type="button">
+            Anulează Cererea
+          </button>
+        }
+        onClick={onCardClick}
+        request={baseRequest}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Anulează Cererea' }))
+
+    expect(onActionClick).toHaveBeenCalledTimes(1)
+    expect(onCardClick).not.toHaveBeenCalled()
   })
 })

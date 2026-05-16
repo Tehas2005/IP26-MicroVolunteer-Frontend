@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 export type LiveRequestUrgencyLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 export type LiveRequestCategory = 'FACETOFACE' | 'MESSAGES_ONLY'
 
@@ -22,6 +24,7 @@ export interface LiveRequestCardData {
 export interface LiveRequestCardProps {
   request: LiveRequestCardData
   onClick?: () => void
+  footerActions?: ReactNode
 }
 
 interface UrgencyConfig {
@@ -75,7 +78,7 @@ function getUrgencyMeta(urgencyLevel?: LiveRequestUrgencyLevel | null): UrgencyC
   return urgencyConfig[urgencyLevel]
 }
 
-export function LiveRequestCard({ request, onClick }: LiveRequestCardProps) {
+export function LiveRequestCard({ request, onClick, footerActions }: LiveRequestCardProps) {
   const urgency = getUrgencyMeta(request.urgencyLevel)
   const categoryLabel = getCategoryLabel(request.category)
   const displayName = getDisplayName(request)
@@ -83,7 +86,10 @@ export function LiveRequestCard({ request, onClick }: LiveRequestCardProps) {
 
   return (
     <article
-      className="group cursor-pointer rounded-[24px] border border-brand-gray/90 bg-[#F8FAFD] px-5 py-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-200 hover:border-brand-purple/35 hover:bg-white hover:shadow-[0_0_0_1px_rgba(123,47,190,0.08),0_2px_5px_rgba(26,26,26,0.08)]"
+      className={[
+        'group rounded-[24px] border border-brand-gray/90 bg-[#F8FAFD] px-5 py-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-200 hover:border-brand-purple/35 hover:bg-white hover:shadow-[0_0_0_1px_rgba(123,47,190,0.08),0_2px_5px_rgba(26,26,26,0.08)]',
+        isInteractive ? 'cursor-pointer' : '',
+      ].join(' ')}
       onClick={onClick}
       onKeyDown={
         isInteractive
@@ -129,6 +135,15 @@ export function LiveRequestCard({ request, onClick }: LiveRequestCardProps) {
           className={`h-3 w-16 shrink-0 rounded-full transition-opacity duration-200 group-hover:opacity-85 ${urgency.accentClassName}`}
         />
       </div>
+
+      {footerActions ? (
+        <div
+          className="mt-4 border-t border-brand-gray/70 pt-3"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {footerActions}
+        </div>
+      ) : null}
     </article>
   )
 }

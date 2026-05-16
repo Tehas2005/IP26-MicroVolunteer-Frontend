@@ -1,6 +1,7 @@
 import type { Fetcher } from './Fetcher'
 import type {
   ApiResponse,
+  DeleteTaskResponseType,
   DeleteTaskDetailsResponseType,
   PaginatedTaskListType,
   TaskDetailsPayloadType,
@@ -41,5 +42,9 @@ export class TasksFetcher {
 
   public deleteDetails(id: string): Promise<ApiResponse<DeleteTaskDetailsResponseType>> {
     return this.fetcher.delete<DeleteTaskDetailsResponseType>(`/api/tasks/${id}/details`)
+  }
+
+  public delete(id: string): Promise<ApiResponse<DeleteTaskResponseType>> {
+    return this.fetcher.delete<DeleteTaskResponseType>(`/api/tasks/${id}`)
   }
 }
