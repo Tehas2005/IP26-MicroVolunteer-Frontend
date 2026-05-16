@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
+import { SkillTagSelector } from '@/components/shared/SkillTagSelector'
 import { backend } from '@/lib/backend'
 import {
   decrementGuestRequestLimit,
@@ -18,17 +19,9 @@ import {
   ROMANIA_DEFAULT_COORDINATES,
   type TaskLocationPayload,
 } from '@/lib/romania-city-coordinates'
+import { COMMON_SKILL_SUGGESTIONS } from '@/lib/skillSuggestions'
 import { useAuthStore } from '@/store/authStore'
 import type { TaskSubmissionPayloadType, TaskUrgencyType } from '@/sdk/types'
-
-const skillSuggestions = [
-  'Traducere',
-  'Transport local',
-  'Sprijin emotional',
-  'Asistenta digitala',
-  'Ridicare medicamente',
-  'Completare formulare',
-]
 
 type TaskCategory = 'MESSAGES_ONLY' | 'FACE_TO_FACE'
 
@@ -288,36 +281,6 @@ const askForHelpStyles = `
     color: #6b7280;
     font-size: 14px;
     line-height: 1.5;
-  }
-
-  .ask-help-chip-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-
-  .ask-help-chip {
-    border: 1px solid #e5e7eb;
-    border-radius: 999px;
-    background: #ffffff;
-    color: #374151;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 10px 14px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .ask-help-chip:hover {
-    border-color: #d8b4fe;
-    background: #faf5ff;
-  }
-
-  .ask-help-chip.ask-help-active {
-    border-color: #7c3aed;
-    background: #f5f3ff;
-    color: #6d28d9;
   }
 
   .ask-help-inline-field {
@@ -743,7 +706,6 @@ export function AskForHelpPage() {
   const [safetyNotes, setSafetyNotes] = useState('')
   const [locationTouched, setLocationTouched] = useState(false)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
-  const [customSkill, setCustomSkill] = useState('')
   const [guestSessionId, setGuestSessionId] = useState('')
   const [requestLimit, setRequestLimit] = useState(0)
   const [isAnonymous, setIsAnonymous] = useState(false)
@@ -834,36 +796,6 @@ export function AskForHelpPage() {
 
   const showLocationError = requestType === 'Fizic' && locationTouched && !location.trim()
 
-  const toggleSkill = (skill: string) => {
-    setSelectedSkills((currentSkills) =>
-      currentSkills.includes(skill)
-        ? currentSkills.filter((currentSkill) => currentSkill !== skill)
-        : [...currentSkills, skill],
-    )
-  }
-
-  const getNormalizedSkills = () => {
-    const normalizedSkill = customSkill.trim()
-
-    if (!normalizedSkill || selectedSkills.includes(normalizedSkill)) {
-      return selectedSkills
-    }
-
-    return [...selectedSkills, normalizedSkill]
-  }
-
-  const addCustomSkill = () => {
-    setSelectedSkills(getNormalizedSkills())
-    setCustomSkill('')
-  }
-
-  const handleCustomSkillKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      addCustomSkill()
-    }
-  }
-
   const startRecording = async () => {
     if (isGuest) {
       return
@@ -942,15 +874,13 @@ export function AskForHelpPage() {
       return
     }
 
-    addCustomSkill()
-
     if (requestType === 'Fizic' && !location.trim()) {
       setLocationTouched(true)
       setError('Completeaza locatia pentru cererile fizice.')
       return
     }
 
-    const nextSkills = getNormalizedSkills()
+    const nextSkills = selectedSkills
     const requestDetails = buildRequestDetailsPayload(notes, languageNeeded, safetyNotes)
     const resolvedLocation = resolveTaskLocation(location)
 
@@ -1044,7 +974,6 @@ export function AskForHelpPage() {
       setSafetyNotes('')
       setLocationTouched(false)
       setSelectedSkills([])
-      setCustomSkill('')
       setIsAnonymous(false)
       setError('')
       clearAudio()
@@ -1205,56 +1134,12 @@ export function AskForHelpPage() {
                   </div>
                 </div>
 
-                <div className="ask-help-chip-grid">
-                  {skillSuggestions.map((skill) => (
-                    <button
-                      key={skill}
-                      type="button"
-                      className={`ask-help-chip ${selectedSkills.includes(skill) ? 'ask-help-active' : ''}`}
-                      onClick={() => toggleSkill(skill)}
-                    >
-                      {skill}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="ask-help-inline-field">
-                  <input
-                    type="text"
-                    className="ask-help-text-input"
-                    placeholder="Adauga o abilitate personalizata"
-                    value={customSkill}
-                    onChange={(event) => setCustomSkill(event.target.value)}
-                    onKeyDown={handleCustomSkillKeyDown}
-                  />
-                  <button
-                    type="button"
-                    className="ask-help-secondary-btn"
-                    onClick={addCustomSkill}
-                  >
-                    Adauga
-                  </button>
-                </div>
-
-                {selectedSkills.length > 0 && (
-                  <div className="ask-help-selected-skills">
-                    {selectedSkills.map((skill) => (
-                      <span key={skill} className="ask-help-selected-skill">
-                        {skill}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedSkills((currentSkills) =>
-                              currentSkills.filter((currentSkill) => currentSkill !== skill),
-                            )
-                          }
-                        >
-                          x
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <SkillTagSelector
+                  suggestions={COMMON_SKILL_SUGGESTIONS}
+                  value={selectedSkills}
+                  onChange={setSelectedSkills}
+                  emptySelectionText="Nu ai selectat inca nicio abilitate."
+                />
               </div>
             </div>
 

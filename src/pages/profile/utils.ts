@@ -17,21 +17,3 @@ export function readHiddenIdentityFromResponse(payload: unknown) {
 
   return false
 }
-
-export function addSkillToList(currentSkills: string[], rawSkill: string): string[] {
-  const normalizedSkill = rawSkill.trim()
-
-  if (!normalizedSkill) {
-    return currentSkills
-  }
-
-  const alreadyExists = currentSkills.some(
-    (existingSkill) => existingSkill.toLowerCase() === normalizedSkill.toLowerCase(),
-  )
-
-  if (alreadyExists) {
-    return currentSkills
-  }
-
-  return [...currentSkills, normalizedSkill]
-}

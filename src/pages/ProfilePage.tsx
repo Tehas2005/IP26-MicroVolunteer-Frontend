@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
+import { SkillTagSelector } from '@/components/shared/SkillTagSelector'
 import { backend } from '@/lib/backend'
 import {
   ROMANIA_CITY_COORDINATES,
   ROMANIA_CITY_NAMES,
   type TaskLocationPayload,
 } from '@/lib/romania-city-coordinates'
-import { addSkillToList, readHiddenIdentityFromResponse } from '@/pages/profile/utils'
+import { COMMON_SKILL_SUGGESTIONS } from '@/lib/skillSuggestions'
+import { readHiddenIdentityFromResponse } from '@/pages/profile/utils'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
 const SAVE_DELAY_MS = 1200
 const SKILLS_STORAGE_KEY_PREFIX = 'mvcr-profile-skills'
-
-const SKILL_SUGGESTIONS = ['traducere', 'transport', 'insotire', 'cumparaturi', 'suport emotional']
 
 function resolveVolunteerLocation(location: string): TaskLocationPayload | null {
   const normalizedLocation = location.trim()
@@ -37,7 +37,6 @@ export function ProfilePage() {
   const [isFormVisible, setIsFormVisible] = useState(Boolean(volunteerProfile))
   const [location, setLocation] = useState(volunteerProfile?.location ?? '')
   const [hiddenIdentity, setHiddenIdentity] = useState(volunteerProfile?.hiddenIdentity ?? false)
-  const [skillInput, setSkillInput] = useState('')
   const [skills, setSkills] = useState<string[]>(volunteerProfile?.skills ?? [])
   const [hasHydratedProfile, setHasHydratedProfile] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -70,14 +69,12 @@ export function ProfilePage() {
       setLocation(volunteerProfile.location)
       setSkills(volunteerProfile.skills)
       setHiddenIdentity(volunteerProfile.hiddenIdentity)
-      setSkillInput('')
       setSaveError('')
       return
     }
 
     setIsFormVisible(false)
     setLocation('')
-    setSkillInput('')
     setIsLocationListOpen(false)
     setIsConfirmModalOpen(false)
   }, [volunteerProfile])
@@ -170,28 +167,8 @@ export function ProfilePage() {
     window.localStorage.setItem(skillsStorageKey, JSON.stringify(skills))
   }, [hasHydratedProfile, skills, skillsStorageKey])
 
-  function addSkill(rawSkill: string) {
-    const nextSkills = addSkillToList(skills, rawSkill)
-
-    if (nextSkills === skills && !rawSkill.trim()) {
-      return
-    }
-
-    if (nextSkills === skills) {
-      setSkillInput('')
-      return
-    }
-
+  function updateSkills(nextSkills: string[]) {
     setSkills(nextSkills)
-    setSkillInput('')
-    setSaveError('')
-    setSaveMessage('')
-  }
-
-  function removeSkill(skillToRemove: string) {
-    setSkills((currentSkills) =>
-      currentSkills.filter((existingSkill) => existingSkill !== skillToRemove),
-    )
     setSaveError('')
     setSaveMessage('')
   }
@@ -388,68 +365,13 @@ export function ProfilePage() {
               <div className="rounded-[28px] border border-brand-gray bg-brand-cream/70 p-5 sm:p-6">
                 <h2 className="text-xl font-bold text-brand-black">Abilitati</h2>
 
-                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                  <input
-                    type="text"
-                    value={skillInput}
-                    onChange={(event) => setSkillInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        addSkill(skillInput)
-                      }
-                    }}
-                    placeholder="Ex: traducere, transport, organizare"
-                    className="w-full rounded-[18px] border border-brand-gray bg-white px-4 py-3 text-sm text-brand-black outline-none transition focus:border-brand-purple"
-                    aria-label="Adauga abilitate"
-                  />
-
-                  <button
-                    type="button"
-                    className="rounded-[18px] bg-brand-black px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
-                    onClick={() => addSkill(skillInput)}
-                  >
-                    Adauga
-                  </button>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {skills.length > 0 ? (
-                    skills.map((skill) => (
-                      <span
-                        key={skill}
-                        className="inline-flex items-center gap-2 rounded-full border border-brand-purple/30 bg-brand-purple-light/70 px-3 py-2 text-sm font-medium text-brand-black"
-                      >
-                        {skill}
-                        <button
-                          type="button"
-                          className="rounded-full text-brand-gray-text transition hover:text-brand-black"
-                          onClick={() => removeSkill(skill)}
-                          aria-label={`Sterge abilitatea ${skill}`}
-                        >
-                          x
-                        </button>
-                      </span>
-                    ))
-                  ) : (
-                    <p className="text-sm text-brand-gray-text">
-                      Nu ai adaugat inca nicio abilitate.
-                    </p>
-                  )}
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {SKILL_SUGGESTIONS.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      className="rounded-full border border-brand-gray bg-white px-3 py-1.5 text-xs font-medium text-brand-gray-text transition hover:border-brand-purple hover:text-brand-black"
-                      onClick={() => addSkill(suggestion)}
-                    >
-                      + {suggestion}
-                    </button>
-                  ))}
-                </div>
+                <SkillTagSelector
+                  suggestions={COMMON_SKILL_SUGGESTIONS}
+                  value={skills}
+                  onChange={updateSkills}
+                  inputPlaceholder="Ex: traducere, transport, organizare"
+                  className="mt-5"
+                />
               </div>
 
               <div className="rounded-[28px] border border-brand-gray bg-brand-cream/70 p-5 sm:p-6">
