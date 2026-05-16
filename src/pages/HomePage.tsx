@@ -150,8 +150,7 @@ export function HomePage() {
   const displayedVolunteerRequests = shouldUseMockLiveRequests
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
-  const shouldUseBackendNotifications =
-    sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
+  const shouldUseBackendNotifications = sessionStatus === 'ready' && !isGuest
 
   const requestLookup = useMemo(() => {
     const nextLookup = new Map<string, LiveRequestCardData>()
@@ -179,6 +178,12 @@ export function HomePage() {
       setActiveNotifications((currentNotifications) =>
         currentNotifications.length === 0 ? currentNotifications : [],
       )
+      return
+    }
+
+    if (shouldUseBackendNotifications) {
+      seenVolunteerRequestIdsRef.current.clear()
+      hasInitializedVolunteerFeedRef.current = false
       return
     }
 
@@ -381,39 +386,41 @@ export function HomePage() {
 
   const handleNotificationOpen = useCallback(
     async (notification: VolunteerNotificationItem) => {
-      handleNotificationDismiss(notification.id)
+      let requestToOpen = notification.request
+
+      if (!requestToOpen) {
+        if (!notification.relatedRequestId) {
+          return
+        }
+
+        const response = await backend.tasks.getById(notification.relatedRequestId)
+
+        if (!response.success) {
+          return
+        }
+
+        const task = extractTask(response.data)
+
+        if (!task) {
+          return
+        }
+
+        requestToOpen = mapTaskToLiveRequestCard(task, {
+          currentUserName: authUser?.name,
+          isOwnedByCurrentUser: false,
+        })
+      }
 
       if (shouldUseBackendNotifications) {
-        await backend.notifications.markAsRead(notification.id)
+        const markAsReadResponse = await backend.notifications.markAsRead(notification.id)
+
+        if (!markAsReadResponse.success) {
+          return
+        }
       }
 
-      if (notification.request) {
-        handleVolunteerRequestOpen(notification.request)
-        return
-      }
-
-      if (!notification.relatedRequestId) {
-        return
-      }
-
-      const response = await backend.tasks.getById(notification.relatedRequestId)
-
-      if (!response.success) {
-        return
-      }
-
-      const task = extractTask(response.data)
-
-      if (!task) {
-        return
-      }
-
-      const request = mapTaskToLiveRequestCard(task, {
-        currentUserName: authUser?.name,
-        isOwnedByCurrentUser: false,
-      })
-
-      handleVolunteerRequestOpen(request)
+      handleNotificationDismiss(notification.id)
+      handleVolunteerRequestOpen(requestToOpen)
     },
     [
       authUser?.name,
