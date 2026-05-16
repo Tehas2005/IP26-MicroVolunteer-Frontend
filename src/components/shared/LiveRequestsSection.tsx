@@ -13,6 +13,7 @@ export interface LiveRequestsSectionProps {
   isLoading?: boolean
   myRequests?: LiveRequestCardData[] | null
   volunteerRequests?: LiveRequestCardData[] | null
+  onMyRequestOpen?: (request: LiveRequestCardData) => void
   onVolunteerRequestOpen?: (request: LiveRequestCardData) => void
 }
 
@@ -31,6 +32,7 @@ export function LiveRequestsSection({
   isLoading = false,
   myRequests,
   volunteerRequests,
+  onMyRequestOpen,
   onVolunteerRequestOpen,
 }: LiveRequestsSectionProps) {
   const [activeTab, setActiveTab] = useState<LiveRequestsTab>('mine')
@@ -83,6 +85,14 @@ export function LiveRequestsSection({
         id={activePanelId}
         role="tabpanel"
       >
+        {!isLoading && activeTab === 'mine' && requestsByTab.mine.length > 0 ? (
+          <div className="px-2 pb-3 sm:px-3">
+            <p className="text-sm text-brand-gray-text">
+              Apasă pe o cerere ca să vezi ofertele primite și să alegi voluntarul potrivit.
+            </p>
+          </div>
+        ) : null}
+
         {isLoading ? (
           <div className="flex min-h-[220px] items-center justify-center rounded-[22px] border border-brand-gray bg-white">
             <div className="flex flex-col items-center gap-3 text-center">
@@ -116,9 +126,13 @@ export function LiveRequestsSection({
                 <LiveRequestCard
                   key={request.id}
                   onClick={
-                    activeTab === 'volunteer' && onVolunteerRequestOpen
-                      ? () => onVolunteerRequestOpen(request)
-                      : undefined
+                    activeTab === 'mine'
+                      ? onMyRequestOpen
+                        ? () => onMyRequestOpen(request)
+                        : undefined
+                      : onVolunteerRequestOpen
+                        ? () => onVolunteerRequestOpen(request)
+                        : undefined
                   }
                   request={request}
                 />

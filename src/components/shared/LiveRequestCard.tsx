@@ -16,6 +16,7 @@ export interface LiveRequestCardData {
   requesterKey?: string | null
   requesterKind?: 'guest' | 'user'
   requesterLabel?: string | null
+  supportingText?: string | null
 }
 
 export interface LiveRequestCardProps {
@@ -115,6 +116,12 @@ export function LiveRequestCard({ request, onClick }: LiveRequestCardProps) {
           <p className="mt-3 text-sm text-brand-gray-text transition-colors duration-200 group-hover:text-brand-black/75">
             {urgency.label}
           </p>
+
+          {request.supportingText?.trim() ? (
+            <p className="mt-2 text-sm font-medium text-brand-purple-dark/90">
+              {request.supportingText}
+            </p>
+          ) : null}
         </div>
 
         <span

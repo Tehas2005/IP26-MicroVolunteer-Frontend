@@ -157,6 +157,14 @@ export function rememberCreatedTaskId(userId: string, taskId: string | number | 
 }
 
 export function extractCreatedTaskId(payload: unknown): string | null {
+  if (isRecord(payload)) {
+    const directTaskId = normalizeTaskId(payload.id as string | number | null | undefined)
+
+    if (directTaskId) {
+      return directTaskId
+    }
+  }
+
   const task = readEnvelopeData<unknown>(payload)
 
   if (!isRecord(task)) {

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
+import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
@@ -14,15 +15,25 @@ import {
   mapTaskToLiveRequestCard,
   readCreatedTaskIds,
 } from '@/lib/liveRequests'
-import { ensureMockConversation, resolveChatViewerIdentity } from '@/lib/mockChat'
+import {
+  ensureMockConversation,
+  ensureMockConversationForAcceptedOffer,
+  resolveChatViewerIdentity,
+} from '@/lib/mockChat'
+import {
+  getReceivedOffersSummary,
+  listMockHelpOffers,
+  updateMockHelpOfferStatus,
+  type HelpOfferData,
+} from '@/lib/mockHelpOffers'
 import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import {
   createVolunteerNotification,
   getVolunteerNotificationId,
   type VolunteerNotificationItem,
 } from '@/lib/volunteerNotifications'
-import { useAuthStore } from '@/store/authStore'
 import type { TaskResponseType } from '@/sdk/types'
+import { useAuthStore } from '@/store/authStore'
 
 const EMPTY_TASKS: TaskResponseType[] = []
 const EMPTY_REQUESTS: LiveRequestCardData[] = []
@@ -33,6 +44,8 @@ export function HomePage() {
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
+  const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
+  const [offersRevision, setOffersRevision] = useState(0)
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
 
@@ -158,6 +171,28 @@ export function HomePage() {
     })
   }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
 
+  const displayedMyRequestsWithOfferSummary = useMemo(() => {
+    void offersRevision
+
+    return displayedMyRequests.map((request) => ({
+      ...request,
+      supportingText: getReceivedOffersSummary(request),
+    }))
+  }, [displayedMyRequests, offersRevision])
+
+  const selectedMyRequest = useMemo(
+    () =>
+      displayedMyRequestsWithOfferSummary.find((request) => request.id === selectedMyRequestId) ??
+      null,
+    [displayedMyRequestsWithOfferSummary, selectedMyRequestId],
+  )
+
+  const selectedMyRequestOffers = useMemo(() => {
+    void offersRevision
+
+    return selectedMyRequest ? listMockHelpOffers(selectedMyRequest) : []
+  }, [offersRevision, selectedMyRequest])
+
   const handleVolunteerRequestOpen = useCallback(
     (request: LiveRequestCardData) => {
       const identity = resolveChatViewerIdentity(authUser)
@@ -165,6 +200,38 @@ export function HomePage() {
       navigate(`/chat/${conversation.id}`)
     },
     [authUser, navigate],
+  )
+
+  const handleMyRequestOpen = useCallback((request: LiveRequestCardData) => {
+    setSelectedMyRequestId(request.id)
+  }, [])
+
+  const handleOfferReject = useCallback((offer: HelpOfferData) => {
+    updateMockHelpOfferStatus(offer.requestId, offer.id, 'rejected')
+    setOffersRevision((currentValue) => currentValue + 1)
+  }, [])
+
+  const handleOfferAccept = useCallback(
+    (offer: HelpOfferData) => {
+      if (!selectedMyRequest) {
+        return
+      }
+
+      updateMockHelpOfferStatus(selectedMyRequest.id, offer.id, 'accepted')
+      setOffersRevision((currentValue) => currentValue + 1)
+
+      const conversation = ensureMockConversationForAcceptedOffer(
+        selectedMyRequest,
+        resolveChatViewerIdentity(authUser),
+        {
+          volunteerKey: offer.volunteerKey,
+          volunteerName: offer.volunteerName,
+        },
+      )
+
+      navigate(`/chat/${conversation.id}`)
+    },
+    [authUser, navigate, selectedMyRequest],
   )
 
   const handleNotificationDismiss = useCallback((notificationId: string) => {
@@ -249,12 +316,26 @@ export function HomePage() {
 
           <LiveRequestsSection
             isLoading={isLoadingLiveRequests}
-            myRequests={displayedMyRequests}
+            myRequests={displayedMyRequestsWithOfferSummary}
+            onMyRequestOpen={handleMyRequestOpen}
             onVolunteerRequestOpen={handleVolunteerRequestOpen}
             volunteerRequests={displayedVolunteerRequests}
           />
         </div>
       </section>
+
+      <HelpOffersInboxDialog
+        offers={selectedMyRequestOffers}
+        onAccept={handleOfferAccept}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedMyRequestId(null)
+          }
+        }}
+        onReject={handleOfferReject}
+        open={selectedMyRequest !== null}
+        request={selectedMyRequest}
+      />
     </div>
   )
 }

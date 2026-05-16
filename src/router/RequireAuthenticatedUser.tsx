@@ -3,7 +3,11 @@ import { Navigate } from 'react-router-dom'
 
 import { useAuthStore } from '@/store/authStore'
 
-export function RequireAuthenticatedUser({ children }: { children: ReactNode }) {
+interface RequireAuthenticatedUserProps {
+  children: ReactNode
+}
+
+export function RequireAuthenticatedUser({ children }: RequireAuthenticatedUserProps) {
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
 
