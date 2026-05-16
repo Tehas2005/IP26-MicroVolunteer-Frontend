@@ -1,32 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
 import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
+import SubmitHelpOfferDialog from '@/components/shared/SubmitHelpOfferDialog'
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
+  extractOfferList,
+  mapOfferToHelpOffer,
+  readOfferTaskId,
+  readOfferVolunteerId,
+  type HelpOfferData,
+} from '@/lib/helpOffers'
+import {
+  extractTaskPayload,
   extractTasksList,
   isTaskOwnedByCurrentUser,
   mapTaskToLiveRequestCard,
   readCreatedTaskIds,
 } from '@/lib/liveRequests'
-import {
-  ensureMockConversation,
-  ensureMockConversationForAcceptedOffer,
-  resolveChatViewerIdentity,
-} from '@/lib/mockChat'
-import {
-  getReceivedOffersSummary,
-  listMockHelpOffers,
-  updateMockHelpOfferStatus,
-  type HelpOfferData,
-} from '@/lib/mockHelpOffers'
-import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
+import { readGuestSessionId } from '@/lib/guestSession'
 import {
   createVolunteerNotification,
   getVolunteerNotificationId,
@@ -37,32 +35,87 @@ import { useAuthStore } from '@/store/authStore'
 
 const EMPTY_TASKS: TaskResponseType[] = []
 const EMPTY_REQUESTS: LiveRequestCardData[] = []
+const CONVERSATION_READY_STATUSES = new Set(['ASSIGNED', 'MATCHED', 'IN_PROGRESS', 'COMPLETED'])
+const CHAT_READY_POLL_DELAY_MS = 600
+const CHAT_READY_MAX_ATTEMPTS = 8
+const MAX_OFFERS_PAGE_SIZE = 50
+
+function normalizeTaskStatus(status: string | null | undefined) {
+  return typeof status === 'string' ? status.trim().toUpperCase() : ''
+}
+
+function buildMyRequestSupportingText(task: TaskResponseType) {
+  const normalizedStatus = normalizeTaskStatus(task.status)
+
+  if (normalizedStatus === 'COMPLETED') {
+    return 'Task finalizat. Conversatia ramane disponibila in chat.'
+  }
+
+  if (CONVERSATION_READY_STATUSES.has(normalizedStatus)) {
+    return 'Voluntar selectat. Conversatia este disponibila in chat.'
+  }
+
+  return 'Apasa pe cerere pentru a vedea ofertele primite si a alege un voluntar.'
+}
+
+function buildGuestRequestSupportingText() {
+  return 'Cererea ta de vizitator este sincronizata cu backendul si ramane vizibila in sesiunea curenta.'
+}
+
+function canOpenConversationForTask(status: string | null | undefined) {
+  return CONVERSATION_READY_STATUSES.has(normalizeTaskStatus(status))
+}
+
+function wait(delayMs: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs)
+  })
+}
 
 export function HomePage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
+  const guestSessionId = isGuest ? readGuestSessionId() : ''
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
-  const [offersRevision, setOffersRevision] = useState(0)
+  const [selectedVolunteerRequest, setSelectedVolunteerRequest] = useState<LiveRequestCardData | null>(
+    null,
+  )
+  const [volunteerOfferError, setVolunteerOfferError] = useState<string | null>(null)
+  const [volunteerOfferSubmitting, setVolunteerOfferSubmitting] = useState(false)
+  const [offerActionError, setOfferActionError] = useState<string | null>(null)
+  const [offerActionState, setOfferActionState] = useState<{
+    offerId: string
+    action: 'accept' | 'reject'
+  } | null>(null)
+  const [pageNotice, setPageNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(
+    null,
+  )
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
 
   const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
-    queryKey: ['live-requests', authUser?.id],
-    enabled: sessionStatus === 'ready' && !isGuest,
+    queryKey: ['live-requests', authUser?.id, guestSessionId],
+    enabled: sessionStatus === 'ready' && (!isGuest || Boolean(guestSessionId)),
     refetchInterval: 15000,
     refetchIntervalInBackground: true,
     queryFn: async () => {
-      const response = await backend.tasks.list({
-        page: 1,
-        pageSize: 50,
-        order: 'DESC',
-      })
+      const response = isGuest
+        ? await backend.guest.listTasks(guestSessionId, {
+            page: 1,
+            pageSize: 50,
+          })
+        : await backend.tasks.list({
+            page: 1,
+            pageSize: 50,
+            order: 'DESC',
+          })
 
       if (!response.success) {
-        throw new Error(response.message || 'Nu am putut încărca cererile live.')
+        throw new Error(response.message || 'Nu am putut incarca cererile live.')
       }
 
       return extractTasksList(response.data)
@@ -70,8 +123,52 @@ export function HomePage() {
   })
   const liveTasks = liveTasksData ?? EMPTY_TASKS
 
+  const { data: myPendingOffers = [] } = useQuery({
+    queryKey: ['my-pending-offers', authUser?.id],
+    enabled: sessionStatus === 'ready' && !isGuest && Boolean(authUser?.id),
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
+    queryFn: async () => {
+      const response = await backend.offers.listMine({
+        page: 1,
+        pageSize: MAX_OFFERS_PAGE_SIZE,
+        status: 'PENDING',
+      })
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut incarca ofertele trimise.')
+      }
+
+      return extractOfferList(response.data)
+    },
+  })
+
+  const pendingOfferTaskIds = useMemo(
+    () => new Set(myPendingOffers.map((offer) => readOfferTaskId(offer)).filter(Boolean)),
+    [myPendingOffers],
+  )
+
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
-    if (isGuest || !authUser) {
+    if (isGuest) {
+      return {
+        myRequests: liveTasks.map((task) => {
+          const hasConversation = canOpenConversationForTask(task.status)
+
+          return {
+            ...mapTaskToLiveRequestCard(task, {
+              currentUserName: 'Solicitant',
+              isOwnedByCurrentUser: true,
+            }),
+            supportingText: hasConversation
+              ? 'Voluntar selectat. Apasa pe cerere pentru a intra in chat.'
+              : buildGuestRequestSupportingText(),
+          }
+        }),
+        volunteerFeedRequests: EMPTY_REQUESTS,
+      }
+    }
+
+    if (!authUser) {
       return {
         myRequests: EMPTY_REQUESTS,
         volunteerFeedRequests: EMPTY_REQUESTS,
@@ -82,25 +179,32 @@ export function HomePage() {
     const ownedTaskIds = new Set<string>()
 
     const ownedTasks = liveTasks.filter((task) => {
-      const isOwnedByCurrentUser = isTaskOwnedByCurrentUser(task, authUser.id, locallyTrackedTaskIds)
+      const isOwned = isTaskOwnedByCurrentUser(task, authUser.id, locallyTrackedTaskIds)
 
-      if (isOwnedByCurrentUser) {
+      if (isOwned) {
         ownedTaskIds.add(String(task.id))
       }
 
-      return isOwnedByCurrentUser
+      return isOwned
     })
 
-    const publicTasks = liveTasks.filter((task) => !ownedTaskIds.has(String(task.id)))
+    const publicOpenTasks = liveTasks.filter((task) => {
+      if (ownedTaskIds.has(String(task.id))) {
+        return false
+      }
+
+      return normalizeTaskStatus(task.status) === 'OPEN'
+    })
 
     return {
-      myRequests: ownedTasks.map((task) =>
-        mapTaskToLiveRequestCard(task, {
+      myRequests: ownedTasks.map((task) => ({
+        ...mapTaskToLiveRequestCard(task, {
           currentUserName: authUser.name,
           isOwnedByCurrentUser: true,
         }),
-      ),
-      volunteerFeedRequests: publicTasks.map((task) =>
+        supportingText: buildMyRequestSupportingText(task),
+      })),
+      volunteerFeedRequests: publicOpenTasks.map((task) =>
         mapTaskToLiveRequestCard(task, {
           currentUserName: authUser.name,
           isOwnedByCurrentUser: false,
@@ -109,26 +213,8 @@ export function HomePage() {
     }
   }, [authUser, isGuest, liveTasks])
 
-  const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
-  const shouldUseMockLiveRequests =
-    !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
-
-  const displayedMyRequests = shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
-  const displayedVolunteerRequests = shouldUseMockLiveRequests
-    ? mockLiveRequests.volunteerRequests
-    : volunteerFeedRequests
-
   useEffect(() => {
     if (isGuest || sessionStatus !== 'ready') {
-      seenVolunteerRequestIdsRef.current.clear()
-      hasInitializedVolunteerFeedRef.current = false
-      setActiveNotifications((currentNotifications) =>
-        currentNotifications.length === 0 ? currentNotifications : [],
-      )
-      return
-    }
-
-    if (shouldUseMockLiveRequests) {
       seenVolunteerRequestIdsRef.current.clear()
       hasInitializedVolunteerFeedRef.current = false
       setActiveNotifications((currentNotifications) =>
@@ -169,69 +255,244 @@ export function HomePage() {
 
       return [...currentNotifications, ...nextNotifications].slice(-4)
     })
-  }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
-
-  const displayedMyRequestsWithOfferSummary = useMemo(() => {
-    void offersRevision
-
-    return displayedMyRequests.map((request) => ({
-      ...request,
-      supportingText: getReceivedOffersSummary(request),
-    }))
-  }, [displayedMyRequests, offersRevision])
+  }, [isGuest, sessionStatus, volunteerFeedRequests])
 
   const selectedMyRequest = useMemo(
-    () =>
-      displayedMyRequestsWithOfferSummary.find((request) => request.id === selectedMyRequestId) ??
-      null,
-    [displayedMyRequestsWithOfferSummary, selectedMyRequestId],
+    () => myRequests.find((request) => request.id === selectedMyRequestId) ?? null,
+    [myRequests, selectedMyRequestId],
   )
 
-  const selectedMyRequestOffers = useMemo(() => {
-    void offersRevision
+  const {
+    data: selectedMyRequestOffers = [],
+    isLoading: isLoadingSelectedOffers,
+    error: selectedOffersError,
+    refetch: refetchSelectedOffers,
+  } = useQuery({
+    queryKey: ['task-offers', selectedMyRequest?.id],
+    enabled: sessionStatus === 'ready' && !isGuest && Boolean(selectedMyRequest?.id),
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchInterval: selectedMyRequest?.id ? 5000 : false,
+    queryFn: async () => {
+      const requestId = selectedMyRequest?.id
 
-    return selectedMyRequest ? listMockHelpOffers(selectedMyRequest) : []
-  }, [offersRevision, selectedMyRequest])
+      if (!requestId) {
+        return []
+      }
+
+      const response = await backend.offers.listForTask(requestId, {
+        page: 1,
+        pageSize: 50,
+      })
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut incarca ofertele pentru aceasta cerere.')
+      }
+
+      const offers = extractOfferList(response.data)
+      const volunteerIds = Array.from(
+        new Set(offers.map((offer) => readOfferVolunteerId(offer)).filter(Boolean)),
+      )
+
+      const [profiles, ratingSummaries] = await Promise.all([
+        Promise.all(
+          volunteerIds.map(async (volunteerId) => {
+            const profileResponse = await backend.profile.getByUserId(volunteerId)
+            return [volunteerId, profileResponse.success ? profileResponse.data : null] as const
+          }),
+        ),
+        Promise.all(
+          volunteerIds.map(async (volunteerId) => {
+            const ratingSummaryResponse = await backend.ratings.getSummaryForUser(volunteerId)
+            return [volunteerId, ratingSummaryResponse.success ? ratingSummaryResponse.data : null] as const
+          }),
+        ),
+      ])
+
+      const profilesById = new Map(profiles)
+      const ratingSummaryById = new Map(ratingSummaries)
+
+      return offers.map((offer) => {
+        const volunteerId = readOfferVolunteerId(offer)
+
+        return mapOfferToHelpOffer({
+          offer,
+          requestId,
+          profile: volunteerId ? profilesById.get(volunteerId) ?? null : null,
+          ratingSummary: volunteerId ? ratingSummaryById.get(volunteerId) ?? null : null,
+        })
+      })
+    },
+  })
 
   const handleVolunteerRequestOpen = useCallback(
     (request: LiveRequestCardData) => {
-      const identity = resolveChatViewerIdentity(authUser)
-      const conversation = ensureMockConversation(request, identity)
-      navigate(`/chat/${conversation.id}`)
+      setPageNotice(null)
+      setVolunteerOfferError(null)
+
+      if (pendingOfferTaskIds.has(request.id)) {
+        setPageNotice({
+          kind: 'error',
+          message:
+            'Ai deja o oferta in asteptare pentru aceasta cerere. Asteapta raspunsul requesterului.',
+        })
+        return
+      }
+
+      setSelectedVolunteerRequest(request)
     },
-    [authUser, navigate],
+    [pendingOfferTaskIds],
   )
 
-  const handleMyRequestOpen = useCallback((request: LiveRequestCardData) => {
-    setSelectedMyRequestId(request.id)
-  }, [])
+  const handleMyRequestOpen = useCallback(
+    (request: LiveRequestCardData) => {
+      if (isGuest) {
+        const matchingTask = liveTasks.find((task) => String(task.id) === request.id)
 
-  const handleOfferReject = useCallback((offer: HelpOfferData) => {
-    updateMockHelpOfferStatus(offer.requestId, offer.id, 'rejected')
-    setOffersRevision((currentValue) => currentValue + 1)
-  }, [])
+        if (!matchingTask) {
+          setPageNotice({
+            kind: 'error',
+            message: 'Nu am mai gasit cererea selectata. Reincarca pagina si incearca din nou.',
+          })
+          return
+        }
+
+        if (canOpenConversationForTask(matchingTask.status)) {
+          navigate(`/chat/${request.id}`)
+          return
+        }
+
+        setPageNotice({
+          kind: 'error',
+          message:
+            'Chatul devine disponibil dupa ce un voluntar este acceptat pentru aceasta cerere.',
+        })
+        return
+      }
+
+      setOfferActionError(null)
+      setPageNotice(null)
+      setSelectedMyRequestId(request.id)
+      void queryClient.invalidateQueries({ queryKey: ['task-offers', request.id] })
+    },
+    [isGuest, liveTasks, navigate, queryClient],
+  )
+
+  const handleVolunteerOfferSubmit = useCallback(
+    async (message: string) => {
+      if (!selectedVolunteerRequest) {
+        return
+      }
+
+      setVolunteerOfferSubmitting(true)
+      setVolunteerOfferError(null)
+      setPageNotice(null)
+
+      try {
+        const response = await backend.offers.createForTask(selectedVolunteerRequest.id, {
+          message: message || undefined,
+        })
+
+        if (!response.success) {
+          setVolunteerOfferError(
+            response.message || 'Nu am putut trimite oferta. Incearca din nou.',
+          )
+          return
+        }
+
+        setSelectedVolunteerRequest(null)
+        setPageNotice({
+          kind: 'success',
+          message:
+            'Oferta ta a fost trimisa. Conversatia va deveni disponibila dupa ce requesterul o accepta.',
+        })
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['live-requests'] }),
+          queryClient.invalidateQueries({ queryKey: ['my-pending-offers'] }),
+        ])
+      } finally {
+        setVolunteerOfferSubmitting(false)
+      }
+    },
+    [queryClient, selectedVolunteerRequest],
+  )
+
+  const handleOfferReject = useCallback(
+    async (offer: HelpOfferData) => {
+      setOfferActionState({ offerId: offer.id, action: 'reject' })
+      setOfferActionError(null)
+      setPageNotice(null)
+
+      try {
+        const response = await backend.offers.updateStatus(offer.id, { status: 'REJECTED' })
+
+        if (!response.success) {
+          setOfferActionError(response.message || 'Nu am putut refuza oferta.')
+          return
+        }
+
+        await refetchSelectedOffers()
+      } finally {
+        setOfferActionState(null)
+      }
+    },
+    [refetchSelectedOffers],
+  )
 
   const handleOfferAccept = useCallback(
-    (offer: HelpOfferData) => {
+    async (offer: HelpOfferData) => {
       if (!selectedMyRequest) {
         return
       }
 
-      updateMockHelpOfferStatus(selectedMyRequest.id, offer.id, 'accepted')
-      setOffersRevision((currentValue) => currentValue + 1)
+      setOfferActionState({ offerId: offer.id, action: 'accept' })
+      setOfferActionError(null)
+      setPageNotice(null)
 
-      const conversation = ensureMockConversationForAcceptedOffer(
-        selectedMyRequest,
-        resolveChatViewerIdentity(authUser),
-        {
-          volunteerKey: offer.volunteerKey,
-          volunteerName: offer.volunteerName,
-        },
-      )
+      try {
+        const response = await backend.offers.updateStatus(offer.id, { status: 'ACCEPTED' })
 
-      navigate(`/chat/${conversation.id}`)
+        if (!response.success) {
+          setOfferActionError(response.message || 'Nu am putut accepta oferta.')
+          return
+        }
+
+        await Promise.all([
+          refetchSelectedOffers(),
+          queryClient.invalidateQueries({ queryKey: ['live-requests'] }),
+          queryClient.invalidateQueries({ queryKey: ['backend-conversations'] }),
+        ])
+
+        let isChatReady = false
+
+        for (let attempt = 0; attempt < CHAT_READY_MAX_ATTEMPTS; attempt += 1) {
+          const taskResponse = await backend.tasks.getById(selectedMyRequest.id)
+          const task = taskResponse.success && taskResponse.data
+            ? extractTaskPayload(taskResponse.data)
+            : null
+
+          if (task && canOpenConversationForTask(task.status)) {
+            isChatReady = true
+            break
+          }
+
+          await wait(CHAT_READY_POLL_DELAY_MS)
+        }
+
+        if (!isChatReady) {
+          setPageNotice({
+            kind: 'success',
+            message:
+              'Oferta a fost acceptata. Conversatia se pregateste inca putin; incearca din nou imediat.',
+          })
+        }
+
+        navigate(`/chat/${selectedMyRequest.id}`)
+      } finally {
+        setOfferActionState(null)
+      }
     },
-    [authUser, navigate, selectedMyRequest],
+    [navigate, queryClient, refetchSelectedOffers, selectedMyRequest],
   )
 
   const handleNotificationDismiss = useCallback((notificationId: string) => {
@@ -264,8 +525,8 @@ export function HomePage() {
                 Bine ai venit la Micro-Volunteer Crisis Router
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-brand-gray-text sm:text-xl">
-                Conectăm oamenii cu voluntari locali în momente de criză, într-un spațiu clar,
-                calm și ușor de folosit.
+                Conectam oamenii cu voluntari locali in momente de criza, intr-un spatiu clar,
+                calm si usor de folosit.
               </p>
 
               <div className="mt-8 flex justify-center lg:justify-start">
@@ -314,27 +575,61 @@ export function HomePage() {
             </Button>
           </div>
 
+          {pageNotice ? (
+            <div
+              className={[
+                'mt-5 rounded-2xl px-4 py-3 text-sm',
+                pageNotice.kind === 'success'
+                  ? 'border border-green-200 bg-green-50 text-green-700'
+                  : 'border border-red-200 bg-red-50 text-red-700',
+              ].join(' ')}
+            >
+              {pageNotice.message}
+            </div>
+          ) : null}
+
           <LiveRequestsSection
             isLoading={isLoadingLiveRequests}
-            myRequests={displayedMyRequestsWithOfferSummary}
+            myRequests={myRequests}
             onMyRequestOpen={handleMyRequestOpen}
-            onVolunteerRequestOpen={handleVolunteerRequestOpen}
-            volunteerRequests={displayedVolunteerRequests}
+            onVolunteerRequestOpen={isGuest ? undefined : handleVolunteerRequestOpen}
+            volunteerRequests={volunteerFeedRequests}
           />
         </div>
       </section>
 
       <HelpOffersInboxDialog
-        offers={selectedMyRequestOffers}
-        onAccept={handleOfferAccept}
+        busyAction={offerActionState?.action ?? null}
+        busyOfferId={offerActionState?.offerId ?? null}
+        errorMessage={
+          offerActionError ||
+          (selectedOffersError instanceof Error ? selectedOffersError.message : null)
+        }
+        offers={isLoadingSelectedOffers ? [] : selectedMyRequestOffers}
+        onAccept={(offer) => void handleOfferAccept(offer)}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedMyRequestId(null)
+            setOfferActionError(null)
           }
         }}
-        onReject={handleOfferReject}
+        onReject={(offer) => void handleOfferReject(offer)}
         open={selectedMyRequest !== null}
         request={selectedMyRequest}
+      />
+
+      <SubmitHelpOfferDialog
+        errorMessage={volunteerOfferError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedVolunteerRequest(null)
+            setVolunteerOfferError(null)
+          }
+        }}
+        onSubmit={(message) => void handleVolunteerOfferSubmit(message)}
+        open={selectedVolunteerRequest !== null}
+        request={selectedVolunteerRequest}
+        submitting={volunteerOfferSubmitting}
       />
     </div>
   )

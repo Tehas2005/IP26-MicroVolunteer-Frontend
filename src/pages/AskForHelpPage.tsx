@@ -6,7 +6,7 @@ import {
   decrementGuestRequestLimit,
   getGuestRequestLimit,
 } from '@/lib/guestRequestLimit'
-import { getGuestSessionId } from '@/lib/guestSession'
+import { readGuestSessionId, setGuestSessionId as persistGuestSessionId } from '@/lib/guestSession'
 import { extractCreatedTaskId, rememberCreatedTaskId } from '@/lib/liveRequests'
 import {
   buildRequestDetailsPayload,
@@ -726,13 +726,51 @@ export function AskForHelpPage() {
   }, [authIsGuest])
 
   useEffect(() => {
-    if (!isGuest) {
-      setGuestSessionId('')
-      return
+    let isMounted = true
+
+    async function syncGuestSession() {
+      if (!isGuest) {
+        if (isMounted) {
+          setGuestSessionId('')
+        }
+        return
+      }
+
+      const existingSessionId = readGuestSessionId()
+
+      if (existingSessionId) {
+        if (isMounted) {
+          setGuestSessionId(existingSessionId)
+          setRequestLimit(getGuestRequestLimit())
+        }
+        return
+      }
+
+      const response = await backend.guest.createSession()
+      const nextSessionId =
+        response.success && typeof response.data?.sessionId === 'string'
+          ? response.data.sessionId.trim()
+          : ''
+
+      if (!isMounted) {
+        return
+      }
+
+      if (!nextSessionId) {
+        setError('Nu am putut crea sesiunea de vizitator. Incearca din nou mai tarziu.')
+        return
+      }
+
+      persistGuestSessionId(nextSessionId)
+      setGuestSessionId(nextSessionId)
+      setRequestLimit(getGuestRequestLimit())
     }
 
-    setGuestSessionId(getGuestSessionId())
-    setRequestLimit(getGuestRequestLimit())
+    void syncGuestSession()
+
+    return () => {
+      isMounted = false
+    }
   }, [isGuest])
 
   useEffect(() => {
@@ -889,6 +927,11 @@ export function AskForHelpPage() {
       return
     }
 
+    if (isGuest && !guestSessionId.trim()) {
+      setError('Sesiunea de vizitator nu este pregatita inca. Reincarca pagina si incearca din nou.')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -912,20 +955,31 @@ export function AskForHelpPage() {
         }
       }
 
-      const payload: CreateTaskPayload = {
-        title: titlu.trim(),
-        description: buildTaskDescription(requestDetails, location, nextSkills, uploadedAudioUrl),
-        status: 'OPEN' as const,
-        urgency: mapUrgencyToBackend(urgency),
-        category: mapRequestTypeToCategory(requestType),
-        location: resolvedLocation,
-        anonymousMode: isAnonymous,
-        city: location.trim() || undefined,
-        guestSessionId: isGuest ? guestSessionId : undefined,
-        skillsNeeded: nextSkills,
-      }
-
-      const response = await backend.tasks.create(payload)
+      const response = isGuest
+        ? await backend.guest.createTask(guestSessionId, {
+            title: titlu.trim(),
+            description: notes.trim() || undefined,
+            audioUrl: uploadedAudioUrl || undefined,
+            urgency: mapUrgencyToBackend(urgency),
+            city: location.trim() || undefined,
+            addressText: location.trim() || undefined,
+            location: resolvedLocation,
+            skillsNeeded: nextSkills,
+            notes: notes.trim() || undefined,
+            languageNeeded: languageNeeded.trim() || undefined,
+            safetyNotes: safetyNotes.trim() || undefined,
+          })
+        : await backend.tasks.create({
+            title: titlu.trim(),
+            description: buildTaskDescription(requestDetails, location, nextSkills, uploadedAudioUrl),
+            status: 'OPEN' as const,
+            urgency: mapUrgencyToBackend(urgency),
+            category: mapRequestTypeToCategory(requestType),
+            location: resolvedLocation,
+            anonymousMode: isAnonymous,
+            city: location.trim() || undefined,
+            skillsNeeded: nextSkills,
+          } satisfies CreateTaskPayload)
 
       if (!response.success) {
         const validationErrors = getValidationErrors(response.data)

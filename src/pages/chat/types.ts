@@ -11,6 +11,20 @@ export type AudioContent = {
 
 export type MessageContent = TextContent | AudioContent;
 
+export type OutgoingTextMessageContent = {
+  type: 'text';
+  text: string;
+};
+
+export type OutgoingAudioMessageContent = {
+  type: 'audio';
+  blob: Blob;
+  previewUrl: string;
+  durationSec?: number;
+};
+
+export type OutgoingMessageContent = OutgoingTextMessageContent | OutgoingAudioMessageContent;
+
 export type Message = {
   id: string;
   content: MessageContent;

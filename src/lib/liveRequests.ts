@@ -25,6 +25,28 @@ function readEnvelopeData<T>(payload: unknown): T | null {
   return (payload as ResponseEnvelope<T>).data ?? null
 }
 
+function readNestedTasksArray(payload: unknown): TaskResponseType[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord) as TaskResponseType[]
+  }
+
+  if (!isRecord(payload)) {
+    return []
+  }
+
+  const directData = payload.data
+
+  if (Array.isArray(directData)) {
+    return directData.filter(isRecord) as TaskResponseType[]
+  }
+
+  if (directData && typeof directData === 'object') {
+    return readNestedTasksArray(directData)
+  }
+
+  return []
+}
+
 function normalizeTaskId(taskId: string | number | null | undefined): string | null {
   if (typeof taskId === 'number') {
     return String(taskId)
@@ -32,6 +54,18 @@ function normalizeTaskId(taskId: string | number | null | undefined): string | n
 
   if (typeof taskId === 'string' && taskId.trim()) {
     return taskId.trim()
+  }
+
+  return null
+}
+
+function normalizeUserId(userId: unknown): string | null {
+  if (typeof userId === 'number') {
+    return String(userId)
+  }
+
+  if (typeof userId === 'string' && userId.trim()) {
+    return userId.trim()
   }
 
   return null
@@ -100,6 +134,12 @@ function mapUrgency(urgency?: string | null): LiveRequestUrgencyLevel | null {
 }
 
 function readTaskCity(task: TaskResponseType): string | null {
+  const directCity = normalizeUserId(task.city) ?? normalizeUserId(task['addressText'])
+
+  if (directCity) {
+    return directCity
+  }
+
   const details = task.details
 
   if (!isRecord(details)) {
@@ -112,6 +152,14 @@ function readTaskCity(task: TaskResponseType): string | null {
 }
 
 function readTaskSkillsNeeded(task: TaskResponseType): string[] {
+  const directSkills = task['skillsNeeded']
+
+  if (Array.isArray(directSkills)) {
+    return directSkills
+      .filter((skill): skill is string => typeof skill === 'string' && Boolean(skill.trim()))
+      .map((skill) => skill.trim())
+  }
+
   const details = task.details
 
   if (!isRecord(details)) {
@@ -175,6 +223,12 @@ export function extractCreatedTaskId(payload: unknown): string | null {
 }
 
 export function extractTasksList(payload: unknown): TaskResponseType[] {
+  const directTasks = readNestedTasksArray(payload)
+
+  if (directTasks.length > 0) {
+    return directTasks
+  }
+
   const paginatedPayload = readEnvelopeData<unknown>(payload)
 
   if (!isRecord(paginatedPayload)) {
@@ -184,6 +238,20 @@ export function extractTasksList(payload: unknown): TaskResponseType[] {
   const tasksData = (paginatedPayload as PaginatedTasksPayload).data
 
   return Array.isArray(tasksData) ? tasksData.filter(isRecord) as TaskResponseType[] : []
+}
+
+export function extractTaskPayload(payload: unknown): TaskResponseType | null {
+  if (isRecord(payload) && 'id' in payload) {
+    return payload as TaskResponseType
+  }
+
+  const nestedPayload = readEnvelopeData<unknown>(payload)
+
+  if (isRecord(nestedPayload) && 'id' in nestedPayload) {
+    return nestedPayload as TaskResponseType
+  }
+
+  return null
 }
 
 export function isTaskOwnedByCurrentUser(
@@ -197,7 +265,13 @@ export function isTaskOwnedByCurrentUser(
     return true
   }
 
-  return Boolean(currentUserId && task.requestedByUserId && task.requestedByUserId === currentUserId)
+  const requesterUserId =
+    normalizeUserId(task.requestedByUserId) ||
+    normalizeUserId(task.userId) ||
+    normalizeUserId(task['ownerUserId']) ||
+    normalizeUserId(task['createdByUserId'])
+
+  return Boolean(currentUserId && requesterUserId && requesterUserId === currentUserId)
 }
 
 export function mapTaskToLiveRequestCard(
@@ -209,6 +283,11 @@ export function mapTaskToLiveRequestCard(
 ): LiveRequestCardData {
   const { currentUserName, isOwnedByCurrentUser } = options
   const isAnonymous = Boolean(task.anonymousMode)
+  const requesterUserId =
+    normalizeUserId(task.requestedByUserId) ||
+    normalizeUserId(task.userId) ||
+    normalizeUserId(task['ownerUserId']) ||
+    normalizeUserId(task['createdByUserId'])
 
   return {
     id: normalizeTaskId(task.id) ?? crypto.randomUUID(),
@@ -221,14 +300,33 @@ export function mapTaskToLiveRequestCard(
     name: isOwnedByCurrentUser ? currentUserName?.trim() || GENERIC_REQUESTER_NAME : GENERIC_REQUESTER_NAME,
     city: readTaskCity(task),
     skillsNeeded: readTaskSkillsNeeded(task),
-    requesterKey: task.requestedByUserId
-      ? `user:${task.requestedByUserId}`
+    requesterKey: requesterUserId
+      ? `user:${requesterUserId}`
       : `guest-request:${normalizeTaskId(task.id) ?? crypto.randomUUID()}`,
-    requesterKind: task.requestedByUserId ? 'user' : 'guest',
+    requesterKind: requesterUserId ? 'user' : 'guest',
     requesterLabel: isAnonymous
       ? ANONYMOUS_DISPLAY_NAME
       : isOwnedByCurrentUser
         ? currentUserName?.trim() || GENERIC_REQUESTER_NAME
         : GENERIC_REQUESTER_NAME,
   }
+}
+
+export function readTaskRequesterUserId(task: TaskResponseType): string {
+  return (
+    normalizeUserId(task.requestedByUserId) ||
+    normalizeUserId(task.userId) ||
+    normalizeUserId(task['ownerUserId']) ||
+    normalizeUserId(task['createdByUserId']) ||
+    ''
+  )
+}
+
+export function readTaskHelperUserId(task: TaskResponseType): string {
+  return (
+    normalizeUserId(task.helperUserId) ||
+    normalizeUserId(task['volunteerUserId']) ||
+    normalizeUserId(task['assignedUserId']) ||
+    ''
+  )
 }

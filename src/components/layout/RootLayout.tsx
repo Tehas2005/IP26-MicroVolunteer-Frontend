@@ -1,17 +1,40 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
+
+import { OfferAcceptedNotificationCenter } from '@/components/shared/OfferAcceptedNotificationCenter'
+import { BlockedAccountScreen } from '@/components/shared/BlockedAccountScreen'
+import { useAuthStore } from '@/store/authStore'
 
 import { Footer } from './Footer'
 import { Navbar } from './Navbar'
 import { ChatFab } from '@/pages/chat/ChatFab'
 
 export function RootLayout() {
+  const accountStatus = useAuthStore((state) => state.accountStatus)
+  const location = useLocation()
+  const isChatRoute = location.pathname.startsWith('/chat')
+
+  if (accountStatus === 'blocked') {
+    return <BlockedAccountScreen />
+  }
+
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div
+      className={[
+        'flex flex-col bg-white',
+        isChatRoute ? 'h-dvh overflow-hidden' : 'min-h-screen',
+      ].join(' ')}
+    >
       <Navbar />
-      <main className="flex flex-1 flex-col">
+      <main
+        className={[
+          'flex min-h-0 flex-1 flex-col',
+          isChatRoute ? 'overflow-hidden' : '',
+        ].join(' ')}
+      >
         <Outlet />
       </main>
-      <Footer />
+      {!isChatRoute ? <Footer /> : null}
+      <OfferAcceptedNotificationCenter />
       <ChatFab />
     </div>
   )

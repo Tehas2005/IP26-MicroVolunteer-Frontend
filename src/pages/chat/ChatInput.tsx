@@ -1,44 +1,52 @@
-import { useState, type KeyboardEvent } from 'react';
-import { Mic, MicOff, Send, X } from 'lucide-react';
-import type { MessageContent } from './types';
-import { useAudioRecorder } from './hooks/useAudioRecorder';
+import { useState, type KeyboardEvent } from 'react'
+import { Mic, MicOff, Send, X } from 'lucide-react'
+
+import type { OutgoingMessageContent } from './types'
+import { useAudioRecorder } from './hooks/useAudioRecorder'
 
 interface Props {
-  onSend: (content: MessageContent) => void;
-  conversationClosed?: boolean;
+  onSend: (content: OutgoingMessageContent) => void
+  conversationClosed?: boolean
+  sendingMessage?: boolean
 }
 
-export function ChatInput({ onSend, conversationClosed = false }: Props) {
-  const [text, setText] = useState('');
-  const { isRecording, audioUrl, micError, startRecording, stopRecording, clearAudio } =
-    useAudioRecorder();
+export function ChatInput({
+  onSend,
+  conversationClosed = false,
+  sendingMessage = false,
+}: Props) {
+  const [text, setText] = useState('')
+  const { isRecording, audioBlob, audioUrl, micError, startRecording, stopRecording, clearAudio } =
+    useAudioRecorder()
 
-  const canSend = !conversationClosed && (text.trim().length > 0 || audioUrl !== null);
-  const inputDisabled = conversationClosed || isRecording || audioUrl !== null;
+  const canSend =
+    !conversationClosed && !sendingMessage && (text.trim().length > 0 || audioUrl !== null)
+  const inputDisabled = conversationClosed || isRecording || audioUrl !== null || sendingMessage
 
   function handleSend() {
-    if (!canSend) return;
-    if (audioUrl) {
-      onSend({ type: 'audio', url: audioUrl });
-      clearAudio();
+    if (!canSend) return
+
+    if (audioUrl && audioBlob) {
+      onSend({ type: 'audio', blob: audioBlob, previewUrl: audioUrl })
+      clearAudio()
     } else if (text.trim()) {
-      onSend({ type: 'text', text: text.trim() });
-      setText('');
+      onSend({ type: 'text', text: text.trim() })
+      setText('')
     }
   }
 
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      handleSend()
     }
   }
 
   function handleMicClick() {
     if (isRecording) {
-      stopRecording();
+      stopRecording()
     } else {
-      void startRecording();
+      void startRecording()
     }
   }
 
@@ -46,10 +54,10 @@ export function ChatInput({ onSend, conversationClosed = false }: Props) {
     return (
       <div className="shrink-0 border-t border-brand-gray bg-white px-6 py-4 sm:px-8">
         <p className="text-center text-sm text-brand-gray-text">
-          Acest task a fost finalizat. Conversația este închisă.
+          Acest task a fost finalizat. Conversatia este inchisa.
         </p>
       </div>
-    );
+    )
   }
 
   return (
@@ -69,7 +77,7 @@ export function ChatInput({ onSend, conversationClosed = false }: Props) {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
           </span>
-          <span className="text-sm font-medium text-red-600">Înregistrare...</span>
+          <span className="text-sm font-medium text-red-600">Inregistrare...</span>
         </div>
       )}
 
@@ -79,7 +87,7 @@ export function ChatInput({ onSend, conversationClosed = false }: Props) {
           <button
             type="button"
             onClick={clearAudio}
-            aria-label="Șterge înregistrarea"
+            aria-label="Sterge inregistrarea"
             className="shrink-0 text-brand-gray-text transition-colors hover:text-brand-black"
           >
             <X className="h-4 w-4" />
@@ -91,7 +99,7 @@ export function ChatInput({ onSend, conversationClosed = false }: Props) {
         <input
           type="text"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(event) => setText(event.target.value)}
           onKeyDown={handleKeyDown}
           disabled={inputDisabled}
           placeholder="Scrie un mesaj..."
@@ -101,9 +109,10 @@ export function ChatInput({ onSend, conversationClosed = false }: Props) {
         <button
           type="button"
           onClick={handleMicClick}
-          aria-label={isRecording ? 'Oprește înregistrarea' : 'Înregistrează mesaj vocal'}
+          disabled={sendingMessage}
+          aria-label={isRecording ? 'Opreste inregistrarea' : 'Inregistreaza mesaj vocal'}
           className={[
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors',
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50',
             isRecording
               ? 'bg-red-500 text-white hover:bg-red-600'
               : 'border border-brand-gray bg-brand-cream text-brand-gray-text hover:border-brand-purple hover:bg-brand-purple/5 hover:text-brand-purple',
@@ -123,5 +132,5 @@ export function ChatInput({ onSend, conversationClosed = false }: Props) {
         </button>
       </div>
     </div>
-  );
+  )
 }

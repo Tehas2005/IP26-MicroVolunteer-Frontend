@@ -18,7 +18,7 @@ interface Props {
 
 export function ConversationList({ conversations, selectedConversationId, onSelect }: Props) {
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 border-b border-brand-gray/60 px-6 py-4">
         <h2 className="text-base font-semibold text-brand-black">Conversații</h2>
       </div>
@@ -29,7 +29,7 @@ export function ConversationList({ conversations, selectedConversationId, onSele
           <p className="text-sm text-brand-gray-text">Nicio conversație încă.</p>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 divide-y divide-brand-gray/40 overflow-y-auto">
+        <div className="min-h-0 flex-1 divide-y divide-brand-gray/40 overflow-y-auto overscroll-contain">
           {conversations.map((conv) => (
             <button
               key={conv.id}

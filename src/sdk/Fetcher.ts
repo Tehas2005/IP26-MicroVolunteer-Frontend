@@ -112,10 +112,11 @@ export class Fetcher {
 
       const text = await response.text()
       const parsed = text ? this.tryParseJSON(text) : null
+      const data = this.extractData<T>(parsed)
       const message = this.extractMessage(parsed)
 
       const result: ApiResponse<T> = {
-        data: response.ok ? (parsed as T | null) : null,
+        data: response.ok ? data : null,
         message,
         success: response.ok,
         status: response.status,
@@ -215,14 +216,52 @@ export class Fetcher {
     }
   }
 
+  private extractData<T>(payload: unknown): T | null {
+    if (this.isApiEnvelope(payload)) {
+      return (payload.data as T | null) ?? null
+    }
+
+    return (payload as T | null) ?? null
+  }
+
   private extractMessage(payload: unknown): string | null {
     if (!payload) return null
     if (typeof payload === 'string') return payload
     if (typeof payload === 'object' && payload !== null) {
-      const message = 'message' in payload ? payload.message : null
-      return typeof message === 'string' ? message : null
+      const candidate = payload as Record<string, unknown>
+
+      if (typeof candidate.message === 'string') {
+        return candidate.message
+      }
+
+      const nestedError = candidate.error
+
+      if (typeof nestedError === 'string') {
+        return nestedError
+      }
+
+      if (nestedError && typeof nestedError === 'object') {
+        const errorMessage = (nestedError as Record<string, unknown>).message
+        return typeof errorMessage === 'string' ? errorMessage : null
+      }
     }
     return null
+  }
+
+  private isApiEnvelope(
+    payload: unknown,
+  ): payload is { data?: unknown; message?: unknown; statusCode?: unknown; app?: unknown } {
+    if (!payload || typeof payload !== 'object') {
+      return false
+    }
+
+    const candidate = payload as Record<string, unknown>
+
+    return (
+      'data' in candidate &&
+      'statusCode' in candidate &&
+      'app' in candidate
+    )
   }
 
   private appendQueryParams(url: string, query?: FetcherRequestOptionsType['query']) {

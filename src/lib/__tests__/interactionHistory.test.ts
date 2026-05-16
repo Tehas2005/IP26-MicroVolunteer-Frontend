@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { formatInteractionDate, getInteractionSummary, getMockInteractionHistory } from "@/lib/interactionHistory"
+import {
+  formatInteractionDate,
+  getInteractionSummary,
+  mapInteractionToHistoryEntry,
+} from "@/lib/interactionHistory"
 
 describe("interactionHistory helpers", () => {
   it("foloseste fallback cand rezumatul lipseste", () => {
@@ -10,21 +14,21 @@ describe("interactionHistory helpers", () => {
   })
 
   it("foloseste fallback cand data lipseste sau este invalida", () => {
-    expect(formatInteractionDate("")).toBe("Data indisponibilă")
-    expect(formatInteractionDate("not-a-date")).toBe("Data indisponibilă")
-    expect(formatInteractionDate(null)).toBe("Data indisponibilă")
+    expect(formatInteractionDate("")).toBe("Data indisponibila")
+    expect(formatInteractionDate("not-a-date")).toBe("Data indisponibila")
+    expect(formatInteractionDate(null)).toBe("Data indisponibila")
   })
 
-  it("intoarce intrari mock doar pentru utilizator autentificat", () => {
-    expect(getMockInteractionHistory()).toEqual([])
-
-    const history = getMockInteractionHistory({
-      id: "user-1",
-      email: "test@example.com",
-      name: "Ion Socol",
+  it("mapeaza raspunsul backend la intrare de istoric", () => {
+    const history = mapInteractionToHistoryEntry({
+      id: "interaction-1",
+      createdAt: "2026-05-04T14:30:00.000Z",
+      taskTitle: "Formular local",
+      stars: 5,
     })
 
-    expect(history).toHaveLength(3)
-    expect(history[0]?.id).toBe("user-1-history-1")
+    expect(history.id).toBe("interaction-1")
+    expect(history.rating).toBe(5)
+    expect(history.summary).toContain("Formular local")
   })
 })
