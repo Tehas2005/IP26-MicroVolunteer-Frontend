@@ -99,6 +99,36 @@ function mapUrgency(urgency?: string | null): LiveRequestUrgencyLevel | null {
   return null
 }
 
+function readTaskCity(task: TaskResponseType): string | null {
+  const details = task.details
+
+  if (!isRecord(details)) {
+    return null
+  }
+
+  const city = details.city
+
+  return typeof city === 'string' && city.trim() ? city.trim() : null
+}
+
+function readTaskSkillsNeeded(task: TaskResponseType): string[] {
+  const details = task.details
+
+  if (!isRecord(details)) {
+    return []
+  }
+
+  const skillsNeeded = details.skillsNeeded
+
+  if (!Array.isArray(skillsNeeded)) {
+    return []
+  }
+
+  return skillsNeeded
+    .filter((skill): skill is string => typeof skill === 'string' && Boolean(skill.trim()))
+    .map((skill) => skill.trim())
+}
+
 export function readCreatedTaskIds(userId?: string | null): string[] {
   if (!userId) {
     return []
@@ -127,6 +157,14 @@ export function rememberCreatedTaskId(userId: string, taskId: string | number | 
 }
 
 export function extractCreatedTaskId(payload: unknown): string | null {
+  if (isRecord(payload)) {
+    const directTaskId = normalizeTaskId(payload.id as string | number | null | undefined)
+
+    if (directTaskId) {
+      return directTaskId
+    }
+  }
+
   const task = readEnvelopeData<unknown>(payload)
 
   if (!isRecord(task)) {
@@ -175,11 +213,14 @@ export function mapTaskToLiveRequestCard(
   return {
     id: normalizeTaskId(task.id) ?? crypto.randomUUID(),
     title: task.title,
+    description: task.description,
     category: mapCategory(task.category),
     urgencyLevel: mapUrgency(task.urgency),
     anonymousMode: isAnonymous,
     username: isAnonymous ? ANONYMOUS_DISPLAY_NAME : null,
     name: isOwnedByCurrentUser ? currentUserName?.trim() || GENERIC_REQUESTER_NAME : GENERIC_REQUESTER_NAME,
+    city: readTaskCity(task),
+    skillsNeeded: readTaskSkillsNeeded(task),
     requesterKey: task.requestedByUserId
       ? `user:${task.requestedByUserId}`
       : `guest-request:${normalizeTaskId(task.id) ?? crypto.randomUUID()}`,
