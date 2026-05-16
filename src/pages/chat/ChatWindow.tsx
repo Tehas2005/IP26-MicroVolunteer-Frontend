@@ -6,6 +6,7 @@ import { backend } from '@/lib/backend'
 import { backendWebSocketOrigin } from '@/lib/apiConfig'
 import { readGuestSessionId } from '@/lib/guestSession'
 import { extractTaskPayload } from '@/lib/liveRequests'
+import { readUploadedAssetUrl } from '@/lib/uploads'
 import type { TaskResponseType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 
@@ -355,8 +356,7 @@ export function ChatWindow({ conversation }: Props) {
           return
         }
 
-        const audioUrl =
-          typeof uploadResponse.data?.data === 'string' ? uploadResponse.data.data.trim() : ''
+        const audioUrl = readUploadedAssetUrl(uploadResponse.data)
 
         if (!audioUrl) {
           setActionError('Backendul nu a returnat URL-ul mesajului vocal incarcat.')

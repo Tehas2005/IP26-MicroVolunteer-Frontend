@@ -13,6 +13,7 @@ import {
   hasRequestDetailsInput,
   type RequestDetailsPayload,
 } from '@/lib/requestDetails'
+import { readUploadedAssetUrl } from '@/lib/uploads'
 import {
   ROMANIA_CITY_COORDINATES,
   ROMANIA_CITY_NAMES,
@@ -86,15 +87,6 @@ function buildTaskDescription(
   ]
 
   return contentParts.filter(Boolean).join('\n\n')
-}
-
-function getUploadedAssetUrl(payload: unknown): string | null {
-  if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    return null
-  }
-
-  const data = payload.data
-  return typeof data === 'string' && data.trim() ? data : null
 }
 
 function getValidationErrors(data: unknown): ValidationErrorItem[] {
@@ -947,7 +939,7 @@ export function AskForHelpPage() {
           return
         }
 
-        uploadedAudioUrl = getUploadedAssetUrl(uploadResponse.data)
+        uploadedAudioUrl = readUploadedAssetUrl(uploadResponse.data) || null
 
         if (!uploadedAudioUrl) {
           setError('Backendul nu a returnat URL-ul mesajului vocal incarcat.')
