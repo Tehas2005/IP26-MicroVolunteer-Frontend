@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { TaskResponseType } from '@/sdk/types'
 
 import {
+  extractTaskResponseData,
   UNSPECIFIED_REQUEST_DETAIL,
   readRequestDetails,
   readTaskAudioUrl,
@@ -11,6 +12,20 @@ import {
 } from '../requestDetails'
 
 describe('requestDetails helpers', () => {
+  it('extracts task payloads from response envelopes', () => {
+    expect(
+      extractTaskResponseData({
+        data: {
+          id: '12',
+          title: 'Ridicare medicamente',
+        },
+      }),
+    ).toMatchObject({
+      id: '12',
+      title: 'Ridicare medicamente',
+    })
+  })
+
   it('returns fallback text for missing request details fields', () => {
     const task = { details: {} } as TaskResponseType
 

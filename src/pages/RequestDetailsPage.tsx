@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
+  extractTaskResponseData,
   readRequestDetails,
   readTaskAudioUrl,
   readTaskCategoryLabel,
@@ -83,7 +84,13 @@ export function RequestDetailsPage() {
         )
       }
 
-      return response.data
+      const taskData = extractTaskResponseData(response.data)
+
+      if (!taskData) {
+        throw new Error('Detaliile cererii au venit intr-un format neasteptat.')
+      }
+
+      return taskData
     },
   })
 

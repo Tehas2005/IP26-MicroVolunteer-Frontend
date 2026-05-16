@@ -30,6 +30,20 @@ function readTrimmedString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+export function extractTaskResponseData(payload: unknown): TaskResponseType | null {
+  if (isRecord(payload) && ('id' in payload || 'title' in payload || 'details' in payload)) {
+    return payload as TaskResponseType
+  }
+
+  if (!isRecord(payload) || !('data' in payload)) {
+    return null
+  }
+
+  const nestedData = payload.data
+
+  return isRecord(nestedData) ? (nestedData as TaskResponseType) : null
+}
+
 export function buildRequestDetailsPayload(
   notes?: string | null,
   languageNeeded?: string | null,
