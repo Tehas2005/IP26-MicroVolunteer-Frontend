@@ -379,6 +379,14 @@ export function HomePage() {
       <AcceptVolunteerModal
         averageRating={offerDecisionState?.offer.averageRating ?? 0}
         isOpen={offerDecisionState !== null}
+        onClose={() => {
+          if (!offerDecisionState) {
+            return
+          }
+
+          setSelectedMyRequestId(offerDecisionState.request.id)
+          setOfferDecisionState(null)
+        }}
         onAccept={handleOfferDecisionAccept}
         onDecline={handleOfferDecisionReject}
         volunteerName={offerDecisionState?.offer.volunteerName ?? ''}

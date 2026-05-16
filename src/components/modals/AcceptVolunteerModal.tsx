@@ -1,6 +1,6 @@
 import { Loader2, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { Dialog as DialogPrimitive } from 'radix-ui'
 
 type PendingAction = 'accept' | 'decline' | null
 
@@ -8,6 +8,7 @@ export interface AcceptVolunteerModalProps {
   volunteerName: string
   averageRating: number
   isOpen: boolean
+  onClose: () => void
   onAccept: () => Promise<void> | void
   onDecline: () => Promise<void> | void
 }
@@ -16,6 +17,7 @@ export function AcceptVolunteerModal({
   volunteerName,
   averageRating,
   isOpen,
+  onClose,
   onAccept,
   onDecline,
 }: AcceptVolunteerModalProps) {
@@ -30,7 +32,9 @@ export function AcceptVolunteerModal({
   }
 
   const displayName = volunteerName.trim() || 'Voluntar anonim'
-  const normalizedRating = Number.isFinite(averageRating) ? averageRating : 0
+  const normalizedRating = Number.isFinite(averageRating)
+    ? Math.min(5, Math.max(0, averageRating))
+    : 0
   const isLoading = pendingAction !== null
 
   async function handleAction(action: Exclude<PendingAction, null>) {
@@ -48,31 +52,42 @@ export function AcceptVolunteerModal({
     }
   }
 
-  const modalContent = (
-    <div
-      className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm"
-      data-testid="accept-volunteer-overlay"
-    >
-      <div
-        aria-labelledby="accept-volunteer-title"
-        aria-modal="true"
-        className="w-full max-w-md rounded-[32px] bg-white p-6 shadow-2xl sm:p-8"
-        role="dialog"
-      >
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && !isLoading) {
+      onClose()
+    }
+  }
+
+  return (
+    <DialogPrimitive.Root open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0"
+          data-testid="accept-volunteer-overlay"
+        />
+        <DialogPrimitive.Content
+          aria-describedby="accept-volunteer-description"
+          aria-labelledby="accept-volunteer-title"
+          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[32px] bg-white p-6 shadow-2xl outline-none sm:p-8"
+          data-testid="accept-volunteer-dialog"
+        >
         <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-purple">
             Interventie disponibila
           </p>
-          <h2
+          <DialogPrimitive.Title
             id="accept-volunteer-title"
             className="mt-3 text-2xl font-bold tracking-tight text-brand-black sm:text-3xl"
           >
             Un voluntar vrea sa te ajute!
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-brand-gray-text sm:text-base">
+          </DialogPrimitive.Title>
+          <DialogPrimitive.Description
+            id="accept-volunteer-description"
+            className="mt-3 text-sm leading-6 text-brand-gray-text sm:text-base"
+          >
             <span className="font-semibold text-brand-black">{displayName}</span> este pregatit
             sa intervina pentru cererea ta.
-          </p>
+          </DialogPrimitive.Description>
         </div>
 
         <div
@@ -126,15 +141,10 @@ export function AcceptVolunteerModal({
             )}
           </button>
         </div>
-      </div>
-    </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   )
-
-  if (typeof document === 'undefined') {
-    return modalContent
-  }
-
-  return createPortal(modalContent, document.body)
 }
 
 export default AcceptVolunteerModal

@@ -127,11 +127,11 @@ describe('HomePage help offers flow', () => {
     const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
     await user.click(acceptButtons[1])
 
-    const overlay = await screen.findByTestId('accept-volunteer-overlay')
+    const dialog = await screen.findByTestId('accept-volunteer-dialog')
 
-    expect(within(overlay).getByText('Un voluntar vrea sa te ajute!')).toBeInTheDocument()
-    expect(within(overlay).getByText('Radu Pavel')).toBeInTheDocument()
-    expect(within(overlay).getByText('4.7')).toBeInTheDocument()
+    expect(within(dialog).getByText('Un voluntar vrea sa te ajute!')).toBeInTheDocument()
+    expect(within(dialog).getByText('Radu Pavel')).toBeInTheDocument()
+    expect(within(dialog).getByText('4.7')).toBeInTheDocument()
     expect(navigateMock).not.toHaveBeenCalled()
   })
 
@@ -145,8 +145,8 @@ describe('HomePage help offers flow', () => {
     const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
     await user.click(acceptButtons[1])
 
-    const overlay = await screen.findByTestId('accept-volunteer-overlay')
-    await user.click(within(overlay).getByRole('button', { name: 'Accepta ajutorul' }))
+    const dialog = await screen.findByTestId('accept-volunteer-dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Accepta ajutorul' }))
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith(expect.stringMatching(/^\/chat\//))
@@ -175,8 +175,8 @@ describe('HomePage help offers flow', () => {
     const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
     await user.click(acceptButtons[0])
 
-    const overlay = await screen.findByTestId('accept-volunteer-overlay')
-    await user.click(within(overlay).getByRole('button', { name: 'Refuza' }))
+    const dialog = await screen.findByTestId('accept-volunteer-dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Refuza' }))
 
     expect(screen.queryByText('Un voluntar vrea sa te ajute!')).not.toBeInTheDocument()
     expect(await screen.findByText('Oferte primite')).toBeInTheDocument()
@@ -215,8 +215,8 @@ describe('HomePage help offers flow', () => {
 
     const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
     await user.click(acceptButtons[0])
-    await user.click(
-      within(await screen.findByTestId('accept-volunteer-overlay')).getByRole('button', {
+      await user.click(
+      within(await screen.findByTestId('accept-volunteer-dialog')).getByRole('button', {
         name: 'Accepta ajutorul',
       }),
     )

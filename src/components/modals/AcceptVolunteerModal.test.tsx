@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import { AcceptVolunteerModal } from './AcceptVolunteerModal'
+import { AcceptVolunteerModal, type AcceptVolunteerModalProps } from './AcceptVolunteerModal'
 
 function deferred() {
   let resolve!: () => void
@@ -16,30 +16,28 @@ function deferred() {
 }
 
 describe('AcceptVolunteerModal', () => {
+  function renderModal(overrides: Partial<AcceptVolunteerModalProps> = {}) {
+    const props: AcceptVolunteerModalProps = {
+      averageRating: 4.8,
+      isOpen: true,
+      onAccept: () => undefined,
+      onClose: () => undefined,
+      onDecline: () => undefined,
+      volunteerName: 'Ana',
+      ...overrides,
+    }
+
+    return render(<AcceptVolunteerModal {...props} />)
+  }
+
   it('does not render when closed', () => {
-    render(
-      <AcceptVolunteerModal
-        averageRating={4.8}
-        isOpen={false}
-        onAccept={() => undefined}
-        onDecline={() => undefined}
-        volunteerName="Ana"
-      />,
-    )
+    renderModal({ isOpen: false })
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('renders volunteer score and overlay', () => {
-    render(
-      <AcceptVolunteerModal
-        averageRating={4.8}
-        isOpen
-        onAccept={() => undefined}
-        onDecline={() => undefined}
-        volunteerName="Ana"
-      />,
-    )
+    renderModal()
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('Un voluntar vrea sa te ajute!')).toBeInTheDocument()
@@ -49,15 +47,7 @@ describe('AcceptVolunteerModal', () => {
   })
 
   it('falls back to anonymous volunteer name when name is empty', () => {
-    render(
-      <AcceptVolunteerModal
-        averageRating={3.2}
-        isOpen
-        onAccept={() => undefined}
-        onDecline={() => undefined}
-        volunteerName="   "
-      />,
-    )
+    renderModal({ averageRating: 3.2, volunteerName: '   ' })
 
     expect(screen.getByText('Voluntar anonim')).toBeInTheDocument()
   })
@@ -68,15 +58,7 @@ describe('AcceptVolunteerModal', () => {
     const onDecline = vi.fn()
     const user = userEvent.setup()
 
-    render(
-      <AcceptVolunteerModal
-        averageRating={4.4}
-        isOpen
-        onAccept={onAccept}
-        onDecline={onDecline}
-        volunteerName="Mara"
-      />,
-    )
+    renderModal({ averageRating: 4.4, onAccept, onDecline, volunteerName: 'Mara' })
 
     await user.click(screen.getByRole('button', { name: 'Accepta ajutorul' }))
 
@@ -98,15 +80,7 @@ describe('AcceptVolunteerModal', () => {
     const onDecline = vi.fn(() => action.promise)
     const user = userEvent.setup()
 
-    render(
-      <AcceptVolunteerModal
-        averageRating={4.1}
-        isOpen
-        onAccept={onAccept}
-        onDecline={onDecline}
-        volunteerName="Paul"
-      />,
-    )
+    renderModal({ averageRating: 4.1, onAccept, onDecline, volunteerName: 'Paul' })
 
     await user.click(screen.getByRole('button', { name: 'Refuza' }))
 
@@ -128,15 +102,7 @@ describe('AcceptVolunteerModal', () => {
     const onAccept = vi.fn(() => action.promise)
     const onDecline = vi.fn()
 
-    const { rerender } = render(
-      <AcceptVolunteerModal
-        averageRating={4.6}
-        isOpen
-        onAccept={onAccept}
-        onDecline={onDecline}
-        volunteerName="Elena"
-      />,
-    )
+    const { rerender } = renderModal({ averageRating: 4.6, onAccept, onDecline, volunteerName: 'Elena' })
 
     await user.click(screen.getByRole('button', { name: 'Accepta ajutorul' }))
     expect(screen.getByRole('button', { name: /Se confirma/i })).toBeDisabled()
@@ -146,6 +112,7 @@ describe('AcceptVolunteerModal', () => {
         averageRating={4.6}
         isOpen={false}
         onAccept={onAccept}
+        onClose={() => undefined}
         onDecline={onDecline}
         volunteerName="Elena"
       />,
@@ -156,6 +123,7 @@ describe('AcceptVolunteerModal', () => {
         averageRating={4.6}
         isOpen
         onAccept={onAccept}
+        onClose={() => undefined}
         onDecline={onDecline}
         volunteerName="Elena"
       />,
@@ -173,15 +141,7 @@ describe('AcceptVolunteerModal', () => {
     const onAccept = vi.fn(() => action.promise)
     const onDecline = vi.fn()
 
-    const { rerender } = render(
-      <AcceptVolunteerModal
-        averageRating={4.2}
-        isOpen
-        onAccept={onAccept}
-        onDecline={onDecline}
-        volunteerName="Ioana"
-      />,
-    )
+    const { rerender } = renderModal({ averageRating: 4.2, onAccept, onDecline, volunteerName: 'Ioana' })
 
     await user.click(screen.getByRole('button', { name: 'Accepta ajutorul' }))
     expect(screen.getByRole('button', { name: /Se confirma/i })).toBeDisabled()
@@ -191,6 +151,7 @@ describe('AcceptVolunteerModal', () => {
         averageRating={5}
         isOpen
         onAccept={onAccept}
+        onClose={() => undefined}
         onDecline={onDecline}
         volunteerName="Matei"
       />,
@@ -201,5 +162,35 @@ describe('AcceptVolunteerModal', () => {
     expect(screen.getByRole('button', { name: 'Refuza' })).toBeEnabled()
 
     action.resolve()
+  })
+
+  it('clamps invalid ratings into the 0 to 5 range', () => {
+    const { rerender } = renderModal({ averageRating: 7.4 })
+
+    expect(screen.getByText('5.0')).toBeInTheDocument()
+
+    rerender(
+      <AcceptVolunteerModal
+        averageRating={-2}
+        isOpen
+        onAccept={() => undefined}
+        onClose={() => undefined}
+        onDecline={() => undefined}
+        volunteerName="Ana"
+      />,
+    )
+
+    expect(screen.getByText('0.0')).toBeInTheDocument()
+  })
+
+  it('closes on Escape when no action is pending', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+
+    renderModal({ onClose })
+
+    await user.keyboard('{Escape}')
+
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
