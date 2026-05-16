@@ -11,6 +11,7 @@ import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
+import { getGuestSessionId } from '@/lib/guestSession'
 import {
   extractTasksList,
   isTaskOwnedByCurrentUser,
@@ -52,6 +53,7 @@ export function HomePage() {
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
   const viewerIdentity = useMemo(() => resolveChatViewerIdentity(authUser), [authUser])
+  const guestSessionId = useMemo(() => (isGuest ? getGuestSessionId() : null), [isGuest])
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const [cancelErrorMessage, setCancelErrorMessage] = useState<string | null>(null)
   const [cancelledRequestIds, setCancelledRequestIds] = useState<string[]>([])
@@ -65,16 +67,20 @@ export function HomePage() {
   const hasInitializedVolunteerFeedRef = useRef(false)
 
   const { data: liveTasksData, isLoading: isLoadingLiveRequests, refetch: refetchLiveRequests } = useQuery({
-    queryKey: ['live-requests', authUser?.id],
-    enabled: sessionStatus === 'ready' && !isGuest,
+    queryKey: ['live-requests', authUser?.id, guestSessionId],
+    enabled: sessionStatus === 'ready',
     refetchInterval: 15000,
     refetchIntervalInBackground: true,
     queryFn: async () => {
-      const response = await backend.tasks.list({
+      const requestFilters = {
         page: 1,
         pageSize: 50,
         order: 'DESC',
-      })
+      }
+      const response =
+        isGuest && guestSessionId
+          ? await backend.tasks.listGuest(guestSessionId, requestFilters)
+          : await backend.tasks.list(requestFilters)
 
       if (!response.success) {
         throw new Error(response.message || 'Nu am putut încărca cererile live.')
@@ -86,7 +92,26 @@ export function HomePage() {
   const liveTasks = liveTasksData ?? EMPTY_TASKS
 
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
-    if (isGuest || !authUser) {
+    if (isGuest) {
+      return {
+        myRequests: liveTasks.map((task) => {
+          const request = mapTaskToLiveRequestCard(task, {
+            currentUserName: 'Solicitant',
+            isOwnedByCurrentUser: true,
+          })
+
+          return {
+            ...request,
+            requesterKey: viewerIdentity.key,
+            requesterKind: 'guest' as const,
+            requesterLabel: viewerIdentity.displayName,
+          }
+        }),
+        volunteerFeedRequests: EMPTY_REQUESTS,
+      }
+    }
+
+    if (!authUser) {
       return {
         myRequests: EMPTY_REQUESTS,
         volunteerFeedRequests: EMPTY_REQUESTS,
@@ -122,7 +147,7 @@ export function HomePage() {
         }),
       ),
     }
-  }, [authUser, isGuest, liveTasks])
+  }, [authUser, isGuest, liveTasks, viewerIdentity])
 
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
@@ -336,7 +361,10 @@ export function HomePage() {
       if (shouldUseMockLiveRequests) {
         cancelMockLiveRequest(requestPendingCancellation.id)
       } else {
-        const response = await backend.tasks.delete(requestPendingCancellation.id)
+        const response =
+          isGuest && guestSessionId
+            ? await backend.tasks.deleteGuest(requestPendingCancellation.id, guestSessionId)
+            : await backend.tasks.delete(requestPendingCancellation.id)
 
         if (!response.success) {
           setCancelErrorMessage(response.message || 'Nu am putut anula cererea selectată.')
@@ -373,7 +401,14 @@ export function HomePage() {
     } finally {
       setIsCancellingRequest(false)
     }
-  }, [refetchLiveRequests, requestPendingCancellation, shouldUseMockLiveRequests, viewerIdentity])
+  }, [
+    guestSessionId,
+    isGuest,
+    refetchLiveRequests,
+    requestPendingCancellation,
+    shouldUseMockLiveRequests,
+    viewerIdentity,
+  ])
 
   return (
     <div className="bg-brand-cream">

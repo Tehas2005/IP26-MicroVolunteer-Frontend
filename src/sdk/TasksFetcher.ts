@@ -22,6 +22,18 @@ export class TasksFetcher {
     return this.fetcher.get<PaginatedTaskListType>('/api/tasks', { query: filters })
   }
 
+  public listGuest(
+    guestSessionId: string,
+    filters?: TaskFiltersType,
+  ): Promise<ApiResponse<PaginatedTaskListType>> {
+    return this.fetcher.get<PaginatedTaskListType>('/api/guest/tasks', {
+      headers: {
+        'X-Guest-Session': guestSessionId,
+      },
+      query: filters,
+    })
+  }
+
   public getById(id: string): Promise<ApiResponse<TaskResponseType>> {
     return this.fetcher.get<TaskResponseType>(`/api/tasks/${id}`)
   }
@@ -46,5 +58,16 @@ export class TasksFetcher {
 
   public delete(id: string): Promise<ApiResponse<DeleteTaskResponseType>> {
     return this.fetcher.delete<DeleteTaskResponseType>(`/api/tasks/${id}`)
+  }
+
+  public deleteGuest(
+    id: string,
+    guestSessionId: string,
+  ): Promise<ApiResponse<DeleteTaskResponseType>> {
+    return this.fetcher.delete<DeleteTaskResponseType>(`/api/guest/tasks/${id}`, undefined, {
+      headers: {
+        'X-Guest-Session': guestSessionId,
+      },
+    })
   }
 }

@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const navigateMock = vi.fn()
 const deleteTaskMock = vi.fn()
+const deleteGuestTaskMock = vi.fn()
+const listGuestTasksMock = vi.fn()
 const listTasksMock = vi.fn()
 
 vi.mock('react-router-dom', async () => {
@@ -21,7 +23,9 @@ vi.mock('@/lib/backend', () => ({
   backend: {
     tasks: {
       delete: (...args: unknown[]) => deleteTaskMock(...args),
+      deleteGuest: (...args: unknown[]) => deleteGuestTaskMock(...args),
       list: (...args: unknown[]) => listTasksMock(...args),
+      listGuest: (...args: unknown[]) => listGuestTasksMock(...args),
     },
   },
 }))
@@ -57,7 +61,16 @@ describe('HomePage cancel request flow', () => {
     localStorage.clear()
     navigateMock.mockReset()
     deleteTaskMock.mockReset()
+    deleteGuestTaskMock.mockReset()
+    listGuestTasksMock.mockReset()
+    listTasksMock.mockReset()
     listTasksMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: [],
+      },
+    })
+    listGuestTasksMock.mockResolvedValue({
       success: true,
       data: {
         data: [],
@@ -205,6 +218,54 @@ describe('HomePage cancel request flow', () => {
     await waitFor(() => {
       expect(deleteTaskMock).toHaveBeenCalledWith('42')
       expect(screen.queryByRole('button', { name: 'Cerere reală de backend' })).not.toBeInTheDocument()
+    })
+
+    expect(await screen.findByText('Cererea ta a fost anulată.')).toBeInTheDocument()
+  })
+
+  it('foloseste endpoint-ul guest cand visitorul anuleaza o cerere reala', async () => {
+    const user = userEvent.setup()
+
+    useAuthStore.setState({
+      user: null,
+      isGuest: true,
+      sessionStatus: 'ready',
+    })
+
+    listGuestTasksMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 77,
+              title: 'Cerere guest reală',
+              description: 'Cererea guest venită din backend',
+              category: 'MESSAGES_ONLY',
+              urgency: 'HIGH',
+              status: 'OPEN',
+              requestedByUserId: null,
+            },
+          ],
+        },
+      },
+    })
+    deleteGuestTaskMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        success: true,
+      },
+    })
+
+    renderHomePage()
+
+    await user.click(await screen.findByRole('button', { name: 'Anulează Cererea' }))
+    await user.click(await screen.findByRole('button', { name: 'Da, anulează' }))
+
+    await waitFor(() => {
+      expect(deleteGuestTaskMock).toHaveBeenCalledWith('77', expect.any(String))
+      expect(deleteTaskMock).not.toHaveBeenCalled()
+      expect(screen.queryByRole('button', { name: 'Cerere guest reală' })).not.toBeInTheDocument()
     })
 
     expect(await screen.findByText('Cererea ta a fost anulată.')).toBeInTheDocument()
