@@ -2,59 +2,26 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { SkillTagSelector } from '@/components/shared/SkillTagSelector'
 import { backend } from '@/lib/backend'
+import {
+  decrementGuestRequestLimit,
+  getGuestRequestLimit,
+} from '@/lib/guestRequestLimit'
+import { getGuestSessionId } from '@/lib/guestSession'
 import { extractCreatedTaskId, rememberCreatedTaskId } from '@/lib/liveRequests'
 import {
+  buildRequestDetailsPayload,
+  hasRequestDetailsInput,
+  type RequestDetailsPayload,
+} from '@/lib/requestDetails'
+import {
   ROMANIA_CITY_COORDINATES,
+  ROMANIA_CITY_NAMES,
   ROMANIA_DEFAULT_COORDINATES,
   type TaskLocationPayload,
 } from '@/lib/romania-city-coordinates'
 import { COMMON_SKILL_SUGGESTIONS } from '@/lib/skillSuggestions'
 import { useAuthStore } from '@/store/authStore'
 import type { TaskSubmissionPayloadType, TaskUrgencyType } from '@/sdk/types'
-
-const romaniaCities = [
-  'Alba Iulia',
-  'Alexandria',
-  'Arad',
-  'Bacau',
-  'Baia Mare',
-  'Bistrita',
-  'Botosani',
-  'Brasov',
-  'Braila',
-  'Bucuresti',
-  'Buzau',
-  'Calarasi',
-  'Cluj-Napoca',
-  'Constanta',
-  'Craiova',
-  'Deva',
-  'Drobeta-Turnu Severin',
-  'Focsani',
-  'Galati',
-  'Giurgiu',
-  'Iasi',
-  'Miercurea-Ciuc',
-  'Oradea',
-  'Piatra-Neamt',
-  'Pitesti',
-  'Ploiesti',
-  'Ramnicu Valcea',
-  'Resita',
-  'Satu Mare',
-  'Sfantu Gheorghe',
-  'Sibiu',
-  'Slatina',
-  'Slobozia',
-  'Suceava',
-  'Targu Jiu',
-  'Targu Mures',
-  'Targoviste',
-  'Timisoara',
-  'Tulcea',
-  'Vaslui',
-  'Zalau',
-]
 
 type TaskCategory = 'MESSAGES_ONLY' | 'FACE_TO_FACE'
 
@@ -74,6 +41,7 @@ type CreateTaskPayload = TaskSubmissionPayloadType & {
   anonymousMode: boolean
   location: TaskLocationPayload
   city?: string
+  guestSessionId?: string
   skillsNeeded?: string[]
 }
 
@@ -103,13 +71,15 @@ function resolveTaskLocation(location: string): TaskLocationPayload | null {
 }
 
 function buildTaskDescription(
-  details: string,
+  requestDetails: RequestDetailsPayload,
   location: string,
   skills: string[],
   audioMessageUrl?: string | null,
 ) {
   const contentParts = [
-    details.trim() || 'Cerere trimisa din formularul Cere Ajutor.',
+    requestDetails.notes || 'Cerere trimisa din formularul Cere Ajutor.',
+    requestDetails.languageNeeded ? `Limba necesara: ${requestDetails.languageNeeded}` : null,
+    requestDetails.safetyNotes ? `Siguranta: ${requestDetails.safetyNotes}` : null,
     location.trim() ? `Locatie declarata: ${location.trim()}` : null,
     skills.length > 0 ? `Skills needed: ${skills.join(', ')}` : null,
     audioMessageUrl ? `Mesaj vocal: ${audioMessageUrl}` : null,
@@ -145,6 +115,14 @@ function getValidationErrors(data: unknown): ValidationErrorItem[] {
       typeof error.field === 'string' &&
       typeof error.message === 'string',
   )
+}
+
+function getTaskSubmitErrorMessage(response: { isUnauthorized: boolean; message: string | null }) {
+  if (response.isUnauthorized) {
+    return 'Nu am putut trimite cererea ca vizitator momentan. Te rugam sa te autentifici sau incearca din nou mai tarziu.'
+  }
+
+  return response.message || 'Nu am putut trimite cererea catre backend. Incearca din nou.'
 }
 
 const askForHelpStyles = `
@@ -322,7 +300,8 @@ const askForHelpStyles = `
     color: #111827;
     font-size: 14px;
     font-weight: 700;
-    padding: 0 16px;
+    min-height: 48px;
+    padding: 12px 18px;
     cursor: pointer;
     transition: all 0.2s ease;
   }
@@ -343,6 +322,43 @@ const askForHelpStyles = `
     margin-top: 8px;
     font-weight: 500;
     line-height: 1.5;
+  }
+
+  .ask-help-details-grid {
+    display: grid;
+    gap: 14px;
+  }
+
+  .ask-help-textarea {
+    min-height: 92px;
+    resize: vertical;
+  }
+
+  .ask-help-safety-field {
+    border: 1px solid #fed7aa;
+    border-radius: 16px;
+    background: #fff7ed;
+    padding: 14px;
+  }
+
+  .ask-help-safety-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ask-help-warning-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: #f97316;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
   }
 
   .ask-help-selected-skills {
@@ -383,8 +399,10 @@ const askForHelpStyles = `
     color: #6b7280;
     font-size: 12px;
     font-weight: 700;
-    padding: 7px 10px;
-    white-space: nowrap;
+    min-height: 36px;
+    padding: 9px 14px;
+    text-align: center;
+    white-space: normal;
   }
 
   .ask-help-switch {
@@ -562,6 +580,23 @@ const askForHelpStyles = `
     color: #fff;
   }
 
+  .ask-help-submit-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .ask-help-submit-row .ask-help-primary-submit-btn {
+    flex: 1;
+  }
+
+  .ask-help-guest-limit {
+    flex-shrink: 0;
+    color: #4b5563;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
   @keyframes ask-help-pulse-gradient {
     0% {
       background-position: 0% center;
@@ -584,8 +619,18 @@ const askForHelpStyles = `
 
     .ask-help-toggle-grid,
     .ask-help-inline-field,
-    .ask-help-audio-actions {
+    .ask-help-audio-actions,
+    .ask-help-submit-row {
       flex-direction: column;
+    }
+
+    .ask-help-submit-row {
+      align-items: stretch;
+    }
+
+    .ask-help-secondary-btn,
+    .ask-help-locked-badge {
+      width: 100%;
     }
 
     .ask-help-section-title-row,
@@ -602,8 +647,6 @@ interface InformatiiSuplimentareProps {
   onLocationBlur: () => void
   requestType: 'Online' | 'Fizic'
   showLocationError: boolean
-  details: string
-  onDetailsChange: (value: string) => void
 }
 
 function InformatiiSuplimentare({
@@ -612,20 +655,8 @@ function InformatiiSuplimentare({
   onLocationBlur,
   requestType,
   showLocationError,
-  details,
-  onDetailsChange,
 }: InformatiiSuplimentareProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const isPhysicalRequest = requestType === 'Fizic'
-
-  const handleInput = (value: string) => {
-    onDetailsChange(value)
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
-    }
-  }
 
   return (
     <div
@@ -645,7 +676,7 @@ function InformatiiSuplimentare({
         onBlur={onLocationBlur}
       />
       <datalist id="orase-romania">
-        {romaniaCities.map((city) => (
+        {ROMANIA_CITY_NAMES.map((city) => (
           <option key={city} value={city} />
         ))}
       </datalist>
@@ -658,19 +689,6 @@ function InformatiiSuplimentare({
             : 'Pentru cererile online, locatia ramane optionala.'}
         </div>
       )}
-
-      <label className="ask-help-field-label" style={{ marginTop: '18px' }}>
-        Informatii suplimentare
-      </label>
-      <textarea
-        ref={textareaRef}
-        className="ask-help-text-input"
-        placeholder="Adauga informatii suplimentare pentru cererea ta..."
-        rows={3}
-        value={details}
-        onChange={(event) => handleInput(event.target.value)}
-        style={{ resize: 'none', overflow: 'hidden', minHeight: '80px' }}
-      />
     </div>
   )
 }
@@ -683,9 +701,13 @@ export function AskForHelpPage() {
   const [requestType, setRequestType] = useState<'Online' | 'Fizic'>('Online')
   const [urgency, setUrgency] = useState<'Verde' | 'Galben' | 'Rosu'>('Verde')
   const [location, setLocation] = useState('')
-  const [details, setDetails] = useState('')
+  const [notes, setNotes] = useState('')
+  const [languageNeeded, setLanguageNeeded] = useState('')
+  const [safetyNotes, setSafetyNotes] = useState('')
   const [locationTouched, setLocationTouched] = useState(false)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
+  const [guestSessionId, setGuestSessionId] = useState('')
+  const [requestLimit, setRequestLimit] = useState(0)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
@@ -704,6 +726,16 @@ export function AskForHelpPage() {
   }, [authIsGuest])
 
   useEffect(() => {
+    if (!isGuest) {
+      setGuestSessionId('')
+      return
+    }
+
+    setGuestSessionId(getGuestSessionId())
+    setRequestLimit(getGuestRequestLimit())
+  }, [isGuest])
+
+  useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   }, [])
 
@@ -718,7 +750,12 @@ export function AskForHelpPage() {
   }, [audioUrl])
 
   useEffect(() => {
-    if (error && (requestType === 'Online' || location.trim())) {
+    const isLocationError =
+      error === 'Completeaza locatia pentru cererile fizice.' ||
+      error === 'Alege un oras din lista, ca sa putem trimite coordonatele cerute de backend.' ||
+      error === 'Backendul a respins locatia. Selecteaza un oras din lista si incearca din nou.'
+
+    if (isLocationError && (requestType === 'Online' || location.trim())) {
       setError('')
     }
   }, [error, location, requestType])
@@ -830,8 +867,10 @@ export function AskForHelpPage() {
       return
     }
 
-    if (isGuest) {
-      setError('Backendul curent permite trimiterea cererilor doar dupa autentificare.')
+    if (isGuest && requestLimit <= 0) {
+      setError(
+        'ai atins limita de cereri pentru un cont de vizitator. te rugam sa creezi un cont gratuit!',
+      )
       return
     }
 
@@ -842,6 +881,7 @@ export function AskForHelpPage() {
     }
 
     const nextSkills = selectedSkills
+    const requestDetails = buildRequestDetailsPayload(notes, languageNeeded, safetyNotes)
     const resolvedLocation = resolveTaskLocation(location)
 
     if (!resolvedLocation) {
@@ -874,13 +914,14 @@ export function AskForHelpPage() {
 
       const payload: CreateTaskPayload = {
         title: titlu.trim(),
-        description: buildTaskDescription(details, location, nextSkills, uploadedAudioUrl),
+        description: buildTaskDescription(requestDetails, location, nextSkills, uploadedAudioUrl),
         status: 'OPEN' as const,
         urgency: mapUrgencyToBackend(urgency),
         category: mapRequestTypeToCategory(requestType),
         location: resolvedLocation,
         anonymousMode: isAnonymous,
         city: location.trim() || undefined,
+        guestSessionId: isGuest ? guestSessionId : undefined,
         skillsNeeded: nextSkills,
       }
 
@@ -897,13 +938,30 @@ export function AskForHelpPage() {
           return
         }
 
-        setError(response.message || 'Nu am putut trimite cererea catre backend. Incearca din nou.')
+        setError(getTaskSubmitErrorMessage(response))
         return
       }
 
+      const createdTaskId = extractCreatedTaskId(response.data)
+
+      if (!isGuest && createdTaskId && hasRequestDetailsInput(requestDetails)) {
+        const detailsResponse = await backend.tasks.updateDetails(createdTaskId, requestDetails)
+
+        if (!detailsResponse.success) {
+          setError(
+            detailsResponse.message ||
+              'Cererea a fost creata, dar detaliile aditionale nu au putut fi salvate.',
+          )
+          return
+        }
+      }
+
       if (authUserId) {
-        const createdTaskId = extractCreatedTaskId(response.data)
         rememberCreatedTaskId(authUserId, createdTaskId)
+      }
+
+      if (isGuest) {
+        setRequestLimit(decrementGuestRequestLimit())
       }
 
       setSuccessMessage('Cererea ta a fost trimisa voluntarilor!')
@@ -911,7 +969,9 @@ export function AskForHelpPage() {
       setRequestType('Online')
       setUrgency('Verde')
       setLocation('')
-      setDetails('')
+      setNotes('')
+      setLanguageNeeded('')
+      setSafetyNotes('')
       setLocationTouched(false)
       setSelectedSkills([])
       setIsAnonymous(false)
@@ -972,7 +1032,6 @@ export function AskForHelpPage() {
                   Online
                 </button>
               </div>
-              {error && <div className="ask-help-error-text">{error}</div>}
             </div>
 
             <div className="ask-help-field-group">
@@ -1011,9 +1070,56 @@ export function AskForHelpPage() {
               onLocationBlur={() => setLocationTouched(true)}
               requestType={requestType}
               showLocationError={showLocationError}
-              details={details}
-              onDetailsChange={setDetails}
             />
+
+            <div className="ask-help-field-group">
+              <label className="ask-help-field-label">Detalii aditionale</label>
+              <div className="ask-help-section-card">
+                <div className="ask-help-section-title-row">
+                  <div>
+                    <h2 className="ask-help-section-title">Detalii aditionale</h2>
+                  </div>
+                </div>
+
+                <div className="ask-help-details-grid">
+                  <label>
+                    <span className="ask-help-field-label">Notite</span>
+                    <textarea
+                      className="ask-help-text-input ask-help-textarea"
+                      placeholder="Context suplimentar pentru voluntar"
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                    />
+                  </label>
+
+                  <label>
+                    <span className="ask-help-field-label">Limba necesara</span>
+                    <input
+                      type="text"
+                      className="ask-help-text-input"
+                      placeholder="Ex: romana, engleza, ucraineana"
+                      value={languageNeeded}
+                      onChange={(event) => setLanguageNeeded(event.target.value)}
+                    />
+                  </label>
+
+                  <label className="ask-help-safety-field">
+                    <span className="ask-help-field-label ask-help-safety-label">
+                      <span className="ask-help-warning-icon" aria-hidden="true">
+                        !
+                      </span>
+                      Notite de siguranta
+                    </span>
+                    <textarea
+                      className="ask-help-text-input ask-help-textarea"
+                      placeholder="Riscuri, acces in zona sau alte lucruri importante"
+                      value={safetyNotes}
+                      onChange={(event) => setSafetyNotes(event.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
 
             <div className="ask-help-field-group">
               <label className="ask-help-field-label">Skills needed</label>
@@ -1138,13 +1244,19 @@ export function AskForHelpPage() {
               </div>
             </div>
 
-            <button
-              type="submit"
-              className={`ask-help-primary-submit-btn ${isSubmitting ? 'ask-help-submitting' : ''}`}
-              disabled={isSubmitting || isRecording}
-            >
-              {isSubmitting ? 'Se trimite...' : 'Trimite Cererea'}
-            </button>
+            <div className="ask-help-submit-row">
+              <button
+                type="submit"
+                className={`ask-help-primary-submit-btn ${isSubmitting ? 'ask-help-submitting' : ''}`}
+                disabled={isSubmitting || isRecording}
+              >
+                {isSubmitting ? 'Se trimite...' : 'Trimite Cererea'}
+              </button>
+
+              {isGuest ? (
+                <span className="ask-help-guest-limit">Cereri ramase: {requestLimit}</span>
+              ) : null}
+            </div>
 
             {error && <div className="ask-help-error-text">{error}</div>}
             {successMessage && <div className="ask-help-success-box">{successMessage}</div>}

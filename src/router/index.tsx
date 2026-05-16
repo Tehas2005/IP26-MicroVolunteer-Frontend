@@ -46,6 +46,14 @@ export const router = createBrowserRouter([
           </RequireAuthenticatedUser>
         ),
       },
+      {
+        path: 'devino-voluntar',
+        element: (
+          <RequireAuthenticatedUser>
+            <ProfilePage />
+          </RequireAuthenticatedUser>
+        ),
+      },
       { path: 'despre-noi', element: <AboutPage /> },
       {
         path: 'istoric-interactiuni',
