@@ -1,31 +1,53 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from 'vitest'
+
+import type { TaskResponseType } from '@/sdk/types'
 
 import {
-  buildRequestDetailsPayload,
-  hasRequestDetailsInput,
-} from "@/lib/requestDetails"
+  UNSPECIFIED_REQUEST_DETAIL,
+  readRequestDetails,
+  readTaskAudioUrl,
+  readTaskCategoryLabel,
+  readTaskTextDescription,
+} from '../requestDetails'
 
-describe("requestDetails", () => {
-  it("normalizeaza campurile optionale ca string-uri goale", () => {
-    expect(buildRequestDetailsPayload("  ", "", "   ")).toEqual({
-      notes: "",
-      languageNeeded: "",
-      safetyNotes: "",
+describe('requestDetails helpers', () => {
+  it('returns fallback text for missing request details fields', () => {
+    const task = { details: {} } as TaskResponseType
+
+    expect(readRequestDetails(task)).toEqual({
+      notes: UNSPECIFIED_REQUEST_DETAIL,
+      languageNeeded: UNSPECIFIED_REQUEST_DETAIL,
+      safetyNotes: UNSPECIFIED_REQUEST_DETAIL,
     })
   })
 
-  it("pastreaza campurile completate si marcheaza payload-ul cu input partial", () => {
-    const payload = buildRequestDetailsPayload("  context  ", " ", " acces seara ")
+  it('prefers the backend audioUrl when present', () => {
+    const task = {
+      audioUrl: 'https://cdn.example.com/audio/request.webm',
+      description: 'Textul cererii',
+    } as TaskResponseType
 
-    expect(payload).toEqual({
-      notes: "context",
-      languageNeeded: "",
-      safetyNotes: "acces seara",
-    })
-    expect(hasRequestDetailsInput(payload)).toBe(true)
+    expect(readTaskAudioUrl(task)).toBe('https://cdn.example.com/audio/request.webm')
   })
 
-  it("nu marcheaza payload-ul gol ca detalii de salvat", () => {
-    expect(hasRequestDetailsInput(buildRequestDetailsPayload("", " ", "   "))).toBe(false)
+  it('extracts audio urls from AUDIOCONTENT descriptions', () => {
+    const task = {
+      description: 'AUDIOCONTENT: https://cdn.example.com/audio/request.mp3',
+    } as TaskResponseType
+
+    expect(readTaskAudioUrl(task)).toBe('https://cdn.example.com/audio/request.mp3')
+  })
+
+  it('removes audio markers from the visible text description', () => {
+    const task = {
+      description:
+        'Am nevoie de sprijin la traducere. AUDIOCONTENT: https://cdn.example.com/audio/request.mp3',
+    } as TaskResponseType
+
+    expect(readTaskTextDescription(task)).toBe('Am nevoie de sprijin la traducere.')
+  })
+
+  it('normalizes category labels for face to face requests', () => {
+    expect(readTaskCategoryLabel('FACE_TO_FACE')).toBe('FACETOFACE')
   })
 })

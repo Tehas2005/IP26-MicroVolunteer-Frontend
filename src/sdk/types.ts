@@ -109,6 +109,7 @@ export type TaskResponseType = {
   id: string | number
   title?: string | null
   description?: string | null
+  audioUrl?: string | null
   category?: TaskCategoryType | null
   urgency?: TaskUrgencyType | null
   status?: TaskStatusType | null
@@ -116,6 +117,9 @@ export type TaskResponseType = {
   userId?: string | null
   requestedByUserId?: string | null
   helperUserId?: string | null
+  city?: string | null
+  addressText?: string | null
+  location?: Record<string, unknown> | null
   createdAt?: string
   updatedAt?: string
   details?: Record<string, unknown> | null
