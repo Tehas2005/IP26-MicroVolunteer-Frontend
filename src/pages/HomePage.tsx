@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
@@ -6,6 +6,7 @@ import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
 import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
+import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
@@ -26,20 +27,33 @@ import {
   type HelpOfferData,
 } from '@/lib/mockHelpOffers'
 import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
+import {
+  createVolunteerNotification,
+  getVolunteerNotificationId,
+  type VolunteerNotificationItem,
+} from '@/lib/volunteerNotifications'
+import type { TaskResponseType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
-import { ChatFab } from './chat/ChatFab'
+
+const EMPTY_TASKS: TaskResponseType[] = []
+const EMPTY_REQUESTS: LiveRequestCardData[] = []
 
 export function HomePage() {
   const navigate = useNavigate()
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
+  const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
   const [offersRevision, setOffersRevision] = useState(0)
+  const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
+  const hasInitializedVolunteerFeedRef = useRef(false)
 
-  const { data: liveTasks = [], isLoading: isLoadingLiveRequests } = useQuery({
+  const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
     enabled: sessionStatus === 'ready' && !isGuest,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
     queryFn: async () => {
       const response = await backend.tasks.list({
         page: 1,
@@ -54,12 +68,13 @@ export function HomePage() {
       return extractTasksList(response.data)
     },
   })
+  const liveTasks = liveTasksData ?? EMPTY_TASKS
 
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
     if (isGuest || !authUser) {
       return {
-        myRequests: [],
-        volunteerFeedRequests: [],
+        myRequests: EMPTY_REQUESTS,
+        volunteerFeedRequests: EMPTY_REQUESTS,
       }
     }
 
@@ -103,17 +118,67 @@ export function HomePage() {
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
 
-  const displayedMyRequestsWithOfferSummary = useMemo(
-    () => {
-      void offersRevision
+  useEffect(() => {
+    if (isGuest || sessionStatus !== 'ready') {
+      seenVolunteerRequestIdsRef.current.clear()
+      hasInitializedVolunteerFeedRef.current = false
+      setActiveNotifications((currentNotifications) =>
+        currentNotifications.length === 0 ? currentNotifications : [],
+      )
+      return
+    }
 
-      return displayedMyRequests.map((request) => ({
-        ...request,
-        supportingText: getReceivedOffersSummary(request),
-      }))
-    },
-    [displayedMyRequests, offersRevision],
-  )
+    if (shouldUseMockLiveRequests) {
+      seenVolunteerRequestIdsRef.current.clear()
+      hasInitializedVolunteerFeedRef.current = false
+      setActiveNotifications((currentNotifications) =>
+        currentNotifications.length === 0 ? currentNotifications : [],
+      )
+      return
+    }
+
+    if (!hasInitializedVolunteerFeedRef.current) {
+      volunteerFeedRequests.forEach((request) => {
+        seenVolunteerRequestIdsRef.current.add(request.id)
+      })
+      hasInitializedVolunteerFeedRef.current = true
+      return
+    }
+
+    if (volunteerFeedRequests.length === 0) {
+      return
+    }
+
+    const unseenRequests = volunteerFeedRequests.filter(
+      (request) => !seenVolunteerRequestIdsRef.current.has(request.id),
+    )
+
+    if (unseenRequests.length === 0) {
+      return
+    }
+
+    unseenRequests.forEach((request) => {
+      seenVolunteerRequestIdsRef.current.add(request.id)
+    })
+
+    setActiveNotifications((currentNotifications) => {
+      const currentNotificationIds = new Set(currentNotifications.map((item) => item.id))
+      const nextNotifications = unseenRequests
+        .map((request) => createVolunteerNotification(request))
+        .filter((notification) => !currentNotificationIds.has(notification.id))
+
+      return [...currentNotifications, ...nextNotifications].slice(-4)
+    })
+  }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
+
+  const displayedMyRequestsWithOfferSummary = useMemo(() => {
+    void offersRevision
+
+    return displayedMyRequests.map((request) => ({
+      ...request,
+      supportingText: getReceivedOffersSummary(request),
+    }))
+  }, [displayedMyRequests, offersRevision])
 
   const selectedMyRequest = useMemo(
     () =>
@@ -122,14 +187,11 @@ export function HomePage() {
     [displayedMyRequestsWithOfferSummary, selectedMyRequestId],
   )
 
-  const selectedMyRequestOffers = useMemo(
-    () => {
-      void offersRevision
+  const selectedMyRequestOffers = useMemo(() => {
+    void offersRevision
 
-      return selectedMyRequest ? listMockHelpOffers(selectedMyRequest) : []
-    },
-    [offersRevision, selectedMyRequest],
-  )
+    return selectedMyRequest ? listMockHelpOffers(selectedMyRequest) : []
+  }, [offersRevision, selectedMyRequest])
 
   const handleVolunteerRequestOpen = useCallback(
     (request: LiveRequestCardData) => {
@@ -172,8 +234,28 @@ export function HomePage() {
     [authUser, navigate, selectedMyRequest],
   )
 
+  const handleNotificationDismiss = useCallback((notificationId: string) => {
+    setActiveNotifications((currentNotifications) =>
+      currentNotifications.filter((notification) => notification.id !== notificationId),
+    )
+  }, [])
+
+  const handleNotificationOpen = useCallback(
+    (request: LiveRequestCardData) => {
+      handleNotificationDismiss(getVolunteerNotificationId(request.id))
+      handleVolunteerRequestOpen(request)
+    },
+    [handleNotificationDismiss, handleVolunteerRequestOpen],
+  )
+
   return (
     <div className="bg-brand-cream">
+      <VolunteerNotificationStack
+        notifications={activeNotifications}
+        onDismiss={handleNotificationDismiss}
+        onViewDetails={handleNotificationOpen}
+      />
+
       <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="overflow-hidden rounded-[52px] border border-brand-gray/80 bg-brand-purple-light">
           <div className="grid gap-8 px-6 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:px-10 lg:py-14">
@@ -241,6 +323,7 @@ export function HomePage() {
           />
         </div>
       </section>
+
       <HelpOffersInboxDialog
         offers={selectedMyRequestOffers}
         onAccept={handleOfferAccept}
@@ -253,8 +336,6 @@ export function HomePage() {
         open={selectedMyRequest !== null}
         request={selectedMyRequest}
       />
-
-      <ChatFab />
     </div>
   )
 }
