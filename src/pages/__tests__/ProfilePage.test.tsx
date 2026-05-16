@@ -1,10 +1,23 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { backend } from "@/lib/backend"
 import { ProfilePage } from "@/pages/ProfilePage"
 import { useAuthStore } from "@/store/authStore"
 import { useVolunteerProfileStore } from "@/store/volunteerProfileStore"
+
+const profileResponse = {
+  success: true,
+  data: { hiddenIdentity: false },
+  message: "",
+  status: 200,
+  isClientError: false,
+  isServerError: false,
+  isNotFound: false,
+  isUnauthorized: false,
+  isForbidden: false,
+}
 
 function setAuthenticatedSession() {
   useAuthStore.setState({
@@ -29,8 +42,24 @@ function resetStores() {
   })
 }
 
+async function waitForSaveButton() {
+  const saveButton = screen.getByRole("button", { name: "Salveaza Profilul" })
+
+  await waitFor(() => {
+    expect(saveButton).not.toBeDisabled()
+  })
+
+  return saveButton
+}
+
 describe("ProfilePage volunteer opt-in / opt-out", () => {
+  beforeEach(() => {
+    vi.spyOn(backend.profile, "getByUserId").mockResolvedValue(profileResponse)
+    vi.spyOn(backend.profile, "updateMe").mockResolvedValue(profileResponse)
+  })
+
   afterEach(() => {
+    vi.restoreAllMocks()
     resetStores()
     localStorage.clear()
     document.body.style.overflow = ""
@@ -62,7 +91,7 @@ describe("ProfilePage volunteer opt-in / opt-out", () => {
     expect(screen.getByRole("option", { name: "Cluj-Napoca" })).toBeInTheDocument()
     await user.click(screen.getByRole("option", { name: "Cluj-Napoca" }))
     await user.click(screen.getByRole("button", { name: "+ transport" }))
-    await user.click(screen.getByRole("button", { name: "Salveaza Profilul" }))
+    await user.click(await waitForSaveButton())
 
     await waitFor(() => {
       expect(useVolunteerProfileStore.getState().profilesByUserId["user-1"]).toMatchObject({
@@ -84,7 +113,7 @@ describe("ProfilePage volunteer opt-in / opt-out", () => {
 
     await user.click(screen.getByRole("button", { name: "Incepe acum" }))
     await user.click(screen.getByRole("button", { name: "+ transport" }))
-    await user.click(screen.getByRole("button", { name: "Salveaza Profilul" }))
+    await user.click(await waitForSaveButton())
 
     expect(await screen.findByText("adauga locatia in care poti ajuta")).toBeInTheDocument()
     expect(useVolunteerProfileStore.getState().profilesByUserId["user-1"]).toBeUndefined()

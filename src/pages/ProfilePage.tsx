@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
+import { backend } from '@/lib/backend'
 import {
   ROMANIA_CITY_COORDINATES,
   ROMANIA_CITY_NAMES,
   type TaskLocationPayload,
 } from '@/lib/romania-city-coordinates'
+import { addSkillToList, readHiddenIdentityFromResponse } from '@/pages/profile/utils'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
 const SAVE_DELAY_MS = 1200
+const SKILLS_STORAGE_KEY_PREFIX = 'mvcr-profile-skills'
 
 const SKILL_SUGGESTIONS = ['traducere', 'transport', 'insotire', 'cumparaturi', 'suport emotional']
 
@@ -36,8 +39,10 @@ export function ProfilePage() {
   const [hiddenIdentity, setHiddenIdentity] = useState(volunteerProfile?.hiddenIdentity ?? false)
   const [skillInput, setSkillInput] = useState('')
   const [skills, setSkills] = useState<string[]>(volunteerProfile?.skills ?? [])
+  const [hasHydratedProfile, setHasHydratedProfile] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [saveMessage, setSaveMessage] = useState('')
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [isLocationListOpen, setIsLocationListOpen] = useState(false)
@@ -46,20 +51,35 @@ export function ProfilePage() {
   const pageTitle = isExistingVolunteer ? 'Setari profil voluntar' : 'Devino voluntar'
   const selectedLocationCoordinates = resolveVolunteerLocation(location)
 
+  const normalizedSkills = useMemo(
+    () => skills.map((skill) => skill.trim()).filter(Boolean),
+    [skills],
+  )
+
+  const skillsStorageKey = useMemo(() => {
+    if (!authUser?.id) {
+      return null
+    }
+
+    return `${SKILLS_STORAGE_KEY_PREFIX}:${authUser.id}`
+  }, [authUser?.id])
+
   useEffect(() => {
     if (volunteerProfile) {
       setIsFormVisible(true)
       setLocation(volunteerProfile.location)
-      setHiddenIdentity(volunteerProfile.hiddenIdentity)
       setSkills(volunteerProfile.skills)
+      setHiddenIdentity(volunteerProfile.hiddenIdentity)
+      setSkillInput('')
+      setSaveError('')
       return
     }
 
     setIsFormVisible(false)
     setLocation('')
-    setHiddenIdentity(false)
-    setSkills([])
     setSkillInput('')
+    setIsLocationListOpen(false)
+    setIsConfirmModalOpen(false)
   }, [volunteerProfile])
 
   useEffect(() => {
@@ -75,36 +95,127 @@ export function ProfilePage() {
     }
   }, [isConfirmModalOpen])
 
-  const normalizedSkills = useMemo(
-    () => skills.map((skill) => skill.trim()).filter(Boolean),
-    [skills],
-  )
+  useEffect(() => {
+    let isMounted = true
 
-  function addSkill(rawSkill: string) {
-    const normalizedSkill = rawSkill.trim()
+    async function hydrateProfile() {
+      if (isMounted) {
+        setHasHydratedProfile(false)
+        setIsLoadingProfile(true)
 
-    if (!normalizedSkill) {
+        if (!volunteerProfile) {
+          setSkills([])
+          setHiddenIdentity(false)
+        }
+      }
+
+      try {
+        if (skillsStorageKey && !volunteerProfile) {
+          const storedSkills = window.localStorage.getItem(skillsStorageKey)
+
+          if (storedSkills) {
+            try {
+              const parsedSkills = JSON.parse(storedSkills)
+
+              if (isMounted && Array.isArray(parsedSkills)) {
+                setSkills(
+                  parsedSkills.filter((value): value is string => typeof value === 'string'),
+                )
+              }
+            } catch {
+              window.localStorage.removeItem(skillsStorageKey)
+            }
+          }
+        }
+
+        if (!authUser?.id) {
+          return
+        }
+
+        const profileResponse = await backend.profile.getByUserId(authUser.id)
+
+        if (!isMounted) {
+          return
+        }
+
+        if (profileResponse.success) {
+          setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
+        } else if (!profileResponse.isNotFound && profileResponse.message) {
+          setSaveError('Nu am reusit sa incarcam setarile profilului.')
+        }
+      } catch {
+        if (isMounted) {
+          setSaveError('Nu am reusit sa incarcam setarile profilului.')
+        }
+      } finally {
+        if (isMounted) {
+          setHasHydratedProfile(true)
+          setIsLoadingProfile(false)
+        }
+      }
+    }
+
+    void hydrateProfile()
+
+    return () => {
+      isMounted = false
+    }
+  }, [authUser?.id, skillsStorageKey, volunteerProfile])
+
+  useEffect(() => {
+    if (!skillsStorageKey || !hasHydratedProfile) {
       return
     }
 
-    const alreadyExists = skills.some(
-      (existingSkill) => existingSkill.toLowerCase() === normalizedSkill.toLowerCase(),
-    )
+    window.localStorage.setItem(skillsStorageKey, JSON.stringify(skills))
+  }, [hasHydratedProfile, skills, skillsStorageKey])
 
-    if (alreadyExists) {
+  function addSkill(rawSkill: string) {
+    const nextSkills = addSkillToList(skills, rawSkill)
+
+    if (nextSkills === skills && !rawSkill.trim()) {
+      return
+    }
+
+    if (nextSkills === skills) {
       setSkillInput('')
       return
     }
 
-    setSkills((currentSkills) => [...currentSkills, normalizedSkill])
+    setSkills(nextSkills)
     setSkillInput('')
     setSaveError('')
+    setSaveMessage('')
   }
 
   function removeSkill(skillToRemove: string) {
     setSkills((currentSkills) =>
       currentSkills.filter((existingSkill) => existingSkill !== skillToRemove),
     )
+    setSaveError('')
+    setSaveMessage('')
+  }
+
+  async function handleHiddenIdentityToggle() {
+    const previousValue = hiddenIdentity
+    const nextValue = !hiddenIdentity
+
+    setHiddenIdentity(nextValue)
+    setSaveError('')
+    setSaveMessage('')
+
+    try {
+      const response = await backend.profile.updateMe({ hiddenIdentity: nextValue })
+
+      if (response.success) {
+        return
+      }
+    } catch {
+      // Network and server errors should also roll back the optimistic toggle.
+    }
+
+    setHiddenIdentity(previousValue)
+    setSaveError('Nu am reusit sa salvam setarea de confidentialitate.')
   }
 
   async function handleSaveProfile() {
@@ -137,6 +248,18 @@ export function ProfilePage() {
     setSaveError('')
     setSaveMessage('')
     setIsSaving(true)
+
+    if (skillsStorageKey) {
+      window.localStorage.setItem(skillsStorageKey, JSON.stringify(skills))
+    }
+
+    const response = await backend.profile.updateMe({ hiddenIdentity })
+
+    if (!response.success) {
+      setIsSaving(false)
+      setSaveError('Nu am reusit sa salvam profilul. Incearca din nou.')
+      return
+    }
 
     await new Promise((resolve) => {
       window.setTimeout(resolve, SAVE_DELAY_MS)
@@ -304,7 +427,7 @@ export function ProfilePage() {
                           onClick={() => removeSkill(skill)}
                           aria-label={`Sterge abilitatea ${skill}`}
                         >
-                          ×
+                          x
                         </button>
                       </span>
                     ))
@@ -338,9 +461,12 @@ export function ProfilePage() {
                   <button
                     type="button"
                     className={`profile-switch ${hiddenIdentity ? 'profile-switch-active' : ''}`}
-                    onClick={() => setHiddenIdentity((currentValue) => !currentValue)}
+                    onClick={() => {
+                      void handleHiddenIdentityToggle()
+                    }}
                     aria-pressed={hiddenIdentity}
                     aria-label="Ascunde identitatea"
+                    disabled={isLoadingProfile}
                   >
                     <span />
                   </button>
@@ -370,7 +496,7 @@ export function ProfilePage() {
                   onClick={() => {
                     void handleSaveProfile()
                   }}
-                  disabled={isSaving}
+                  disabled={isSaving || isLoadingProfile}
                 >
                   {isSaving ? 'Se salveaza profilul...' : 'Salveaza Profilul'}
                 </button>
