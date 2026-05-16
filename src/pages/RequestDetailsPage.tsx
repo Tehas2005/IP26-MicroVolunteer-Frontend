@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, CircleAlert, Headphones, Languages, ShieldAlert, StickyNote } from 'lucide-react'
+import {
+  ArrowLeft,
+  CircleAlert,
+  Headphones,
+  Languages,
+  ListChecks,
+  MapPin,
+  ShieldAlert,
+  StickyNote,
+} from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import {
@@ -12,14 +21,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { backend } from '@/lib/backend'
 import {
   extractTaskResponseData,
+  mapOfferSubmitErrorMessage,
   readRequestDetails,
   readTaskAudioUrl,
   readTaskCategoryLabel,
   readTaskTextDescription,
   readTaskUrgencyMeta,
+  readRequestSummary,
   UNSPECIFIED_REQUEST_DETAIL,
 } from '@/lib/requestDetails'
 import { useAuthStore } from '@/store/authStore'
@@ -59,6 +71,10 @@ export function RequestDetailsPage() {
   )
   const [isAccessDialogOpen, setIsAccessDialogOpen] = useState(false)
   const [isOfferDialogOpen, setIsOfferDialogOpen] = useState(false)
+  const [offerMessage, setOfferMessage] = useState('')
+  const [offerError, setOfferError] = useState<string | null>(null)
+  const [offerSuccessMessage, setOfferSuccessMessage] = useState<string | null>(null)
+  const [isSubmittingOffer, setIsSubmittingOffer] = useState(false)
 
   const {
     data: task,
@@ -93,13 +109,25 @@ export function RequestDetailsPage() {
       return taskData
     },
   })
+  const { data: hasVolunteerAccess = false, isLoading: isCheckingVolunteerAccess } = useQuery({
+    queryKey: ['request-details-volunteer-access', authUser?.id],
+    enabled: Boolean(authUser) && !isGuest && !volunteerProfile,
+    retry: false,
+    queryFn: async () => {
+      const response = await backend.offers.getMine(1, 1)
+      return response.success
+    },
+  })
 
   const requestDetails = useMemo(() => readRequestDetails(task), [task])
+  const requestSummary = useMemo(() => readRequestSummary(task), [task])
   const audioUrl = useMemo(() => readTaskAudioUrl(task), [task])
   const visibleDescription = useMemo(() => readTaskTextDescription(task), [task])
   const urgency = useMemo(() => readTaskUrgencyMeta(task?.urgency), [task])
   const categoryLabel = useMemo(() => readTaskCategoryLabel(task?.category), [task])
-  const title = task?.title?.trim() || 'Cerere fara titlu'
+  const title = task?.title?.trim() || 'Cerere fără titlu'
+  const isVolunteer = Boolean(volunteerProfile) || hasVolunteerAccess
+  const shouldDisableHelpAction = isSubmittingOffer || (Boolean(authUser) && !volunteerProfile && isCheckingVolunteerAccess)
 
   function handleBack() {
     if (window.history.length > 1) {
@@ -111,12 +139,56 @@ export function RequestDetailsPage() {
   }
 
   function handleHelpAction() {
-    if (isGuest || !authUser || !volunteerProfile) {
+    if (isCheckingVolunteerAccess && !volunteerProfile) {
+      return
+    }
+
+    if (isGuest || !authUser || !isVolunteer) {
       setIsAccessDialogOpen(true)
       return
     }
 
+    setOfferError(null)
+    setOfferSuccessMessage(null)
     setIsOfferDialogOpen(true)
+  }
+
+  function handleOfferDialogChange(nextOpen: boolean) {
+    setIsOfferDialogOpen(nextOpen)
+
+    if (!nextOpen && !isSubmittingOffer) {
+      setOfferError(null)
+    }
+  }
+
+  async function handleOfferSubmit() {
+    if (!taskId) {
+      setOfferError('Nu am putut identifica cererea pentru care vrei să trimiți oferta.')
+      return
+    }
+
+    const normalizedMessage = offerMessage.trim()
+
+    if (!normalizedMessage) {
+      setOfferError('Te rugăm să introduci un mesaj de prezentare.')
+      return
+    }
+
+    setIsSubmittingOffer(true)
+    setOfferError(null)
+
+    const response = await backend.tasks.createOffer(taskId, { message: normalizedMessage })
+
+    if (!response.success) {
+      setOfferError(mapOfferSubmitErrorMessage(response.message))
+      setIsSubmittingOffer(false)
+      return
+    }
+
+    setOfferSuccessMessage('Oferta ta a fost trimisă. Așteaptă răspunsul utilizatorului!')
+    setOfferMessage('')
+    setIsSubmittingOffer(false)
+    setIsOfferDialogOpen(false)
   }
 
   return (
@@ -128,7 +200,7 @@ export function RequestDetailsPage() {
           type="button"
         >
           <ArrowLeft className="h-4 w-4" />
-          Inapoi la cereri live
+          Înapoi la cereri live
         </button>
 
         <div className="mt-5 overflow-hidden rounded-[36px] border border-brand-gray bg-white shadow-sm">
@@ -137,7 +209,7 @@ export function RequestDetailsPage() {
               <div className="flex flex-col items-center gap-3 text-center">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-purple-light border-t-brand-purple" />
                 <p className="text-sm font-medium text-brand-gray-text">
-                  Incarcam detaliile cererii...
+                  Încărcăm detaliile cererii...
                 </p>
               </div>
             </div>
@@ -148,16 +220,16 @@ export function RequestDetailsPage() {
                   <CircleAlert className="h-7 w-7" />
                 </div>
                 <h1 className="mt-4 text-2xl font-bold text-brand-black">
-                  Nu am putut incarca cererea
+                  Nu am putut încărca cererea
                 </h1>
                 <p className="mt-3 text-sm leading-7 text-brand-gray-text">
                   {error instanceof Error
                     ? error.message
-                    : 'A aparut o eroare neasteptata la incarcarea detaliilor.'}
+                    : 'A apărut o eroare neașteptată la încărcarea detaliilor.'}
                 </p>
                 <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                   <Button onClick={() => refetch()} variant="auth">
-                    Incearca din nou
+                    Încearcă din nou
                   </Button>
                   <Button onClick={handleBack} variant="ghost">
                     Revino la feed
@@ -187,27 +259,54 @@ export function RequestDetailsPage() {
                 <p className="mt-4 max-w-3xl text-base leading-8 text-brand-gray-text sm:text-lg">
                   {visibleDescription ||
                     (audioUrl
-                      ? 'Cererea include un mesaj vocal. Il poti asculta in sectiunea audio de mai jos.'
+                      ? 'Cererea include un mesaj vocal. Îl poți asculta în secțiunea audio de mai jos.'
                       : UNSPECIFIED_REQUEST_DETAIL)}
                 </p>
+
+                <div className="mt-5 flex flex-wrap gap-3">
+                  {requestSummary.location !== UNSPECIFIED_REQUEST_DETAIL ? (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-brand-purple-light px-4 py-2 text-sm font-semibold text-brand-purple-dark">
+                      <MapPin className="h-4 w-4" />
+                      Locație: {requestSummary.location}
+                    </span>
+                  ) : null}
+
+                  {requestSummary.skills.map((skill) => (
+                    <span
+                      key={skill}
+                      className="inline-flex items-center gap-2 rounded-full border border-brand-purple/20 bg-white px-4 py-2 text-sm font-semibold text-brand-purple-dark"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               <div className="px-6 py-8 sm:px-8 lg:px-10">
-                <div className="grid gap-5 lg:grid-cols-3">
+                <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-4">
                   <DetailCard
                     icon={<StickyNote className="h-5 w-5" />}
-                    label="Notite"
+                    label="Notițe"
                     value={requestDetails.notes}
                   />
                   <DetailCard
                     icon={<Languages className="h-5 w-5" />}
-                    label="Limba necesara"
+                    label="Limba necesară"
                     value={requestDetails.languageNeeded}
                   />
                   <DetailCard
                     icon={<ShieldAlert className="h-5 w-5" />}
-                    label="Notite de siguranta"
+                    label="Notițe de siguranță"
                     value={requestDetails.safetyNotes}
+                  />
+                  <DetailCard
+                    icon={<ListChecks className="h-5 w-5" />}
+                    label="Abilități necesare"
+                    value={
+                      requestSummary.skills.length > 0
+                        ? requestSummary.skills.join(', ')
+                        : UNSPECIFIED_REQUEST_DETAIL
+                    }
                   />
                 </div>
 
@@ -222,7 +321,7 @@ export function RequestDetailsPage() {
                           Mesaj audio
                         </p>
                         <p className="mt-1 text-sm text-white/80">
-                          Poti asculta mesajul vocal trimis impreuna cu cererea.
+                          Poți asculta mesajul vocal trimis împreună cu cererea.
                         </p>
                       </div>
                     </div>
@@ -238,16 +337,28 @@ export function RequestDetailsPage() {
 
       {!isLoading && !error && task ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-brand-gray/80 bg-white/95 px-4 py-4 shadow-[0_-10px_30px_rgba(26,26,26,0.08)] backdrop-blur-sm sm:px-6">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="hidden sm:block">
               <p className="text-sm font-semibold text-brand-black">Ai parcurs toate detaliile?</p>
               <p className="text-sm text-brand-gray-text">
-                Daca poti interveni, continua cu pasul de ajutor.
+                Dacă poți interveni, continuă cu pasul de ajutor.
               </p>
             </div>
 
-            <Button className="w-full sm:w-auto sm:min-w-[260px]" onClick={handleHelpAction} size="lg" variant="auth">
-              Vreau sa ajut
+            {offerSuccessMessage ? (
+              <div className="w-full rounded-2xl border border-brand-green/20 bg-brand-green/10 px-4 py-3 text-sm font-medium text-brand-green sm:order-last sm:w-auto sm:max-w-md">
+                {offerSuccessMessage}
+              </div>
+            ) : null}
+
+            <Button
+              className="w-full sm:w-auto sm:min-w-[260px]"
+              disabled={shouldDisableHelpAction}
+              onClick={handleHelpAction}
+              size="lg"
+              variant="auth"
+            >
+              {isCheckingVolunteerAccess && !volunteerProfile ? 'Verificăm accesul...' : 'Vreau să ajut'}
             </Button>
           </div>
         </div>
@@ -257,37 +368,57 @@ export function RequestDetailsPage() {
         <DialogContent className="rounded-[28px] p-0 sm:max-w-md" showCloseButton={false}>
           <DialogHeader className="px-6 pt-6">
             <DialogTitle className="text-xl font-bold text-brand-black">
-              Acces restrictionat
+              Acces restricționat
             </DialogTitle>
             <DialogDescription className="pt-2 text-sm leading-7 text-brand-gray-text">
-              Trebuie sa fii logat si sa ai cont de voluntar pentru a accepta cereri.
+              Trebuie să fii logat și să ai cont de voluntar pentru a accepta cereri.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="rounded-b-[28px] px-6">
             <Button onClick={() => setIsAccessDialogOpen(false)} variant="auth">
-              Am inteles
+              Am înțeles
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog onOpenChange={setIsOfferDialogOpen} open={isOfferDialogOpen}>
+      <Dialog onOpenChange={handleOfferDialogChange} open={isOfferDialogOpen}>
         <DialogContent className="rounded-[28px] p-0 sm:max-w-lg" showCloseButton={false}>
           <DialogHeader className="px-6 pt-6">
             <DialogTitle className="text-xl font-bold text-brand-black">
               Oferta de ajutor
             </DialogTitle>
             <DialogDescription className="pt-2 text-sm leading-7 text-brand-gray-text">
-              Din aceasta pagina se deschide fluxul de trimitere a ofertei. Formularul complet de
-              introducere se va continua aici in pasul urmator al functionalitatii.
+              Lasă un mesaj scurt prin care te prezinți și explici cum poți interveni pentru această
+              cerere.
             </DialogDescription>
           </DialogHeader>
+          <div className="px-6 pb-1">
+            <label className="text-lg font-semibold text-brand-black" htmlFor="request-offer-message">
+              Mesaj de introducere
+            </label>
+            <Textarea
+              className="mt-4 min-h-[220px] rounded-[28px] border-brand-gray px-5 py-4 text-base leading-7"
+              id="request-offer-message"
+              onChange={(event) => {
+                setOfferMessage(event.target.value)
+                if (offerError) {
+                  setOfferError(null)
+                }
+              }}
+              placeholder="Ex: Sunt disponibil în următoarea oră și pot ajunge rapid."
+              value={offerMessage}
+            />
+            {offerError ? (
+              <p className="mt-4 text-base font-medium text-brand-red">{offerError}</p>
+            ) : null}
+          </div>
           <DialogFooter className="rounded-b-[28px] px-6">
             <Button onClick={() => setIsOfferDialogOpen(false)} variant="ghost">
               Inchide
             </Button>
-            <Button onClick={() => setIsOfferDialogOpen(false)} variant="auth">
-              Continua
+            <Button disabled={isSubmittingOffer} onClick={handleOfferSubmit} variant="auth">
+              {isSubmittingOffer ? 'Se trimite...' : 'Trimite oferta de ajutor'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -2,6 +2,8 @@ import type { Fetcher } from './Fetcher'
 import type {
   ApiResponse,
   DeleteTaskDetailsResponseType,
+  HelpOfferPayloadType,
+  HelpOfferResponseType,
   PaginatedTaskListType,
   TaskDetailsPayloadType,
   TaskFiltersType,
@@ -23,6 +25,13 @@ export class TasksFetcher {
 
   public getById(id: string): Promise<ApiResponse<TaskResponseType>> {
     return this.fetcher.get<TaskResponseType>(`/api/tasks/${id}`)
+  }
+
+  public createOffer(
+    id: string,
+    payload: HelpOfferPayloadType,
+  ): Promise<ApiResponse<HelpOfferResponseType>> {
+    return this.fetcher.post<HelpOfferResponseType>(`/api/tasks/${id}/offers`, payload)
   }
 
   public updateStatus(

@@ -4,11 +4,13 @@ import type { TaskResponseType } from '@/sdk/types'
 
 import {
   extractTaskResponseData,
-  UNSPECIFIED_REQUEST_DETAIL,
+  mapOfferSubmitErrorMessage,
+  readRequestSummary,
   readRequestDetails,
   readTaskAudioUrl,
   readTaskCategoryLabel,
   readTaskTextDescription,
+  UNSPECIFIED_REQUEST_DETAIL,
 } from '../requestDetails'
 
 describe('requestDetails helpers', () => {
@@ -62,7 +64,33 @@ describe('requestDetails helpers', () => {
     expect(readTaskTextDescription(task)).toBe('Am nevoie de sprijin la traducere.')
   })
 
-  it('normalizes category labels for face to face requests', () => {
-    expect(readTaskCategoryLabel('FACE_TO_FACE')).toBe('FACETOFACE')
+  it('extrage sumarul cererii din descrierea compusă', () => {
+    const task = {
+      description:
+        'Arde\n\nLimba necesara: Romana\n\nSiguranta: Nu este niciun risc, calm.\n\nLocatie declarata: Iasi\n\nSkills needed: Transport local, Sprijin emotional',
+    } as TaskResponseType
+
+    expect(readRequestDetails(task)).toEqual({
+      notes: 'Arde',
+      languageNeeded: 'Romana',
+      safetyNotes: 'Nu este niciun risc, calm.',
+    })
+    expect(readRequestSummary(task)).toEqual({
+      location: 'Iasi',
+      skills: ['Transport local', 'Sprijin emotional'],
+    })
+  })
+
+  it('normalizeaza eticheta categoriei pentru cererile fizice', () => {
+    expect(readTaskCategoryLabel('FACE_TO_FACE')).toBe('Față în față')
+  })
+
+  it('traduce mesajele backend pentru submit-ul ofertei', () => {
+    expect(mapOfferSubmitErrorMessage('HelpRequest is not OPEN')).toBe(
+      'Această cerere de ajutor a fost deja preluată de alt voluntar.',
+    )
+    expect(
+      mapOfferSubmitErrorMessage('A pending offer already exists for this volunteer and task'),
+    ).toBe('Ai deja o ofertă în așteptare pentru această cerere.')
   })
 })

@@ -172,6 +172,20 @@ export type DeleteTaskDetailsResponseType = {
   [key: string]: unknown
 }
 
+export type HelpOfferPayloadType = {
+  message: string
+}
+
+export type HelpOfferResponseType = {
+  id: string | number
+  helpRequestId?: string | number
+  volunteerId?: string | number
+  message?: string | null
+  status?: string | null
+  createdAt?: string
+  [key: string]: unknown
+}
+
 export type UploadResponseEnvelopeType = {
   data?: string | null
   message?: string | null
