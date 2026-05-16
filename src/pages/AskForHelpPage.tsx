@@ -4,6 +4,7 @@ import { backend } from '@/lib/backend'
 import { extractCreatedTaskId, rememberCreatedTaskId } from '@/lib/liveRequests'
 import {
   ROMANIA_CITY_COORDINATES,
+  ROMANIA_CITY_NAMES,
   ROMANIA_DEFAULT_COORDINATES,
   type TaskLocationPayload,
 } from '@/lib/romania-city-coordinates'
@@ -17,50 +18,6 @@ const skillSuggestions = [
   'Asistenta digitala',
   'Ridicare medicamente',
   'Completare formulare',
-]
-
-const romaniaCities = [
-  'Alba Iulia',
-  'Alexandria',
-  'Arad',
-  'Bacau',
-  'Baia Mare',
-  'Bistrita',
-  'Botosani',
-  'Brasov',
-  'Braila',
-  'Bucuresti',
-  'Buzau',
-  'Calarasi',
-  'Cluj-Napoca',
-  'Constanta',
-  'Craiova',
-  'Deva',
-  'Drobeta-Turnu Severin',
-  'Focsani',
-  'Galati',
-  'Giurgiu',
-  'Iasi',
-  'Miercurea-Ciuc',
-  'Oradea',
-  'Piatra-Neamt',
-  'Pitesti',
-  'Ploiesti',
-  'Ramnicu Valcea',
-  'Resita',
-  'Satu Mare',
-  'Sfantu Gheorghe',
-  'Sibiu',
-  'Slatina',
-  'Slobozia',
-  'Suceava',
-  'Targu Jiu',
-  'Targu Mures',
-  'Targoviste',
-  'Timisoara',
-  'Tulcea',
-  'Vaslui',
-  'Zalau',
 ]
 
 type TaskCategory = 'MESSAGES_ONLY' | 'FACE_TO_FACE'
@@ -682,7 +639,7 @@ function InformatiiSuplimentare({
         onBlur={onLocationBlur}
       />
       <datalist id="orase-romania">
-        {romaniaCities.map((city) => (
+        {ROMANIA_CITY_NAMES.map((city) => (
           <option key={city} value={city} />
         ))}
       </datalist>
