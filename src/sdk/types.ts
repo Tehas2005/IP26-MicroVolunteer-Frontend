@@ -132,10 +132,9 @@ export type TaskSubmissionPayloadType = {
 }
 
 export type TaskDetailsPayloadType = {
-  details?: string
-  address?: string
-  preferredContactMethod?: string
-  preferredTimeWindow?: string
+  notes?: string
+  languageNeeded?: string
+  safetyNotes?: string
   [key: string]: unknown
 }
 

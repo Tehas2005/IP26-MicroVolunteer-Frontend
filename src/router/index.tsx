@@ -1,6 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import type { ReactNode } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 
 import RootLayout from '@/components/layout/RootLayout'
 import AboutPage from '@/pages/AboutPage'
@@ -9,23 +7,10 @@ import AuthPage from '@/pages/AuthPage'
 import ChatPage from '@/pages/ChatPage'
 import HomePage from '@/pages/HomePage'
 import VolunteerProfilePage from '@/pages/VolunteerProfilePage'
+import InteractionHistoryPage from '@/pages/InteractionHistoryPage'
+import ProfilePage from '@/pages/ProfilePage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
-import { useAuthStore } from '@/store/authStore'
-
-function RequireAuthenticatedUser({ children }: { children: ReactNode }) {
-  const isGuest = useAuthStore((state) => state.isGuest)
-  const sessionStatus = useAuthStore((state) => state.sessionStatus)
-
-  if (sessionStatus === 'loading') {
-    return null
-  }
-
-  if (isGuest) {
-    return <Navigate to="/auth/login" replace />
-  }
-
-  return <>{children}</>
-}
+import RequireAuthenticatedUser from './RequireAuthenticatedUser'
 
 export const router = createBrowserRouter([
   { path: '/auth', element: <AuthPage mode="login" /> },
@@ -41,12 +26,28 @@ export const router = createBrowserRouter([
       {
         path: 'profil',
         element: (
-            <RequireAuthenticatedUser>
-              <VolunteerProfilePage />
-            </RequireAuthenticatedUser>
+          <RequireAuthenticatedUser>
+            <VolunteerProfilePage />
+          </RequireAuthenticatedUser>
+        ),
+      },
+      {
+        path: 'devino-voluntar',
+        element: (
+          <RequireAuthenticatedUser>
+            <ProfilePage />
+          </RequireAuthenticatedUser>
         ),
       },
       { path: 'despre-noi', element: <AboutPage /> },
+      {
+        path: 'istoric-interactiuni',
+        element: (
+          <RequireAuthenticatedUser>
+            <InteractionHistoryPage />
+          </RequireAuthenticatedUser>
+        ),
+      },
       { path: 'chat/:conversationId', element: <ChatPage /> },
       { path: 'chat', element: <ChatPage /> },
     ],

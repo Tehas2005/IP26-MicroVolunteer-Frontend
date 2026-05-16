@@ -7,21 +7,27 @@ import { MvcrLogo } from '@/components/shared/MvcrLogo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
+import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
 interface NavAction {
   label: string
   path: string
   type: 'link' | 'ghost' | 'auth'
-  requiresAuth?: boolean
+  visibility?: 'all' | 'guest-only' | 'authenticated-only'
 }
 
 const navActions: NavAction[] = [
-  { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link' },
-  { label: 'Profil', path: '/profil', type: 'link', requiresAuth: true },
-  { label: 'Despre Noi', path: '/despre-noi', type: 'link' },
-  // { label: 'Profil', path: '/profil', type: 'link' },
-  { label: 'Log In', path: '/auth/login', type: 'ghost' },
-  { label: 'Sign Up', path: '/auth/signup', type: 'auth' },
+  { label: 'Cere Ajutor', path: '/cere-ajutor', type: 'link', visibility: 'all' },
+  { label: 'Profil', path: '/profil', type: 'link', visibility: 'authenticated-only' },
+  { label: 'Despre Noi', path: '/despre-noi', type: 'link', visibility: 'all' },
+  {
+    label: 'Istoric',
+    path: '/istoric-interactiuni',
+    type: 'link',
+    visibility: 'authenticated-only',
+  },
+  { label: 'Log In', path: '/auth/login', type: 'ghost', visibility: 'guest-only' },
+  { label: 'Sign Up', path: '/auth/signup', type: 'auth', visibility: 'guest-only' },
 ]
 
 const linkClasses =
@@ -86,11 +92,37 @@ function MobileAction({ action, onNavigate }: ActionRendererProps) {
   )
 }
 
+function shouldDisplayAction(action: NavAction, isGuest: boolean) {
+  if (action.visibility === 'guest-only') {
+    return isGuest
+  }
+
+  if (action.visibility === 'authenticated-only') {
+    return !isGuest
+  }
+
+  return true
+}
+
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const navigate = useNavigate()
-  const { isGuest, clearAuthSession } = useAuthStore()
+  const { isGuest, user, clearAuthSession } = useAuthStore()
+  const volunteerProfile = useVolunteerProfileStore((state) =>
+    user?.id ? state.profilesByUserId[user.id] : undefined,
+  )
+
+  const displayedNavActions: NavAction[] = [
+    navActions[0],
+    {
+      label: volunteerProfile ? 'Setari profil voluntar' : 'Vreau sa devin voluntar!',
+      path: '/devino-voluntar',
+      type: 'link',
+      visibility: 'authenticated-only',
+    },
+    ...navActions.slice(1),
+  ]
 
   function handleNavigate(path: string) {
     setIsMenuOpen(false)
@@ -111,18 +143,6 @@ export function Navbar() {
     }
   }
 
-  function shouldShowAction(action: NavAction) {
-    if (action.requiresAuth) {
-      return !isGuest
-    }
-
-    if (action.type === 'link') {
-      return true
-    }
-
-    return isGuest
-  }
-
   return (
     <header className="sticky top-0 z-50 border-b border-brand-gray/30 bg-white/95 backdrop-blur-sm">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
@@ -136,9 +156,11 @@ export function Navbar() {
         </button>
 
         <nav aria-label="Navigare principală" className="hidden items-center gap-2 md:flex">
-          {navActions.filter(shouldShowAction).map((action) => (
-            <DesktopAction key={action.label} action={action} onNavigate={handleNavigate} />
-          ))}
+          {displayedNavActions
+            .filter((action) => shouldDisplayAction(action, isGuest))
+            .map((action) => (
+              <DesktopAction key={action.label} action={action} onNavigate={handleNavigate} />
+            ))}
           {!isGuest ? (
             <div className="ml-2 flex items-center gap-3">
               <Button disabled={isLoggingOut} onClick={handleLogout} variant="ghost">
@@ -170,9 +192,11 @@ export function Navbar() {
           aria-label="Navigare principală mobilă"
           className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6"
         >
-          {navActions.filter(shouldShowAction).map((action) => (
-            <MobileAction key={action.label} action={action} onNavigate={handleNavigate} />
-          ))}
+          {displayedNavActions
+            .filter((action) => shouldDisplayAction(action, isGuest))
+            .map((action) => (
+              <MobileAction key={action.label} action={action} onNavigate={handleNavigate} />
+            ))}
           {!isGuest ? (
             <>
               <Button

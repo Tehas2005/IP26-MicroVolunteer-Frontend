@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Navbar } from "@/components/layout/Navbar"
 import { backend } from "@/lib/backend"
 import { useAuthStore } from "@/store/authStore"
+import { useVolunteerProfileStore } from "@/store/volunteerProfileStore"
 
 const navigateMock = vi.fn()
 let signOutSpy: ReturnType<typeof vi.spyOn>
@@ -44,6 +45,9 @@ describe("Navbar", () => {
       isGuest: true,
       sessionStatus: "ready",
     })
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {},
+    })
     localStorage.clear()
     cleanup()
   })
@@ -64,13 +68,17 @@ describe("Navbar", () => {
     expect(within(desktopNav).getByRole("button", { name: "Despre Noi" })).toBeInTheDocument()
     expect(within(desktopNav).getByRole("button", { name: "Log In" })).toBeInTheDocument()
     expect(within(desktopNav).getByRole("button", { name: "Sign Up" })).toBeInTheDocument()
-    expect(within(desktopNav).queryByRole("button", { name: "Profil" })).not.toBeInTheDocument()
+    expect(
+      within(desktopNav).queryByRole("button", { name: "Vreau sa devin voluntar!" }),
+    ).not.toBeInTheDocument()
 
     expect(within(mobileNav).getByRole("button", { name: "Cere Ajutor" })).toBeInTheDocument()
     expect(within(mobileNav).getByRole("button", { name: "Despre Noi" })).toBeInTheDocument()
     expect(within(mobileNav).getByRole("button", { name: "Log In" })).toBeInTheDocument()
     expect(within(mobileNav).getByRole("button", { name: "Sign Up" })).toBeInTheDocument()
-    expect(within(mobileNav).queryByRole("button", { name: "Profil" })).not.toBeInTheDocument()
+    expect(
+      within(mobileNav).queryByRole("button", { name: "Vreau sa devin voluntar!" }),
+    ).not.toBeInTheDocument()
   })
 
   it("afiseaza actiunile pentru utilizator autentificat", () => {
@@ -91,17 +99,57 @@ describe("Navbar", () => {
 
     expect(within(desktopNav).getByRole("button", { name: "Cere Ajutor" })).toBeInTheDocument()
     expect(within(desktopNav).getByRole("button", { name: "Despre Noi" })).toBeInTheDocument()
-    expect(within(desktopNav).getByRole("button", { name: "Profil" })).toBeInTheDocument()
+    expect(
+      within(desktopNav).getByRole("button", { name: "Vreau sa devin voluntar!" }),
+    ).toBeInTheDocument()
     expect(within(desktopNav).getByRole("button", { name: "Ieși din cont" })).toBeInTheDocument()
     expect(within(desktopNav).queryByRole("button", { name: "Log In" })).not.toBeInTheDocument()
     expect(within(desktopNav).queryByRole("button", { name: "Sign Up" })).not.toBeInTheDocument()
 
     expect(within(mobileNav).getByRole("button", { name: "Cere Ajutor" })).toBeInTheDocument()
     expect(within(mobileNav).getByRole("button", { name: "Despre Noi" })).toBeInTheDocument()
-    expect(within(mobileNav).getByRole("button", { name: "Profil" })).toBeInTheDocument()
+    expect(
+      within(mobileNav).getByRole("button", { name: "Vreau sa devin voluntar!" }),
+    ).toBeInTheDocument()
     expect(within(mobileNav).getByRole("button", { name: "Ieși din cont" })).toBeInTheDocument()
     expect(within(mobileNav).queryByRole("button", { name: "Log In" })).not.toBeInTheDocument()
     expect(within(mobileNav).queryByRole("button", { name: "Sign Up" })).not.toBeInTheDocument()
+  })
+
+  it("schimba actiunea de voluntar cand exista profil local", () => {
+    useAuthStore.setState({
+      user: {
+        id: "user-1",
+        name: "Ion Socol",
+        email: "ion@example.com",
+      },
+      isGuest: false,
+      sessionStatus: "ready",
+    })
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {
+        "user-1": {
+          userId: "user-1",
+          location: "Cluj-Napoca",
+          locationCoordinates: { x: 23.5899542, y: 46.769379 },
+          skills: ["transport"],
+          hiddenIdentity: false,
+          createdAt: "2026-05-15T00:00:00.000Z",
+          updatedAt: "2026-05-15T00:00:00.000Z",
+        },
+      },
+    })
+
+    render(<Navbar />)
+
+    const desktopNav = screen.getByRole("navigation", { name: "Navigare principală" })
+
+    expect(
+      within(desktopNav).getByRole("button", { name: "Setari profil voluntar" }),
+    ).toBeInTheDocument()
+    expect(
+      within(desktopNav).queryByRole("button", { name: "Vreau sa devin voluntar!" }),
+    ).not.toBeInTheDocument()
   })
 
   it("deschide si inchide meniul mobil dupa navigare", async () => {
