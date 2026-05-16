@@ -7,6 +7,7 @@ import AskForHelpPage from '@/pages/AskForHelpPage'
 import AuthPage from '@/pages/AuthPage'
 import ChatPage from '@/pages/ChatPage'
 import HomePage from '@/pages/HomePage'
+import InteractionHistoryPage from '@/pages/InteractionHistoryPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import { useAuthStore } from '@/store/authStore'
@@ -46,6 +47,14 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'despre-noi', element: <AboutPage /> },
+      {
+        path: 'istoric-interactiuni',
+        element: (
+          <RequireAuthenticatedUser>
+            <InteractionHistoryPage />
+          </RequireAuthenticatedUser>
+        ),
+      },
       { path: 'chat/:conversationId', element: <ChatPage /> },
       { path: 'chat', element: <ChatPage /> },
     ],
