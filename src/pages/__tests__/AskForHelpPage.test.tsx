@@ -9,7 +9,10 @@ import { useAuthStore } from "@/store/authStore"
 
 const successResponse = {
   success: true,
-  data: { id: "task-1" },
+  data: {
+    id: "task-1",
+    title: "Ridicare medicamente de la farmacie",
+  },
   message: "",
   status: 201,
   isClientError: false,
@@ -51,20 +54,121 @@ function setAuthenticatedSession() {
   })
 }
 
-describe("AskForHelpPage guest details", () => {
+describe("AskForHelpPage", () => {
+  beforeEach(() => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {})
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
-    useAuthStore.setState({
-      user: null,
-      isGuest: true,
-      sessionStatus: "ready",
-    })
     localStorage.clear()
+    setGuestSession()
     cleanup()
   })
 
+  it("pastreaza restrictiile de guest pentru optiunile rezervate userilor autentificati", () => {
+    setGuestSession()
+    render(<AskForHelpPage />)
+
+    expect(screen.getByRole("button", { name: "Fizic (doar user logat)" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Rosu (doar user logat)" })).toBeDisabled()
+  })
+
+  it("cere locatia pentru cererile fizice", async () => {
+    const user = userEvent.setup()
+    const createTaskMock = vi.spyOn(backend.tasks, "create")
+
+    setAuthenticatedSession()
+    render(<AskForHelpPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Fizic" })).toBeEnabled()
+    })
+
+    await user.type(
+      screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie"),
+      "Ridicare pachet",
+    )
+    await user.click(screen.getByRole("button", { name: "Fizic" }))
+    await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
+
+    expect(
+      await screen.findAllByText("Completeaza locatia pentru cererile fizice."),
+    ).not.toHaveLength(0)
+    expect(createTaskMock).not.toHaveBeenCalled()
+  })
+
+  it("trimite payload-ul corect catre backend si afiseaza mesajul de succes", async () => {
+    const user = userEvent.setup()
+    const createTaskMock = vi.spyOn(backend.tasks, "create").mockResolvedValue(successResponse)
+    const updateDetailsMock = vi.spyOn(backend.tasks, "updateDetails").mockResolvedValue(successResponse)
+
+    setAuthenticatedSession()
+    render(<AskForHelpPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Fizic" })).toBeEnabled()
+    })
+
+    await user.type(
+      screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie"),
+      "Ridicare medicamente de la farmacie",
+    )
+    await user.click(screen.getByRole("button", { name: "Fizic" }))
+    await user.click(screen.getByRole("button", { name: "Galben" }))
+    await user.type(
+      screen.getByPlaceholderText("Scrie orasul sau alege din lista"),
+      "Cluj-Napoca",
+    )
+    await user.type(
+      screen.getByPlaceholderText("Context suplimentar pentru voluntar"),
+      "Am nevoie de ajutor pana la ora 18:00.",
+    )
+    await user.click(screen.getByRole("button", { name: "Transport local" }))
+    await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
+
+    await waitFor(() => {
+      expect(createTaskMock).toHaveBeenCalledTimes(1)
+      expect(updateDetailsMock).toHaveBeenCalledWith("task-1", {
+        notes: "Am nevoie de ajutor pana la ora 18:00.",
+        languageNeeded: "",
+        safetyNotes: "",
+      })
+    })
+
+    expect(createTaskMock).toHaveBeenCalledWith({
+      title: "Ridicare medicamente de la farmacie",
+      description:
+        "Am nevoie de ajutor pana la ora 18:00.\n\nLocatie declarata: Cluj-Napoca\n\nSkills needed: Transport local",
+      status: "OPEN",
+      urgency: "MEDIUM",
+      category: "FACE_TO_FACE",
+      location: {
+        x: 23.5899542,
+        y: 46.769379,
+      },
+      anonymousMode: false,
+      city: "Cluj-Napoca",
+      skillsNeeded: ["Transport local"],
+    })
+
+    expect(
+      await screen.findByText("Cererea ta a fost trimisa voluntarilor!"),
+    ).toBeInTheDocument()
+    expect(screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie")).toHaveValue("")
+  })
+})
+
+describe("AskForHelpPage guest details", () => {
   beforeEach(() => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    setGuestSession()
+    localStorage.clear()
+    cleanup()
   })
 
   it("afiseaza detaliile aditionale si trimite guestSessionId cu descrierea compusa", async () => {
@@ -81,7 +185,10 @@ describe("AskForHelpPage guest details", () => {
       screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie"),
       "Ajutor online",
     )
-    await user.type(screen.getByPlaceholderText("Context suplimentar pentru voluntar"), "Am nevoie de context")
+    await user.type(
+      screen.getByPlaceholderText("Context suplimentar pentru voluntar"),
+      "Am nevoie de context",
+    )
     await user.type(screen.getByPlaceholderText("Ex: romana, engleza, ucraineana"), "engleza")
     await user.type(
       screen.getByPlaceholderText("Riscuri, acces in zona sau alte lucruri importante"),
@@ -114,7 +221,10 @@ describe("AskForHelpPage guest details", () => {
 
     expect(await screen.findByText("Cereri ramase: 0")).toBeInTheDocument()
 
-    await user.type(screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie"), "Ajutor online")
+    await user.type(
+      screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie"),
+      "Ajutor online",
+    )
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
     expect(
@@ -133,7 +243,10 @@ describe("AskForHelpPage guest details", () => {
     setGuestRequestLimit(3)
     render(<AskForHelpPage />)
 
-    await user.type(screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie"), "Ajutor online")
+    await user.type(
+      screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie"),
+      "Ajutor online",
+    )
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
     await waitFor(() => {
