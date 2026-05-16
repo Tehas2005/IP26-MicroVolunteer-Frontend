@@ -98,6 +98,7 @@ export type UpdateProfilePayloadType = Partial<CreateProfilePayloadType>
 export type TaskUrgencyType = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | string
 export type TaskStatusType =
   | 'OPEN'
+  | 'MATCHED'
   | 'ASSIGNED'
   | 'IN_PROGRESS'
   | 'COMPLETED'
@@ -116,6 +117,11 @@ export type TaskResponseType = {
   userId?: string | null
   requestedByUserId?: string | null
   helperUserId?: string | null
+  city?: string | null
+  addressText?: string | null
+  skillsNeeded?: string[] | null
+  displayName?: string | null
+  isMine?: boolean | null
   createdAt?: string
   updatedAt?: string
   details?: Record<string, unknown> | null
@@ -161,6 +167,42 @@ export type TaskListMetaType = {
 export type PaginatedTaskListType = {
   data: TaskResponseType[]
   meta?: TaskListMetaType | null
+}
+
+export type NotificationRecordType = {
+  id: string | number
+  userId?: string | null
+  guestSessionId?: string | null
+  type?: string | null
+  text?: string | null
+  relatedRequestId?: string | number | null
+  relatedAssignmentId?: string | number | null
+  createdAt?: string | null
+  readAt?: string | null
+  [key: string]: unknown
+}
+
+export type NotificationListMetaType = {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  unreadCount: number
+}
+
+export type NotificationListResponseType = {
+  data: NotificationRecordType[]
+  meta?: NotificationListMetaType | null
+}
+
+export type NotificationsListFiltersType = {
+  page?: number
+  pageSize?: number
+  unreadOnly?: 'true' | 'false'
+}
+
+export type ReadAllNotificationsResponseType = {
+  updatedCount: number
 }
 
 export type DeleteTaskDetailsResponseType = {

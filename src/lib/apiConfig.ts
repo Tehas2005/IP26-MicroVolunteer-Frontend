@@ -16,3 +16,6 @@ const backendOriginEnv =
 export const backendOrigin = backendOriginEnv
   ? normalizeOrigin(backendOriginEnv)
   : DEFAULT_BACKEND_ORIGIN
+
+export const backendRealtimeOrigin =
+  import.meta.env.DEV && typeof window !== 'undefined' ? window.location.origin : backendOrigin

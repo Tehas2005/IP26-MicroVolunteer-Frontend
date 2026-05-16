@@ -10,6 +10,7 @@ import VolunteerNotificationStack from '@/components/shared/VolunteerNotificatio
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
+  extractTask,
   extractTasksList,
   isTaskOwnedByCurrentUser,
   mapTaskToLiveRequestCard,
@@ -28,15 +29,45 @@ import {
 } from '@/lib/mockHelpOffers'
 import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import {
+  buildNotificationsWebSocketUrl,
   createVolunteerNotification,
-  getVolunteerNotificationId,
+  mapNotificationRecordsToItems,
+  mapNotificationSocketFrameToItem,
   type VolunteerNotificationItem,
 } from '@/lib/volunteerNotifications'
-import type { TaskResponseType } from '@/sdk/types'
+import type { NotificationListResponseType, TaskResponseType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 
 const EMPTY_TASKS: TaskResponseType[] = []
 const EMPTY_REQUESTS: LiveRequestCardData[] = []
+
+function mergeNotifications(
+  currentNotifications: VolunteerNotificationItem[],
+  nextNotifications: VolunteerNotificationItem[],
+) {
+  if (nextNotifications.length === 0) {
+    return currentNotifications
+  }
+
+  const notificationsById = new Map<string, VolunteerNotificationItem>()
+
+  currentNotifications.forEach((notification) => {
+    notificationsById.set(notification.id, notification)
+  })
+
+  nextNotifications.forEach((notification) => {
+    notificationsById.set(notification.id, notification)
+  })
+
+  return Array.from(notificationsById.values())
+    .sort((left, right) => {
+      const leftDate = left.createdAt ? new Date(left.createdAt).getTime() : 0
+      const rightDate = right.createdAt ? new Date(right.createdAt).getTime() : 0
+
+      return leftDate - rightDate
+    })
+    .slice(-4)
+}
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -48,6 +79,8 @@ export function HomePage() {
   const [offersRevision, setOffersRevision] = useState(0)
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
+  const hasHydratedBackendNotificationsRef = useRef(false)
+  const requestLookupRef = useRef<Map<string, LiveRequestCardData>>(new Map())
 
   const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
@@ -117,11 +150,32 @@ export function HomePage() {
   const displayedVolunteerRequests = shouldUseMockLiveRequests
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
+  const shouldUseBackendNotifications =
+    sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
+
+  const requestLookup = useMemo(() => {
+    const nextLookup = new Map<string, LiveRequestCardData>()
+
+    displayedMyRequests.forEach((request) => {
+      nextLookup.set(request.id, request)
+    })
+
+    displayedVolunteerRequests.forEach((request) => {
+      nextLookup.set(request.id, request)
+    })
+
+    return nextLookup
+  }, [displayedMyRequests, displayedVolunteerRequests])
+
+  useEffect(() => {
+    requestLookupRef.current = requestLookup
+  }, [requestLookup])
 
   useEffect(() => {
     if (isGuest || sessionStatus !== 'ready') {
       seenVolunteerRequestIdsRef.current.clear()
       hasInitializedVolunteerFeedRef.current = false
+      hasHydratedBackendNotificationsRef.current = false
       setActiveNotifications((currentNotifications) =>
         currentNotifications.length === 0 ? currentNotifications : [],
       )
@@ -134,6 +188,10 @@ export function HomePage() {
       setActiveNotifications((currentNotifications) =>
         currentNotifications.length === 0 ? currentNotifications : [],
       )
+      return
+    }
+
+    if (shouldUseBackendNotifications) {
       return
     }
 
@@ -169,7 +227,88 @@ export function HomePage() {
 
       return [...currentNotifications, ...nextNotifications].slice(-4)
     })
-  }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
+  }, [
+    isGuest,
+    sessionStatus,
+    shouldUseBackendNotifications,
+    shouldUseMockLiveRequests,
+    volunteerFeedRequests,
+  ])
+
+  const { data: unreadNotificationsPayload = null, isSuccess: hasLoadedUnreadNotifications } =
+    useQuery({
+      queryKey: ['unread-volunteer-notifications', authUser?.id],
+      enabled: shouldUseBackendNotifications,
+      queryFn: async () => {
+        const response = await backend.notifications.list({
+          page: 1,
+          pageSize: 20,
+          unreadOnly: 'true',
+        })
+
+        if (!response.success) {
+          throw new Error(response.message || 'Nu am putut încărca notificările.')
+        }
+
+        return response.data as NotificationListResponseType | null
+      },
+    })
+
+  const unreadNotificationItems = useMemo(
+    () => mapNotificationRecordsToItems(unreadNotificationsPayload, requestLookup),
+    [requestLookup, unreadNotificationsPayload],
+  )
+
+  useEffect(() => {
+    if (!shouldUseBackendNotifications) {
+      hasHydratedBackendNotificationsRef.current = false
+      return
+    }
+
+    if (!hasLoadedUnreadNotifications || hasHydratedBackendNotificationsRef.current) {
+      return
+    }
+
+    hasHydratedBackendNotificationsRef.current = true
+    setActiveNotifications((currentNotifications) =>
+      mergeNotifications(currentNotifications, unreadNotificationItems),
+    )
+  }, [
+    hasLoadedUnreadNotifications,
+    shouldUseBackendNotifications,
+    unreadNotificationItems,
+  ])
+
+  useEffect(() => {
+    if (!shouldUseBackendNotifications) {
+      return
+    }
+
+    const socket = new WebSocket(buildNotificationsWebSocketUrl())
+
+    socket.onmessage = (event) => {
+      if (typeof event.data !== 'string') {
+        return
+      }
+
+      const nextNotification = mapNotificationSocketFrameToItem(
+        event.data,
+        requestLookupRef.current,
+      )
+
+      if (!nextNotification) {
+        return
+      }
+
+      setActiveNotifications((currentNotifications) =>
+        mergeNotifications(currentNotifications, [nextNotification]),
+      )
+    }
+
+    return () => {
+      socket.close()
+    }
+  }, [shouldUseBackendNotifications])
 
   const displayedMyRequestsWithOfferSummary = useMemo(() => {
     void offersRevision
@@ -241,11 +380,47 @@ export function HomePage() {
   }, [])
 
   const handleNotificationOpen = useCallback(
-    (request: LiveRequestCardData) => {
-      handleNotificationDismiss(getVolunteerNotificationId(request.id))
+    async (notification: VolunteerNotificationItem) => {
+      handleNotificationDismiss(notification.id)
+
+      if (shouldUseBackendNotifications) {
+        await backend.notifications.markAsRead(notification.id)
+      }
+
+      if (notification.request) {
+        handleVolunteerRequestOpen(notification.request)
+        return
+      }
+
+      if (!notification.relatedRequestId) {
+        return
+      }
+
+      const response = await backend.tasks.getById(notification.relatedRequestId)
+
+      if (!response.success) {
+        return
+      }
+
+      const task = extractTask(response.data)
+
+      if (!task) {
+        return
+      }
+
+      const request = mapTaskToLiveRequestCard(task, {
+        currentUserName: authUser?.name,
+        isOwnedByCurrentUser: false,
+      })
+
       handleVolunteerRequestOpen(request)
     },
-    [handleNotificationDismiss, handleVolunteerRequestOpen],
+    [
+      authUser?.name,
+      handleNotificationDismiss,
+      handleVolunteerRequestOpen,
+      shouldUseBackendNotifications,
+    ],
   )
 
   return (

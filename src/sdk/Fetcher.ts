@@ -219,7 +219,8 @@ export class Fetcher {
     if (!payload) return null
     if (typeof payload === 'string') return payload
     if (typeof payload === 'object' && payload !== null) {
-      const message = 'message' in payload ? payload.message : null
+      const message =
+        ('message' in payload ? payload.message : null) ?? ('error' in payload ? payload.error : null)
       return typeof message === 'string' ? message : null
     }
     return null
