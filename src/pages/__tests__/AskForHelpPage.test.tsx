@@ -9,7 +9,7 @@ import { useAuthStore } from "@/store/authStore"
 
 const successResponse = {
   success: true,
-  data: { data: { id: "task-1" } },
+  data: { id: "task-1" },
   message: "",
   status: 201,
   isClientError: false,
