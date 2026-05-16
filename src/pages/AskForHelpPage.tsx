@@ -9,7 +9,7 @@ import { getGuestSessionId } from '@/lib/guestSession'
 import { extractCreatedTaskId, rememberCreatedTaskId } from '@/lib/liveRequests'
 import {
   buildRequestDetailsPayload,
-  hasCompleteRequestDetails,
+  hasRequestDetailsInput,
   type RequestDetailsPayload,
 } from '@/lib/requestDetails'
 import {
@@ -165,6 +165,14 @@ function getValidationErrors(data: unknown): ValidationErrorItem[] {
       typeof error.field === 'string' &&
       typeof error.message === 'string',
   )
+}
+
+function getTaskSubmitErrorMessage(response: { isUnauthorized: boolean; message: string | null }) {
+  if (response.isUnauthorized) {
+    return 'Nu am putut trimite cererea ca vizitator momentan. Te rugam sa te autentifici sau incearca din nou mai tarziu.'
+  }
+
+  return response.message || 'Nu am putut trimite cererea catre backend. Incearca din nou.'
 }
 
 const askForHelpStyles = `
@@ -1043,13 +1051,13 @@ export function AskForHelpPage() {
           return
         }
 
-        setError(response.message || 'Nu am putut trimite cererea catre backend. Incearca din nou.')
+        setError(getTaskSubmitErrorMessage(response))
         return
       }
 
       const createdTaskId = extractCreatedTaskId(response.data)
 
-      if (!isGuest && createdTaskId && hasCompleteRequestDetails(requestDetails)) {
+      if (!isGuest && createdTaskId && hasRequestDetailsInput(requestDetails)) {
         const detailsResponse = await backend.tasks.updateDetails(createdTaskId, requestDetails)
 
         if (!detailsResponse.success) {

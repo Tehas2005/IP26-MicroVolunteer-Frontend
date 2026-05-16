@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   buildRequestDetailsPayload,
-  hasCompleteRequestDetails,
+  hasRequestDetailsInput,
 } from "@/lib/requestDetails"
 
 describe("requestDetails", () => {
@@ -14,14 +14,18 @@ describe("requestDetails", () => {
     })
   })
 
-  it("pastreaza campurile completate si verifica payload complet", () => {
-    const payload = buildRequestDetailsPayload("  context  ", " engleza ", " acces seara ")
+  it("pastreaza campurile completate si marcheaza payload-ul cu input partial", () => {
+    const payload = buildRequestDetailsPayload("  context  ", " ", " acces seara ")
 
     expect(payload).toEqual({
       notes: "context",
-      languageNeeded: "engleza",
+      languageNeeded: "",
       safetyNotes: "acces seara",
     })
-    expect(hasCompleteRequestDetails(payload)).toBe(true)
+    expect(hasRequestDetailsInput(payload)).toBe(true)
+  })
+
+  it("nu marcheaza payload-ul gol ca detalii de salvat", () => {
+    expect(hasRequestDetailsInput(buildRequestDetailsPayload("", " ", "   "))).toBe(false)
   })
 })

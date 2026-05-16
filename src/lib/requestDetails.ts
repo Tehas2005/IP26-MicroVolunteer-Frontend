@@ -16,8 +16,8 @@ export function buildRequestDetailsPayload(
   }
 }
 
-export function hasCompleteRequestDetails(requestDetails: RequestDetailsPayload) {
+export function hasRequestDetailsInput(requestDetails: RequestDetailsPayload) {
   return Boolean(
-    requestDetails.notes && requestDetails.languageNeeded && requestDetails.safetyNotes,
+    requestDetails.notes || requestDetails.languageNeeded || requestDetails.safetyNotes,
   )
 }
