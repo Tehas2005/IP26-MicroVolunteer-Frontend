@@ -121,4 +121,85 @@ describe('AcceptVolunteerModal', () => {
       expect(screen.getByRole('button', { name: 'Refuza' })).toBeEnabled()
     })
   })
+
+  it('resets loading state after modal closes and reopens', async () => {
+    const action = deferred()
+    const user = userEvent.setup()
+    const onAccept = vi.fn(() => action.promise)
+    const onDecline = vi.fn()
+
+    const { rerender } = render(
+      <AcceptVolunteerModal
+        averageRating={4.6}
+        isOpen
+        onAccept={onAccept}
+        onDecline={onDecline}
+        volunteerName="Elena"
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Accepta ajutorul' }))
+    expect(screen.getByRole('button', { name: /Se confirma/i })).toBeDisabled()
+
+    rerender(
+      <AcceptVolunteerModal
+        averageRating={4.6}
+        isOpen={false}
+        onAccept={onAccept}
+        onDecline={onDecline}
+        volunteerName="Elena"
+      />,
+    )
+
+    rerender(
+      <AcceptVolunteerModal
+        averageRating={4.6}
+        isOpen
+        onAccept={onAccept}
+        onDecline={onDecline}
+        volunteerName="Elena"
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Accepta ajutorul' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Refuza' })).toBeEnabled()
+
+    action.resolve()
+  })
+
+  it('resets loading state when modal switches to another volunteer', async () => {
+    const action = deferred()
+    const user = userEvent.setup()
+    const onAccept = vi.fn(() => action.promise)
+    const onDecline = vi.fn()
+
+    const { rerender } = render(
+      <AcceptVolunteerModal
+        averageRating={4.2}
+        isOpen
+        onAccept={onAccept}
+        onDecline={onDecline}
+        volunteerName="Ioana"
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Accepta ajutorul' }))
+    expect(screen.getByRole('button', { name: /Se confirma/i })).toBeDisabled()
+
+    rerender(
+      <AcceptVolunteerModal
+        averageRating={5}
+        isOpen
+        onAccept={onAccept}
+        onDecline={onDecline}
+        volunteerName="Matei"
+      />,
+    )
+
+    expect(screen.getByText('Matei')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Accepta ajutorul' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Refuza' })).toBeEnabled()
+
+    action.resolve()
+  })
 })

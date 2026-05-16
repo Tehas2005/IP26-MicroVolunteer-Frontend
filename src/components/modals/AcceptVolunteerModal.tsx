@@ -1,5 +1,6 @@
 import { Loader2, Star } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 type PendingAction = 'accept' | 'decline' | null
 
@@ -19,6 +20,10 @@ export function AcceptVolunteerModal({
   onDecline,
 }: AcceptVolunteerModalProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+
+  useEffect(() => {
+    setPendingAction(null)
+  }, [averageRating, isOpen, volunteerName])
 
   if (!isOpen) {
     return null
@@ -43,9 +48,9 @@ export function AcceptVolunteerModal({
     }
   }
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm"
+      className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm"
       data-testid="accept-volunteer-overlay"
     >
       <div
@@ -124,6 +129,12 @@ export function AcceptVolunteerModal({
       </div>
     </div>
   )
+
+  if (typeof document === 'undefined') {
+    return modalContent
+  }
+
+  return createPortal(modalContent, document.body)
 }
 
 export default AcceptVolunteerModal
