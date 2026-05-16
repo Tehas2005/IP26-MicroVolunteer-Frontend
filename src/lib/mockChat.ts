@@ -417,6 +417,9 @@ export function ensureMockConversationForAcceptedOffer(
   seed: ChatRequestSeed,
   requesterIdentity: ChatViewerIdentity,
   volunteer: MatchedVolunteerSeed,
+  options?: {
+    preferredConversationId?: string | null
+  },
 ): Conversation {
   const state = readState()
   const requesterKey = seed.requesterKey?.trim() || `guest-request:${seed.id}`
@@ -433,7 +436,7 @@ export function ensureMockConversationForAcceptedOffer(
 
   const now = new Date().toISOString()
   const nextConversation: StoredConversation = {
-    id: crypto.randomUUID(),
+    id: options?.preferredConversationId?.trim() || crypto.randomUUID(),
     requestId: seed.id,
     requestTitle: seed.title?.trim() || 'Cerere fără titlu',
     requesterKey,
