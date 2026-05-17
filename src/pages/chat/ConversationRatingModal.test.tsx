@@ -36,7 +36,25 @@ describe('ConversationRatingModal', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Te rugam sa acorzi cel putin o stea')
   })
 
-  it('trimite rating-ul selectat impreuna cu targetUserId', () => {
+  it('afiseaza eroare daca lipseste comentariul', () => {
+    render(
+      <ConversationRatingModal
+        isOpen
+        targetName="Ana"
+        targetUserId="user:ana"
+        viewerRole="volunteer"
+        onSkip={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '4 stele' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Trimite Evaluarea' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Te rugam sa adaugi un scurt comentariu')
+  })
+
+  it('trimite rating-ul selectat impreuna cu comentariul si targetUserId', () => {
     const handleSubmit = vi.fn()
 
     render(
@@ -51,8 +69,11 @@ describe('ConversationRatingModal', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: '4 stele' }))
+    fireEvent.change(screen.getByLabelText('Comentariu'), {
+      target: { value: 'A fost foarte de ajutor.' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Trimite Evaluarea' }))
 
-    expect(handleSubmit).toHaveBeenCalledWith(4, 'user:ana')
+    expect(handleSubmit).toHaveBeenCalledWith(4, 'A fost foarte de ajutor.', 'user:ana')
   })
 })

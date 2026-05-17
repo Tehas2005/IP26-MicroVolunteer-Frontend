@@ -85,8 +85,12 @@ describe('HomePage request details navigation', () => {
   beforeEach(() => {
     navigateMock.mockReset()
     useAuthStore.setState({
-      user: null,
-      isGuest: true,
+      user: {
+        id: 'volunteer-1',
+        name: 'Voluntar Test',
+        email: 'volunteer@example.com',
+      },
+      isGuest: false,
       sessionStatus: 'ready',
     })
   })

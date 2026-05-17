@@ -1,37 +1,28 @@
 import type { Fetcher } from './Fetcher'
 import type {
   ApiResponse,
-  NotificationListResponseType,
-  NotificationRecordType,
-  NotificationsListFiltersType,
-  ReadAllNotificationsResponseType,
+  NotificationFiltersType,
+  NotificationMarkAllReadResponseType,
+  NotificationResponseType,
+  PaginatedNotificationListType,
 } from './types'
 
 export class NotificationsFetcher {
   constructor(private readonly fetcher: Fetcher) {}
 
   public list(
-    filters?: NotificationsListFiltersType,
-  ): Promise<ApiResponse<NotificationListResponseType>> {
-    return this.fetcher.get<NotificationListResponseType>('/api/notifications', {
+    filters?: NotificationFiltersType,
+  ): Promise<ApiResponse<PaginatedNotificationListType>> {
+    return this.fetcher.get<PaginatedNotificationListType>('/api/notifications', {
       query: filters,
-      suppressUnauthorizedEvent: true,
     })
   }
 
-  public markAsRead(id: string): Promise<ApiResponse<NotificationRecordType>> {
-    return this.fetcher.patch<NotificationRecordType>(`/api/notifications/${id}/read`, undefined, {
-      suppressUnauthorizedEvent: true,
-    })
+  public markRead(id: string): Promise<ApiResponse<NotificationResponseType>> {
+    return this.fetcher.patch<NotificationResponseType>(`/api/notifications/${id}/read`)
   }
 
-  public markAllAsRead(): Promise<ApiResponse<ReadAllNotificationsResponseType>> {
-    return this.fetcher.patch<ReadAllNotificationsResponseType>(
-      '/api/notifications/read-all',
-      undefined,
-      {
-        suppressUnauthorizedEvent: true,
-      },
-    )
+  public markAllRead(): Promise<ApiResponse<NotificationMarkAllReadResponseType>> {
+    return this.fetcher.patch<NotificationMarkAllReadResponseType>('/api/notifications/read-all')
   }
 }

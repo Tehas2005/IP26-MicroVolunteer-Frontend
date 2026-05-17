@@ -4,30 +4,50 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { backend } from '@/lib/backend'
 import { ProfilePage } from '@/pages/ProfilePage'
+import type { ApiResponse } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
-const profileResponse = {
-  success: true,
-  data: { hiddenIdentity: false },
-  message: '',
-  status: 200,
-  isClientError: false,
-  isServerError: false,
-  isNotFound: false,
-  isUnauthorized: false,
-  isForbidden: false,
+function createSuccessResponse<T>(data: T): ApiResponse<T> {
+  return {
+    success: true,
+    data,
+    message: '',
+    status: 200,
+    isClientError: false,
+    isServerError: false,
+    isNotFound: false,
+    isUnauthorized: false,
+    isForbidden: false,
+  }
 }
 
-function setAuthenticatedSession() {
+function createNotFoundResponse<T>(): ApiResponse<T> {
+  return {
+    success: false,
+    data: null,
+    message: 'Volunteer profile not found',
+    status: 404,
+    isClientError: true,
+    isServerError: false,
+    isNotFound: true,
+    isUnauthorized: false,
+    isForbidden: false,
+  }
+}
+
+function setAuthenticatedSession(role?: string | null) {
   useAuthStore.setState({
     user: {
       id: 'user-1',
       name: 'Ion Socol',
       email: 'ion@example.com',
+      role: role ?? null,
     },
     isGuest: false,
     sessionStatus: 'ready',
+    volunteerStatus: 'unknown',
+    knownVolunteerUserIds: {},
   })
 }
 
@@ -36,6 +56,8 @@ function resetStores() {
     user: null,
     isGuest: true,
     sessionStatus: 'ready',
+    volunteerStatus: 'unknown',
+    knownVolunteerUserIds: {},
   })
   useVolunteerProfileStore.setState({
     profilesByUserId: {},
@@ -56,8 +78,16 @@ describe('ProfilePage volunteer profile', () => {
   beforeEach(() => {
     resetStores()
     localStorage.clear()
-    vi.spyOn(backend.profile, 'getByUserId').mockResolvedValue(profileResponse)
-    vi.spyOn(backend.profile, 'updateMe').mockResolvedValue(profileResponse)
+    vi.spyOn(backend.profile, 'create').mockResolvedValue(createSuccessResponse({ hiddenIdentity: false }))
+    vi.spyOn(backend.profile, 'updateMe').mockResolvedValue(createSuccessResponse({ hiddenIdentity: false }))
+    vi.spyOn(backend.users, 'becomeVolunteer').mockResolvedValue(createSuccessResponse({ success: true }))
+    vi.spyOn(backend.volunteers, 'getMeProfile').mockResolvedValue(createNotFoundResponse())
+    vi.spyOn(backend.volunteers, 'createMeProfile').mockResolvedValue(
+      createSuccessResponse({ hiddenIdentity: false }),
+    )
+    vi.spyOn(backend.volunteers, 'updateMeProfile').mockResolvedValue(
+      createSuccessResponse({ hiddenIdentity: false }),
+    )
   })
 
   afterEach(() => {
@@ -82,21 +112,56 @@ describe('ProfilePage volunteer profile', () => {
     expect(screen.getByRole('button', { name: 'Salveaza Profilul' })).toBeInTheDocument()
   })
 
+  it('afiseaza direct setarile cand sesiunea spune ca userul este deja voluntar', async () => {
+    setAuthenticatedSession('volunteer')
+
+    render(<ProfilePage />)
+
+    expect(screen.getByRole('heading', { name: 'Setari profil voluntar' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Incepe acum' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Salveaza Profilul' })).toBeInTheDocument()
+  })
+
+  it('pastreaza ecranul de voluntar dupa relogare daca userul este deja cunoscut local ca voluntar', async () => {
+    setAuthenticatedSession()
+    useAuthStore.setState({
+      knownVolunteerUserIds: {
+        'user-1': true,
+      },
+    })
+
+    render(<ProfilePage />)
+
+    expect(screen.getByRole('heading', { name: 'Setari profil voluntar' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Incepe acum' })).not.toBeInTheDocument()
+  })
+
   it('hidrateaza skillurile salvate si pastreaza salvarea prin backend', async () => {
     const user = userEvent.setup()
-    const getProfileSpy = vi.mocked(backend.profile.getByUserId).mockResolvedValueOnce({
-      ...profileResponse,
-      data: { hiddenIdentity: true },
-    })
-    const updateProfileSpy = vi.mocked(backend.profile.updateMe)
+    const getVolunteerProfileSpy = vi.mocked(backend.volunteers.getMeProfile)
+      .mockResolvedValueOnce(
+        createSuccessResponse({
+          hiddenIdentity: true,
+          city: 'Cluj-Napoca',
+          skills: ['transport'],
+        }),
+      )
+      .mockResolvedValue(
+        createSuccessResponse({
+          hiddenIdentity: true,
+          city: 'Cluj-Napoca',
+          skills: ['transport'],
+        }),
+      )
+    const updateVolunteerProfileSpy = vi.mocked(backend.volunteers.updateMeProfile)
 
-    setAuthenticatedSession()
+    setAuthenticatedSession('volunteer')
     localStorage.setItem('mvcr-profile-skills:user-1', JSON.stringify(['transport']))
     render(<ProfilePage />)
 
-    expect(getProfileSpy).toHaveBeenCalledWith('user-1')
-
-    await user.click(screen.getByRole('button', { name: 'Incepe acum' }))
+    await waitFor(() => {
+      expect(getVolunteerProfileSpy).toHaveBeenCalled()
+    })
 
     expect(await screen.findByText('transport')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ascunde identitatea' })).toHaveAttribute(
@@ -110,7 +175,13 @@ describe('ProfilePage volunteer profile', () => {
 
     await waitFor(
       () => {
-        expect(updateProfileSpy).toHaveBeenCalledWith({ hiddenIdentity: true })
+        expect(updateVolunteerProfileSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            city: 'Cluj-Napoca',
+            hiddenIdentity: true,
+            skills: ['transport'],
+          }),
+        )
         expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
           location: 'Cluj-Napoca',
           skills: ['transport'],
@@ -123,6 +194,15 @@ describe('ProfilePage volunteer profile', () => {
 
   it('creeaza profilul local de voluntar dupa completarea locatiei si abilitatilor', async () => {
     const user = userEvent.setup()
+    vi.mocked(backend.volunteers.getMeProfile)
+      .mockResolvedValueOnce(createNotFoundResponse())
+      .mockResolvedValueOnce(
+        createSuccessResponse({
+          hiddenIdentity: false,
+          city: 'Cluj-Napoca',
+          skills: ['Transport local'],
+        }),
+      )
 
     setAuthenticatedSession()
     render(<ProfilePage />)
@@ -136,17 +216,19 @@ describe('ProfilePage volunteer profile', () => {
 
     await waitFor(
       () => {
-        expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
-          userId: 'user-1',
-          location: 'Cluj-Napoca',
-          locationCoordinates: { x: 23.5899542, y: 46.769379 },
-          skills: ['Transport local'],
-          hiddenIdentity: false,
-        })
+        expect(backend.users.becomeVolunteer).toHaveBeenCalled()
+        expect(backend.volunteers.createMeProfile).toHaveBeenCalledWith(
+          expect.objectContaining({
+            city: 'Cluj-Napoca',
+            skills: ['Transport local'],
+            hiddenIdentity: false,
+          }),
+        )
+        expect(useAuthStore.getState().volunteerStatus).toBe('volunteer')
+        expect(screen.getByRole('heading', { name: 'Setari profil voluntar' })).toBeInTheDocument()
       },
-      { timeout: 2500 },
+      { timeout: 4000 },
     )
-    expect(await screen.findByText('Profilul de voluntar a fost creat.')).toBeInTheDocument()
   })
 
   it('cere selectarea unui oras din lista', async () => {
@@ -163,10 +245,10 @@ describe('ProfilePage volunteer profile', () => {
     expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toBeUndefined()
   })
 
-  it('sterge profilul local doar dupa confirmarea renuntarii', async () => {
+  it('afiseaza confirmarea de renuntare fara sa stearga profilul local daca backendul nu are endpoint dedicat', async () => {
     const user = userEvent.setup()
 
-    setAuthenticatedSession()
+    setAuthenticatedSession('volunteer')
     useVolunteerProfileStore.setState({
       profilesByUserId: {
         'user-1': {
@@ -198,10 +280,12 @@ describe('ProfilePage volunteer profile', () => {
     await user.click(screen.getByRole('button', { name: 'Renunta la statutul de voluntar' }))
     await user.click(screen.getByRole('button', { name: 'Da, renunt' }))
 
-    await waitFor(() => {
-      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toBeUndefined()
-    })
+    expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toBeDefined()
     expect(document.body.style.overflow).toBe('')
-    expect(screen.getByRole('button', { name: 'Incepe acum' })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Renuntarea la statutul de voluntar nu este inca legata la un endpoint backend dedicat.',
+      ),
+    ).toBeInTheDocument()
   })
 })

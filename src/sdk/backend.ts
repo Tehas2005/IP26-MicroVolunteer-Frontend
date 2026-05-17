@@ -3,9 +3,12 @@ import { GuestFetcher } from './GuestFetcher'
 import { NotificationsFetcher } from './NotificationsFetcher'
 import { OffersFetcher } from './OffersFetcher'
 import { ProfileFetcher } from './ProfileFetcher'
+import { RatingsFetcher } from './RatingsFetcher'
 import { TasksFetcher } from './TasksFetcher'
 import { UploadsFetcher } from './UploadsFetcher'
+import { UsersFetcher } from './UsersFetcher'
 import { VolunteerProfilesFetcher } from './VolunteerProfilesFetcher'
+import { VolunteersFetcher } from './VolunteersFetcher'
 import type { Fetcher } from './Fetcher'
 
 export class Backend {
@@ -14,9 +17,12 @@ export class Backend {
   public readonly notifications: NotificationsFetcher
   public readonly offers: OffersFetcher
   public readonly profile: ProfileFetcher
+  public readonly ratings: RatingsFetcher
   public readonly tasks: TasksFetcher
   public readonly uploads: UploadsFetcher
+  public readonly users: UsersFetcher
   public readonly volunteerProfiles: VolunteerProfilesFetcher
+  public readonly volunteers: VolunteersFetcher
 
   constructor(readonly fetcher: Fetcher) {
     this.auth = new AuthFetcher(this.fetcher)
@@ -24,8 +30,11 @@ export class Backend {
     this.notifications = new NotificationsFetcher(this.fetcher)
     this.offers = new OffersFetcher(this.fetcher)
     this.profile = new ProfileFetcher(this.fetcher)
+    this.ratings = new RatingsFetcher(this.fetcher)
     this.tasks = new TasksFetcher(this.fetcher)
     this.uploads = new UploadsFetcher(this.fetcher)
+    this.users = new UsersFetcher(this.fetcher)
     this.volunteerProfiles = new VolunteerProfilesFetcher(this.fetcher)
+    this.volunteers = new VolunteersFetcher(this.fetcher)
   }
 }

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { HelpOffersInboxDialog } from '@/components/shared/HelpOffersInboxDialog'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
-import type { HelpOfferData } from '@/lib/mockHelpOffers'
+import type { HelpOfferData } from '@/lib/helpOffers'
 
 const request: LiveRequestCardData = {
   id: 'request-1',
@@ -54,7 +54,31 @@ describe('HelpOffersInboxDialog', () => {
     expect(scrollArea).toHaveClass('min-h-0')
     expect(scrollArea).toHaveClass('flex-1')
     expect(scrollArea).toHaveClass('overflow-y-auto')
-    expect(screen.getByRole('button', { name: 'Refuzată' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Acceptată' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refuzata' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Acceptata' })).toBeInTheDocument()
+  })
+
+  it('afiseaza fallback-ul pentru voluntarii fara rating', () => {
+    render(
+      <HelpOffersInboxDialog
+        offers={[
+          {
+            ...offers[0],
+            averageRating: null,
+            id: 'offer-no-rating',
+            status: 'pending',
+            volunteerName: 'Voluntar nou',
+          },
+        ]}
+        onAccept={vi.fn()}
+        onOpenChange={vi.fn()}
+        onReject={vi.fn()}
+        open
+        request={request}
+      />,
+    )
+
+    expect(screen.getByText('Fără rating')).toBeInTheDocument()
+    expect(screen.queryByText('0.0')).not.toBeInTheDocument()
   })
 })

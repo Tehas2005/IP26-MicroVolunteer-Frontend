@@ -63,7 +63,7 @@ export function UserProfilePage() {
                     <ShieldCheck className="h-6 w-6" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-brand-black">Statut voluntar</h2>
+                    <h2 className="text-xl font-bold text-brand-black">Status voluntar</h2>
                     <p className="text-sm text-brand-gray-text">
                       Configurează sau actualizează profilul de voluntar separat de pagina de cont.
                     </p>

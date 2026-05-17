@@ -1,5 +1,8 @@
 import { Clock3, Star } from 'lucide-react'
 
+import { formatHelpOfferRelativeTime, type HelpOfferData } from '@/lib/helpOffers'
+import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -8,17 +11,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { cn } from '@/lib/utils'
 
 import type { LiveRequestCardData } from './LiveRequestCard'
-import { formatHelpOfferRelativeTime, type HelpOfferData } from '@/lib/helpOffers'
 
 interface HelpOffersInboxDialogProps {
-  errorMessage?: string | null
-  isLoading?: boolean
   open: boolean
   request: LiveRequestCardData | null
   offers: HelpOfferData[]
+  busyOfferId?: string | null
+  busyAction?: 'accept' | 'reject' | null
+  errorMessage?: string | null
   onAccept: (offer: HelpOfferData) => void
   onOpenChange: (open: boolean) => void
   onReject: (offer: HelpOfferData) => void
@@ -26,26 +28,27 @@ interface HelpOffersInboxDialogProps {
 
 function getOfferStatusLabel(offer: HelpOfferData, acceptedOfferId: string | null) {
   if (offer.status === 'accepted') {
-    return 'Acceptată'
+    return 'Acceptata'
   }
 
   if (offer.status === 'rejected') {
-    return 'Refuzată'
+    return 'Refuzata'
   }
 
   if (acceptedOfferId && acceptedOfferId !== offer.id) {
-    return 'Inactivă'
+    return 'Inactiva'
   }
 
-  return 'În așteptare'
+  return 'In asteptare'
 }
 
 export function HelpOffersInboxDialog({
-  errorMessage,
-  isLoading = false,
   open,
   request,
   offers,
+  busyOfferId = null,
+  busyAction = null,
+  errorMessage,
   onAccept,
   onOpenChange,
   onReject,
@@ -69,12 +72,12 @@ export function HelpOffersInboxDialog({
               </DialogTitle>
               <DialogDescription className="text-sm leading-6 text-brand-gray-text sm:text-[0.95rem]">
                 {request?.title?.trim()
-                  ? `Alege cine preia cererea "${request.title}". După acceptare, conversația pornește automat în chat.`
-                  : 'Alege voluntarul potrivit și continuă direct în chat.'}
+                  ? `Alege cine preia cererea "${request.title}". Dupa acceptare, conversatia porneste automat in chat.`
+                  : 'Alege voluntarul potrivit si continua direct in chat.'}
               </DialogDescription>
             </div>
             <Button
-              aria-label="Închide ofertele"
+              aria-label="Inchide ofertele"
               className="shrink-0"
               onClick={() => onOpenChange(false)}
               size="icon-sm"
@@ -88,7 +91,7 @@ export function HelpOffersInboxDialog({
             <div className="mt-4 rounded-2xl border border-brand-purple/15 bg-white/80 px-4 py-3 text-sm text-brand-purple-dark">
               Ai acceptat deja oferta lui{' '}
               <span className="font-semibold">{acceptedOffer.volunteerName}</span>. Celelalte
-              răspunsuri rămân inactive.
+              raspunsuri raman inactive.
             </div>
           ) : null}
         </DialogHeader>
@@ -97,25 +100,17 @@ export function HelpOffersInboxDialog({
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
           data-testid="help-offers-scroll-area"
         >
-          {isLoading ? (
-            <div className="rounded-[28px] border border-dashed border-brand-gray bg-brand-cream/50 px-6 py-10 text-center">
-              <p className="text-base font-semibold text-brand-black">Se încarcă ofertele...</p>
-              <p className="mt-2 text-sm text-brand-gray-text">
-                Verificăm răspunsurile primite pentru această cerere.
-              </p>
+          {errorMessage ? (
+            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errorMessage}
             </div>
-          ) : errorMessage ? (
-            <div className="rounded-[28px] border border-brand-red/20 bg-brand-red/5 px-6 py-10 text-center">
-              <p className="text-base font-semibold text-brand-black">
-                Nu am putut încărca ofertele.
-              </p>
-              <p className="mt-2 text-sm text-brand-gray-text">{errorMessage}</p>
-            </div>
-          ) : offers.length === 0 ? (
+          ) : null}
+
+          {offers.length === 0 ? (
             <div className="rounded-[28px] border border-dashed border-brand-gray bg-brand-cream/50 px-6 py-10 text-center">
-              <p className="text-base font-semibold text-brand-black">Nu ai oferte încă.</p>
+              <p className="text-base font-semibold text-brand-black">Nu ai oferte inca.</p>
               <p className="mt-2 text-sm text-brand-gray-text">
-                Revino în curând pentru voluntari compatibili.
+                Revino in curand pentru voluntari compatibili.
               </p>
             </div>
           ) : (
@@ -124,8 +119,9 @@ export function HelpOffersInboxDialog({
                 const isAccepted = offer.status === 'accepted'
                 const isRejected = offer.status === 'rejected'
                 const isLocked = Boolean(acceptedOfferId && acceptedOfferId !== offer.id)
-                const disableAccept = isAccepted || isRejected || isLocked
-                const disableReject = isAccepted || isRejected || isLocked
+                const isBusy = busyOfferId === offer.id
+                const disableAccept = isAccepted || isRejected || isLocked || isBusy
+                const disableReject = isAccepted || isRejected || isLocked || isBusy
 
                 return (
                   <article
@@ -166,10 +162,17 @@ export function HelpOffersInboxDialog({
                               <Clock3 className="h-4 w-4" />
                               {formatHelpOfferRelativeTime(offer.createdAt)}
                             </span>
-                            <span className="inline-flex items-center gap-1.5 font-medium text-brand-black">
-                              <Star className="h-4 w-4 fill-[#F59E0B] text-[#F59E0B]" />
-                              {offer.averageRating.toFixed(1)}
-                            </span>
+                            {offer.averageRating === null ? (
+                              <span className="inline-flex items-center gap-1.5 font-medium text-brand-gray-text">
+                                <Star className="h-4 w-4 text-brand-gray/70" />
+                                Fără rating
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 font-medium text-brand-black">
+                                <Star className="h-4 w-4 fill-[#F59E0B] text-[#F59E0B]" />
+                                {offer.averageRating.toFixed(1)}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -186,7 +189,7 @@ export function HelpOffersInboxDialog({
 
                       {isLocked ? (
                         <p className="text-sm font-medium text-brand-gray-text">
-                          O altă ofertă a fost deja acceptată pentru această cerere.
+                          O alta oferta a fost deja acceptata pentru aceasta cerere.
                         </p>
                       ) : null}
 
@@ -197,7 +200,11 @@ export function HelpOffersInboxDialog({
                           onClick={() => onReject(offer)}
                           variant="outline"
                         >
-                          {isRejected ? 'Refuzată' : 'Refuză'}
+                          {isBusy && busyAction === 'reject'
+                            ? 'Se refuza...'
+                            : isRejected
+                              ? 'Refuzata'
+                              : 'Refuza'}
                         </Button>
                         <Button
                           className="w-full sm:min-w-[140px] sm:w-auto"
@@ -205,7 +212,11 @@ export function HelpOffersInboxDialog({
                           onClick={() => onAccept(offer)}
                           variant="auth"
                         >
-                          {isAccepted ? 'Acceptată' : 'Acceptă'}
+                          {isBusy && busyAction === 'accept'
+                            ? 'Se accepta...'
+                            : isAccepted
+                              ? 'Acceptata'
+                              : 'Accepta'}
                         </Button>
                       </div>
                     </div>

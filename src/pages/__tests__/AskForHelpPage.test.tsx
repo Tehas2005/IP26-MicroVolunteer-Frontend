@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { backend } from "@/lib/backend"
+import { setGuestRequestLimit } from "@/lib/guestRequestLimit"
 import { AskForHelpPage } from "@/pages/AskForHelpPage"
 import { useAuthStore } from "@/store/authStore"
 
@@ -238,15 +239,16 @@ describe("AskForHelpPage guest details", () => {
     expect(authCreateSpy).not.toHaveBeenCalled()
     expect(createSpy).toHaveBeenCalledWith("550e8400-e29b-41d4-a716-446655440000", {
       title: "Ajutor online",
-      description:
-        "Am nevoie de context\n\nLimba necesara: engleza\n\nSiguranta: bloc fara lift",
+      description: "Am nevoie de context",
+      audioUrl: undefined,
       urgency: "LOW",
       location: {
         x: 24.96676,
         y: 45.943161,
       },
       city: undefined,
-      skillsNeeded: undefined,
+      addressText: undefined,
+      skillsNeeded: [],
       notes: "Am nevoie de context",
       languageNeeded: "engleza",
       safetyNotes: "bloc fara lift",
@@ -255,9 +257,10 @@ describe("AskForHelpPage guest details", () => {
 
   it("blocheaza submit-ul pentru guest cand limita este zero", async () => {
     const user = userEvent.setup()
-    vi.mocked(backend.guest.listTasks).mockResolvedValue(guestTasksResponse(3))
     const createSpy = vi.spyOn(backend.guest, "createTask").mockResolvedValue(successResponse)
 
+    localStorage.setItem("mvcr-guest-session-id", "550e8400-e29b-41d4-a716-446655440000")
+    setGuestRequestLimit(0)
     setGuestSession()
     render(<AskForHelpPage />)
 
@@ -270,9 +273,7 @@ describe("AskForHelpPage guest details", () => {
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
     expect(
-      await screen.findByText(
-        "ai atins limita de cereri pentru un cont de vizitator. te rugam sa creezi un cont gratuit!",
-      ),
+      await screen.findByText(/ai atins limita de cereri pentru un cont de vizitator/i),
     ).toBeInTheDocument()
     expect(createSpy).not.toHaveBeenCalled()
   })
@@ -291,7 +292,7 @@ describe("AskForHelpPage guest details", () => {
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledTimes(2)
+      expect(createSpy).toHaveBeenCalledTimes(1)
     })
 
     expect(
@@ -299,17 +300,16 @@ describe("AskForHelpPage guest details", () => {
         "Nu am putut trimite cererea ca vizitator momentan. Te rugam sa te autentifici sau incearca din nou mai tarziu.",
       ),
     ).toBeInTheDocument()
-    expect(backend.guest.createSession).toHaveBeenCalledTimes(2)
+    expect(backend.guest.createSession).toHaveBeenCalledTimes(1)
     expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument()
     expect(screen.getByText("Cereri ramase: 3")).toBeInTheDocument()
   })
 
-  it("regenereaza sesiunea guest expirata si retrimite cererea o singura data", async () => {
+  it("afiseaza mesajul de eroare daca sesiunea guest este expirata la submit", async () => {
     const user = userEvent.setup()
     const createSpy = vi
       .spyOn(backend.guest, "createTask")
-      .mockResolvedValueOnce(unauthorizedResponse)
-      .mockResolvedValueOnce(successResponse)
+      .mockResolvedValue(unauthorizedResponse)
 
     localStorage.setItem("mvcr-guest-session-id", "11111111-1111-4111-8111-111111111111")
     setGuestSession()
@@ -324,30 +324,24 @@ describe("AskForHelpPage guest details", () => {
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledTimes(2)
+      expect(createSpy).toHaveBeenCalledTimes(1)
     })
 
-    expect(createSpy).toHaveBeenNthCalledWith(
-      1,
+    expect(createSpy).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
       expect.objectContaining({
         title: "Ajutor online",
       }),
     )
-    expect(createSpy).toHaveBeenNthCalledWith(
-      2,
-      "550e8400-e29b-41d4-a716-446655440000",
-      expect.objectContaining({
-        title: "Ajutor online",
-      }),
-    )
-    expect(backend.guest.createSession).toHaveBeenCalledTimes(1)
+    expect(backend.guest.createSession).not.toHaveBeenCalled()
     expect(
-      await screen.findByText("Cererea ta a fost trimisa voluntarilor!"),
+      await screen.findByText(
+        "Nu am putut trimite cererea ca vizitator momentan. Te rugam sa te autentifici sau incearca din nou mai tarziu.",
+      ),
     ).toBeInTheDocument()
   })
 
-  it("blocheaza detaliile aditionale partiale pentru utilizator autentificat", async () => {
+  it("trimite si detaliile aditionale partiale pentru utilizator autentificat", async () => {
     const user = userEvent.setup()
     const createSpy = vi.spyOn(backend.tasks, "create").mockResolvedValue(successResponse)
     const updateDetailsSpy = vi.spyOn(backend.tasks, "updateDetails").mockResolvedValue(successResponse)
@@ -365,13 +359,14 @@ describe("AskForHelpPage guest details", () => {
     )
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
-    expect(
-      await screen.findByText(
-        "Completeaza toate campurile de detalii aditionale sau lasa-le pe toate goale.",
-      ),
-    ).toBeInTheDocument()
-    expect(createSpy).not.toHaveBeenCalled()
-    expect(updateDetailsSpy).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledTimes(1)
+      expect(updateDetailsSpy).toHaveBeenCalledWith("task-1", {
+        notes: "Am nevoie de context",
+        languageNeeded: "",
+        safetyNotes: "",
+      })
+    })
   })
 
   it("trimite detaliile complete pentru utilizator autentificat", async () => {

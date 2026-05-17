@@ -19,6 +19,7 @@ describe("InteractionHistoryList", () => {
             date: "2026-05-04T14:30:00.000Z",
             summary: "Ai oferit sprijin pentru completarea unui formular local.",
             rating: 5,
+            comment: "A fost foarte calm si de ajutor.",
           },
         ]}
       />,
@@ -28,6 +29,8 @@ describe("InteractionHistoryList", () => {
       screen.getByText("Ai oferit sprijin pentru completarea unui formular local."),
     ).toBeInTheDocument()
     expect(screen.getByText("5/5")).toBeInTheDocument()
+    expect(screen.getByText("Mesaj din review")).toBeInTheDocument()
+    expect(screen.getByText("A fost foarte calm si de ajutor.")).toBeInTheDocument()
   })
 
   it("afiseaza fallback pentru rezumat lipsa", () => {

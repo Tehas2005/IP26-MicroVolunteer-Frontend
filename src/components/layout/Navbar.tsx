@@ -108,15 +108,19 @@ export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const navigate = useNavigate()
-  const { isGuest, user, clearAuthSession } = useAuthStore()
-  const volunteerProfile = useVolunteerProfileStore((state) =>
+  const { isGuest, clearAuthSession, user, volunteerStatus, knownVolunteerUserIds } = useAuthStore()
+  const localVolunteerProfile = useVolunteerProfileStore((state) =>
     user?.id ? state.profilesByUserId[user.id] : undefined,
   )
+  const isKnownVolunteerUser = Boolean(user?.id && knownVolunteerUserIds[user.id])
 
   const displayedNavActions: NavAction[] = [
     navActions[0],
     {
-      label: volunteerProfile ? 'Setari profil voluntar' : 'Vreau sa devin voluntar!',
+      label:
+        volunteerStatus === 'volunteer' || localVolunteerProfile || isKnownVolunteerUser
+          ? 'Setari profil voluntar'
+          : 'Vreau sa devin voluntar!',
       path: '/devino-voluntar',
       type: 'link',
       visibility: 'authenticated-only',

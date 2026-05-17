@@ -1,56 +1,114 @@
-import type { NotificationListResponseType, NotificationRecordType } from '@/sdk/types'
+import type {
+  NotificationRecordType,
+  NotificationResponseType,
+  PaginatedNotificationListType,
+} from '@/sdk/types'
 
-type ResponseEnvelope<T> = {
-  data?: T | null
+type NotificationSocketEnvelope = {
+  data?: unknown
+  type?: unknown
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function readEnvelopeData<T>(payload: unknown): T | null {
-  if (!isRecord(payload) || !('data' in payload)) {
-    return null
+function normalizeString(value: unknown) {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim()
   }
 
-  return (payload as ResponseEnvelope<T>).data ?? null
+  if (typeof value === 'number') {
+    return String(value)
+  }
+
+  return ''
 }
 
-export function extractNotificationsList(payload: unknown): NotificationRecordType[] {
-  if (!isRecord(payload)) {
-    return []
+function parsePayload(payload: unknown): unknown {
+  if (typeof payload !== 'string') {
+    return payload
   }
 
-  const directPayload = payload as NotificationListResponseType
-
-  if (Array.isArray(directPayload.data)) {
-    return directPayload.data.filter(isRecord) as NotificationRecordType[]
-  }
-
-  const nestedPayload = readEnvelopeData<unknown>(payload)
-
-  if (
-    !isRecord(nestedPayload) ||
-    !Array.isArray((nestedPayload as NotificationListResponseType).data)
-  ) {
-    return []
-  }
-
-  return ((nestedPayload as NotificationListResponseType).data ?? []).filter(
-    isRecord,
-  ) as NotificationRecordType[]
-}
-
-export function parseNotificationSocketFrame(payload: string): NotificationRecordType | null {
   try {
-    const parsed = JSON.parse(payload)
-
-    if (!isRecord(parsed) || parsed.type !== 'NOTIFICATION' || !isRecord(parsed.data)) {
-      return null
-    }
-
-    return parsed.data as NotificationRecordType
+    return JSON.parse(payload)
   } catch {
     return null
   }
+}
+
+export function extractNotificationPayload(payload: unknown): NotificationResponseType | null {
+  const parsedPayload = parsePayload(payload)
+
+  if (isRecord(parsedPayload) && 'id' in parsedPayload) {
+    return parsedPayload as NotificationResponseType
+  }
+
+  if (!isRecord(parsedPayload)) {
+    return null
+  }
+
+  const envelope = parsedPayload as NotificationSocketEnvelope
+
+  if (
+    normalizeString(envelope.type).toUpperCase() === 'NOTIFICATION' &&
+    isRecord(envelope.data) &&
+    'id' in envelope.data
+  ) {
+    return envelope.data as NotificationResponseType
+  }
+
+  if (isRecord(envelope.data)) {
+    return extractNotificationPayload(envelope.data)
+  }
+
+  return null
+}
+
+export function parseNotificationSocketFrame(payload: string) {
+  return extractNotificationPayload(payload)
+}
+
+export function extractNotificationsList(payload: unknown): NotificationRecordType[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord) as NotificationRecordType[]
+  }
+
+  const parsedPayload = parsePayload(payload)
+
+  if (!isRecord(parsedPayload)) {
+    return []
+  }
+
+  const directData = (parsedPayload as PaginatedNotificationListType).data
+
+  if (Array.isArray(directData)) {
+    return directData.filter(isRecord) as NotificationRecordType[]
+  }
+
+  if (isRecord(directData)) {
+    const nestedData = (directData as PaginatedNotificationListType).data
+
+    if (Array.isArray(nestedData)) {
+      return nestedData.filter(isRecord) as NotificationRecordType[]
+    }
+  }
+
+  return []
+}
+
+export function readNotificationId(notification: NotificationResponseType) {
+  return normalizeString(notification.id)
+}
+
+export function readNotificationTaskId(notification: NotificationResponseType) {
+  return normalizeString(notification.relatedRequestId)
+}
+
+export function readNotificationText(notification: NotificationResponseType) {
+  return normalizeString(notification.text)
+}
+
+export function readNotificationType(notification: NotificationResponseType) {
+  return normalizeString(notification.type).toUpperCase()
 }

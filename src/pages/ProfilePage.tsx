@@ -10,6 +10,7 @@ import {
 } from '@/lib/romania-city-coordinates'
 import { COMMON_SKILL_SUGGESTIONS } from '@/lib/skillSuggestions'
 import { readHiddenIdentityFromResponse } from '@/pages/profile/utils'
+import type { CreateProfilePayloadType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
@@ -26,8 +27,128 @@ function resolveVolunteerLocation(location: string): TaskLocationPayload | null 
   return ROMANIA_CITY_COORDINATES[normalizedLocation] ?? null
 }
 
+function normalizeString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
+
+function normalizeId(value: unknown) {
+  if (typeof value === 'number') {
+    return String(value)
+  }
+
+  return normalizeString(value)
+}
+
+function readVolunteerLocationFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return ''
+  }
+
+  const candidate = payload as Record<string, unknown>
+
+  return (
+    normalizeString(candidate.city) ||
+    normalizeString(candidate.location) ||
+    normalizeString(candidate.addressText)
+  )
+}
+
+function readVolunteerSkillsFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return []
+  }
+
+  const candidate = payload as Record<string, unknown>
+  const directSkills = candidate.skills
+  const skillsNeeded = candidate.skillsNeeded
+  const languages = candidate.languages
+
+  const rawValues = [directSkills, skillsNeeded, languages].find((value) => Array.isArray(value))
+
+  if (!Array.isArray(rawValues)) {
+    return []
+  }
+
+  return rawValues
+    .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+    .map((value) => value.trim())
+}
+
+function readProfileIdFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return ''
+  }
+
+  const candidate = payload as Record<string, unknown>
+  const directId = normalizeId(candidate.id) || normalizeId(candidate.profileId)
+
+  if (directId) {
+    return directId
+  }
+
+  const nestedData = candidate.data
+
+  if (nestedData && typeof nestedData === 'object') {
+    const nestedCandidate = nestedData as Record<string, unknown>
+    return normalizeId(nestedCandidate.id) || normalizeId(nestedCandidate.profileId)
+  }
+
+  return ''
+}
+
+function indicatesExistingVolunteer(message: string | null | undefined) {
+  if (!message) {
+    return false
+  }
+
+  return /already exists|already a volunteer|volunteer already exists|user already exists/i.test(
+    message,
+  )
+}
+
+function buildGeneralProfilePayload(name: string, hiddenIdentity: boolean): CreateProfilePayloadType {
+  return {
+    name,
+    bio: 'Utilizator activ in platforma Micro-Volunteer Crisis Router.',
+    languages: ['ro'],
+    hiddenIdentity,
+  }
+}
+
+function buildVolunteerProfilePayload(options: {
+  name: string
+  city: string
+  hiddenIdentity: boolean
+  location: TaskLocationPayload
+  skills: string[]
+  profileId?: string
+}): CreateProfilePayloadType {
+  const { name, city, hiddenIdentity, location, skills, profileId } = options
+
+  return {
+    ...(profileId ? { profileId } : {}),
+    name,
+    displayName: name,
+    bio: `Voluntar disponibil in ${city}. Abilitati: ${skills.join(', ')}.`,
+    city,
+    languages: ['ro'],
+    hiddenIdentity,
+    location,
+    skills,
+    skillsNeeded: skills,
+  }
+}
+
+function readAuthUserRole(user: { role?: string | null } | null | undefined) {
+  return typeof user?.role === 'string' ? user.role.trim().toLowerCase() : ''
+}
+
 export function ProfilePage() {
   const authUser = useAuthStore((state) => state.user)
+  const volunteerStatus = useAuthStore((state) => state.volunteerStatus)
+  const knownVolunteerUserIds = useAuthStore((state) => state.knownVolunteerUserIds)
+  const setVolunteerStatus = useAuthStore((state) => state.setVolunteerStatus)
+  const rememberVolunteerUser = useAuthStore((state) => state.rememberVolunteerUser)
   const volunteerProfile = useVolunteerProfileStore((state) =>
     authUser?.id ? state.profilesByUserId[authUser.id] : undefined,
   )
@@ -45,8 +166,17 @@ export function ProfilePage() {
   const [saveMessage, setSaveMessage] = useState('')
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [isLocationListOpen, setIsLocationListOpen] = useState(false)
+  const [hasBackendVolunteerProfile, setHasBackendVolunteerProfile] = useState(false)
+  const hasVolunteerRole = readAuthUserRole(authUser) === 'volunteer'
+  const isKnownVolunteerUser = Boolean(authUser?.id && knownVolunteerUserIds[authUser.id])
 
-  const isExistingVolunteer = Boolean(volunteerProfile)
+  const isExistingVolunteer = Boolean(
+    volunteerProfile ||
+      hasBackendVolunteerProfile ||
+      volunteerStatus === 'volunteer' ||
+      hasVolunteerRole ||
+      isKnownVolunteerUser,
+  )
   const pageTitle = isExistingVolunteer ? 'Setari profil voluntar' : 'Devino voluntar'
   const selectedLocationCoordinates = resolveVolunteerLocation(location)
 
@@ -73,11 +203,27 @@ export function ProfilePage() {
       return
     }
 
+    if (
+      hasBackendVolunteerProfile ||
+      volunteerStatus === 'volunteer' ||
+      hasVolunteerRole ||
+      isKnownVolunteerUser
+    ) {
+      setIsFormVisible(true)
+      return
+    }
+
     setIsFormVisible(false)
     setLocation('')
     setIsLocationListOpen(false)
     setIsConfirmModalOpen(false)
-  }, [volunteerProfile])
+  }, [
+    hasBackendVolunteerProfile,
+    hasVolunteerRole,
+    isKnownVolunteerUser,
+    volunteerProfile,
+    volunteerStatus,
+  ])
 
   useEffect(() => {
     if (!isConfirmModalOpen) {
@@ -129,15 +275,47 @@ export function ProfilePage() {
           return
         }
 
-        const profileResponse = await backend.profile.getByUserId(authUser.id)
+        const volunteerResponse = await backend.volunteers.getMeProfile()
 
         if (!isMounted) {
           return
         }
 
-        if (profileResponse.success) {
-          setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
-        } else if (!profileResponse.isNotFound && profileResponse.message) {
+        if (volunteerResponse.success) {
+          setHasBackendVolunteerProfile(true)
+          setVolunteerStatus('volunteer')
+          rememberVolunteerUser(authUser.id)
+          setHiddenIdentity(readHiddenIdentityFromResponse(volunteerResponse.data))
+
+          const volunteerLocation = readVolunteerLocationFromPayload(volunteerResponse.data)
+          const volunteerSkills = readVolunteerSkillsFromPayload(volunteerResponse.data)
+
+          if (!volunteerProfile) {
+            if (volunteerLocation) {
+              setLocation(volunteerLocation)
+            }
+
+            if (volunteerSkills.length > 0) {
+              setSkills(volunteerSkills)
+            }
+          }
+        } else {
+          setHasBackendVolunteerProfile(false)
+          const shouldKeepVolunteerStatus = Boolean(
+            volunteerProfile ||
+              volunteerStatus === 'volunteer' ||
+              hasVolunteerRole ||
+              isKnownVolunteerUser,
+          )
+
+          setVolunteerStatus(shouldKeepVolunteerStatus ? 'volunteer' : 'not-volunteer')
+
+          if (volunteerResponse.isNotFound && authUser?.id && volunteerProfile && !hasVolunteerRole) {
+            deleteVolunteerProfile(authUser.id)
+          }
+        }
+
+        if (!volunteerResponse.success && !volunteerResponse.isNotFound && volunteerResponse.message) {
           setSaveError('Nu am reusit sa incarcam setarile profilului.')
         }
       } catch {
@@ -157,7 +335,17 @@ export function ProfilePage() {
     return () => {
       isMounted = false
     }
-  }, [authUser?.id, skillsStorageKey, volunteerProfile])
+  }, [
+    authUser?.id,
+    deleteVolunteerProfile,
+    hasVolunteerRole,
+    isKnownVolunteerUser,
+    rememberVolunteerUser,
+    volunteerStatus,
+    setVolunteerStatus,
+    skillsStorageKey,
+    volunteerProfile,
+  ])
 
   useEffect(() => {
     if (!skillsStorageKey || !hasHydratedProfile) {
@@ -181,10 +369,28 @@ export function ProfilePage() {
     setSaveError('')
     setSaveMessage('')
 
+    if (!authUser?.id || !isExistingVolunteer || !selectedLocationCoordinates) {
+      return
+    }
+
     try {
-      const response = await backend.profile.updateMe({ hiddenIdentity: nextValue })
+      const response = await backend.volunteers.updateMeProfile(
+        buildVolunteerProfilePayload({
+          name: authUser.name,
+          city: location.trim(),
+          hiddenIdentity: nextValue,
+          location: selectedLocationCoordinates,
+          skills: normalizedSkills,
+        }),
+      )
 
       if (response.success) {
+        upsertVolunteerProfile(authUser.id, {
+          location: location.trim(),
+          locationCoordinates: selectedLocationCoordinates,
+          skills: normalizedSkills,
+          hiddenIdentity: nextValue,
+        })
         return
       }
     } catch {
@@ -230,43 +436,133 @@ export function ProfilePage() {
       window.localStorage.setItem(skillsStorageKey, JSON.stringify(skills))
     }
 
-    const response = await backend.profile.updateMe({ hiddenIdentity })
-
-    if (!response.success) {
-      setIsSaving(false)
-      setSaveError('Nu am reusit sa salvam profilul. Incearca din nou.')
-      return
-    }
-
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, SAVE_DELAY_MS)
-    })
-
-    upsertVolunteerProfile(authUser.id, {
-      location: trimmedLocation,
-      locationCoordinates: selectedLocationCoordinates,
-      skills: normalizedSkills,
+    const generalProfilePayload = buildGeneralProfilePayload(authUser.name, hiddenIdentity)
+    const volunteerProfilePayload = buildVolunteerProfilePayload({
+      name: authUser.name,
+      city: trimmedLocation,
       hiddenIdentity,
+      location: selectedLocationCoordinates,
+      skills: normalizedSkills,
     })
 
-    setIsSaving(false)
-    setSaveMessage(
-      isExistingVolunteer
-        ? 'Setarile profilului au fost actualizate.'
-        : 'Profilul de voluntar a fost creat.',
-    )
+    try {
+      const initialProfileResponse = hasBackendVolunteerProfile
+        ? await backend.profile.updateMe(generalProfilePayload)
+        : await backend.profile.create(generalProfilePayload)
+
+      const profileResponse =
+        !initialProfileResponse.success && !hasBackendVolunteerProfile
+          ? await backend.profile.updateMe(generalProfilePayload)
+          : initialProfileResponse
+
+      if (!profileResponse.success) {
+        setSaveError(profileResponse.message || 'Nu am reusit sa salvam profilul. Incearca din nou.')
+        return
+      }
+
+      const profileId = readProfileIdFromPayload(profileResponse.data)
+
+      if (!hasBackendVolunteerProfile) {
+        const becomeVolunteerResponse = await backend.users.becomeVolunteer()
+
+        if (!becomeVolunteerResponse.success && !indicatesExistingVolunteer(becomeVolunteerResponse.message)) {
+          setSaveError(
+            becomeVolunteerResponse.message ||
+              'Profilul general a fost salvat, dar nu am putut activa statutul de voluntar.',
+          )
+          return
+        }
+
+        setVolunteerStatus('volunteer')
+        rememberVolunteerUser(authUser.id)
+      }
+
+      const volunteerProfileResponse = hasBackendVolunteerProfile
+        ? await backend.volunteers.updateMeProfile({
+            ...volunteerProfilePayload,
+            ...(profileId ? { profileId } : {}),
+          })
+        : await backend.volunteers.createMeProfile({
+            ...volunteerProfilePayload,
+            ...(profileId ? { profileId } : {}),
+          })
+
+      const persistedVolunteerProfileResponse =
+        !volunteerProfileResponse.success && !hasBackendVolunteerProfile
+          ? await backend.volunteers.updateMeProfile({
+              ...volunteerProfilePayload,
+              ...(profileId ? { profileId } : {}),
+            })
+          : volunteerProfileResponse
+
+      if (!persistedVolunteerProfileResponse.success) {
+        setHasBackendVolunteerProfile(false)
+        setVolunteerStatus('volunteer')
+        rememberVolunteerUser(authUser.id)
+        upsertVolunteerProfile(authUser.id, {
+          location: trimmedLocation,
+          locationCoordinates: selectedLocationCoordinates,
+          skills: normalizedSkills,
+          hiddenIdentity,
+        })
+        setSaveError(
+          persistedVolunteerProfileResponse.message ||
+            'Statutul de voluntar a fost activat, dar profilul de voluntar nu a putut fi salvat.',
+        )
+        return
+      }
+
+      const volunteerResponse = await backend.volunteers.getMeProfile()
+
+      if (!volunteerResponse.success) {
+        setHasBackendVolunteerProfile(false)
+        setVolunteerStatus('volunteer')
+        rememberVolunteerUser(authUser.id)
+        upsertVolunteerProfile(authUser.id, {
+          location: trimmedLocation,
+          locationCoordinates: selectedLocationCoordinates,
+          skills: normalizedSkills,
+          hiddenIdentity,
+        })
+        setSaveError(
+          volunteerResponse.message ||
+            'Profilul a fost salvat, dar backendul nu confirma inca statutul de voluntar.',
+        )
+        return
+      }
+
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, SAVE_DELAY_MS)
+      })
+
+      setHasBackendVolunteerProfile(true)
+      setVolunteerStatus('volunteer')
+      rememberVolunteerUser(authUser.id)
+      upsertVolunteerProfile(authUser.id, {
+        location: trimmedLocation,
+        locationCoordinates: selectedLocationCoordinates,
+        skills: normalizedSkills,
+        hiddenIdentity,
+      })
+
+      setSaveMessage(
+        isExistingVolunteer
+          ? 'Setarile profilului au fost actualizate.'
+          : 'Profilul de voluntar a fost creat.',
+      )
+    } catch {
+      setSaveError('Nu am reusit sa salvam profilul. Incearca din nou.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   function handleConfirmOptOut() {
-    if (!authUser) {
-      return
-    }
-
-    deleteVolunteerProfile(authUser.id)
-    setIsConfirmModalOpen(false)
-    setIsLocationListOpen(false)
-    setSaveError('')
+    setSaveError(
+      'Renuntarea la statutul de voluntar nu este inca legata la un endpoint backend dedicat.',
+    )
     setSaveMessage('')
+    setIsConfirmModalOpen(false)
   }
 
   return (

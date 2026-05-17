@@ -9,7 +9,7 @@ export interface HelpOfferData {
   requestId: string
   volunteerKey: string
   volunteerName: string
-  averageRating: number
+  averageRating: number | null
   createdAt: string
   message: string
   status: HelpOfferStatus

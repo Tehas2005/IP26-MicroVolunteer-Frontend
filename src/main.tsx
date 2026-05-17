@@ -7,9 +7,14 @@ import { createAuthClient } from 'better-auth/client'
 import { emailOTPClient } from 'better-auth/client/plugins'
 
 import { AuthSessionBootstrap } from '@/components/shared/AuthSessionBootstrap'
+import { backendOrigin } from '@/lib/apiConfig'
 import router from '@/router'
 
 import './index.css'
+
+if (typeof window !== 'undefined') {
+  window.localStorage.removeItem('mvcr-mock-chat-store')
+}
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
@@ -35,10 +40,9 @@ Sentry.init({
   debug: true,
 });
 export const authClient = createAuthClient({
-  baseURL: import.meta.env.VITE_SERVER_URL,
-  plugins: [emailOTPClient()]
+  baseURL: backendOrigin,
+  plugins: [emailOTPClient()],
 })
-console.log(import.meta.env.VITE_SERVER_URL)
 const queryClient = new QueryClient()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
