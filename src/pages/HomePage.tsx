@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
-import AcceptVolunteerModal from '@/components/modals/AcceptVolunteerModal'
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
 import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
@@ -45,18 +44,12 @@ const EMPTY_REQUESTS: LiveRequestCardData[] = []
 const EMPTY_OFFERS: HelpOfferData[] = []
 const FALLBACK_OFFERS_SUMMARY = 'Apasă pentru a vedea ofertele primite.'
 
-type OfferDecisionState = {
-  offer: HelpOfferData
-  request: LiveRequestCardData
-}
-
 export function HomePage() {
   const navigate = useNavigate()
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
-  const [offerDecisionState, setOfferDecisionState] = useState<OfferDecisionState | null>(null)
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
   const [offersRevision, setOffersRevision] = useState(0)
   const [offerActionErrorMessage, setOfferActionErrorMessage] = useState<string | null>(null)
@@ -301,7 +294,6 @@ export function HomePage() {
 
   const handleMyRequestOpen = useCallback((request: LiveRequestCardData) => {
     setOfferActionErrorMessage(null)
-    setOfferDecisionState(null)
     setSelectedMyRequestId(request.id)
   }, [])
 
@@ -313,9 +305,6 @@ export function HomePage() {
 
       if (shouldUseMockLiveRequests) {
         updateMockHelpOfferStatus(offer.requestId, offer.id, 'rejected')
-        setOfferDecisionState((currentState) =>
-          currentState?.offer.id === offer.id ? null : currentState,
-        )
         setOffersRevision((currentValue) => currentValue + 1)
         return
       }
@@ -328,9 +317,6 @@ export function HomePage() {
       }
 
       setOfferActionErrorMessage(null)
-      setOfferDecisionState((currentState) =>
-        currentState?.offer.id === offer.id ? null : currentState,
-      )
       setOffersRevision((currentValue) => currentValue + 1)
       void refetchSelectedOffers()
     },
@@ -338,38 +324,21 @@ export function HomePage() {
   )
 
   const handleOfferAccept = useCallback(
-    (offer: HelpOfferData) => {
+    async (offer: HelpOfferData) => {
       if (!selectedMyRequest) {
         return
       }
 
-      setOfferActionErrorMessage(null)
-      setOfferDecisionState({
-        offer,
-        request: selectedMyRequest,
-      })
-      setSelectedMyRequestId(null)
-    },
-    [selectedMyRequest],
-  )
-
-  const handleOfferDecisionAccept = useCallback(
-    async () => {
-      if (!offerDecisionState) {
-        return
-      }
-
       if (shouldUseMockLiveRequests) {
-        updateMockHelpOfferStatus(offerDecisionState.request.id, offerDecisionState.offer.id, 'accepted')
-        setOfferDecisionState(null)
+        updateMockHelpOfferStatus(selectedMyRequest.id, offer.id, 'accepted')
         setOffersRevision((currentValue) => currentValue + 1)
 
         const conversation = ensureMockConversationForAcceptedOffer(
-          offerDecisionState.request,
+          selectedMyRequest,
           resolveChatViewerIdentity(authUser),
           {
-            volunteerKey: offerDecisionState.offer.volunteerKey,
-            volunteerName: offerDecisionState.offer.volunteerName,
+            volunteerKey: offer.volunteerKey,
+            volunteerName: offer.volunteerName,
           },
         )
 
@@ -377,69 +346,34 @@ export function HomePage() {
         return
       }
 
-      const response = await backend.offers.updateStatus(offerDecisionState.offer.id, {
-        status: 'ACCEPTED',
-      })
+      const response = await backend.offers.updateStatus(offer.id, { status: 'ACCEPTED' })
 
       if (!response.success) {
         setOfferActionErrorMessage(response.message || 'Nu am putut accepta oferta selectată.')
-        setSelectedMyRequestId(offerDecisionState.request.id)
-        setOfferDecisionState(null)
         return
       }
 
       setOfferActionErrorMessage(null)
-      setOfferDecisionState(null)
       setOffersRevision((currentValue) => currentValue + 1)
 
       const redirectMeta = extractOfferRedirectMeta(response.data)
 
       const conversation = ensureMockConversationForAcceptedOffer(
-        offerDecisionState.request,
+        selectedMyRequest,
         resolveChatViewerIdentity(authUser),
         {
-          volunteerKey: offerDecisionState.offer.volunteerKey,
-          volunteerName: offerDecisionState.offer.volunteerName,
+          volunteerKey: offer.volunteerKey,
+          volunteerName: offer.volunteerName,
         },
         {
-          preferredConversationId: redirectMeta.conversationId ?? redirectMeta.helpRequestId,
+          preferredConversationId: redirectMeta.conversationId,
         },
       )
 
       navigate(`/chat/${conversation.id}`)
     },
-    [authUser, navigate, offerDecisionState, shouldUseMockLiveRequests],
+    [authUser, navigate, selectedMyRequest, shouldUseMockLiveRequests],
   )
-
-  const handleOfferDecisionReject = useCallback(async () => {
-    if (!offerDecisionState) {
-      return
-    }
-
-    if (shouldUseMockLiveRequests) {
-      updateMockHelpOfferStatus(offerDecisionState.request.id, offerDecisionState.offer.id, 'rejected')
-      setOffersRevision((currentValue) => currentValue + 1)
-      setSelectedMyRequestId(offerDecisionState.request.id)
-      setOfferDecisionState(null)
-      return
-    }
-
-    const response = await backend.offers.updateStatus(offerDecisionState.offer.id, {
-      status: 'REJECTED',
-    })
-
-    if (!response.success) {
-      setOfferActionErrorMessage(response.message || 'Nu am putut refuza oferta selectată.')
-      setSelectedMyRequestId(offerDecisionState.request.id)
-      setOfferDecisionState(null)
-      return
-    }
-
-    setOfferActionErrorMessage(null)
-    setOffersRevision((currentValue) => currentValue + 1)
-    setSelectedMyRequestId(offerDecisionState.request.id)
-    setOfferDecisionState(null)
-  }, [offerDecisionState, shouldUseMockLiveRequests])
 
   const handleNotificationDismiss = useCallback((notificationId: string) => {
     setActiveNotifications((currentNotifications) =>
@@ -538,29 +472,12 @@ export function HomePage() {
         onAccept={handleOfferAccept}
         onOpenChange={(open) => {
           if (!open) {
-            setOfferDecisionState(null)
             setSelectedMyRequestId(null)
           }
         }}
         onReject={handleOfferReject}
         open={selectedMyRequest !== null}
         request={selectedMyRequest}
-      />
-
-      <AcceptVolunteerModal
-        averageRating={offerDecisionState?.offer.averageRating ?? 0}
-        isOpen={offerDecisionState !== null}
-        onClose={() => {
-          if (!offerDecisionState) {
-            return
-          }
-
-          setSelectedMyRequestId(offerDecisionState.request.id)
-          setOfferDecisionState(null)
-        }}
-        onAccept={handleOfferDecisionAccept}
-        onDecline={handleOfferDecisionReject}
-        volunteerName={offerDecisionState?.offer.volunteerName ?? ''}
       />
     </div>
   )
