@@ -1,8 +1,20 @@
 import type { Fetcher } from './Fetcher'
-import type { ApiResponse, OfferResponseType, OfferStatusPayloadType } from './types'
+import type {
+  ApiResponse,
+  OfferResponseType,
+  OfferStatusPayloadType,
+  OfferSubmissionPayloadType,
+} from './types'
 
 export class OffersFetcher {
   constructor(private readonly fetcher: Fetcher) {}
+
+  public createForTask(
+    taskId: string,
+    payload: OfferSubmissionPayloadType,
+  ): Promise<ApiResponse<OfferResponseType>> {
+    return this.fetcher.post<OfferResponseType>(`/api/tasks/${taskId}/offers`, payload)
+  }
 
   public updateStatus(
     id: string,

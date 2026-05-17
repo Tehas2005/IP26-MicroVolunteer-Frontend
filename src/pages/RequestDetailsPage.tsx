@@ -10,6 +10,7 @@ import {
   StickyNote,
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -20,9 +21,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { backend } from '@/lib/backend'
 import {
   extractTaskResponseData,
+  mapOfferSubmitErrorMessage,
   readRequestDetails,
   readTaskAudioUrl,
   readTaskCategoryLabel,
@@ -69,6 +72,10 @@ export function RequestDetailsPage() {
   )
   const [isAccessDialogOpen, setIsAccessDialogOpen] = useState(false)
   const [isOfferDialogOpen, setIsOfferDialogOpen] = useState(false)
+  const [offerMessage, setOfferMessage] = useState('')
+  const [offerError, setOfferError] = useState<string | null>(null)
+  const [isSubmittingOffer, setIsSubmittingOffer] = useState(false)
+  const [hasMarkedTaskUnavailable, setHasMarkedTaskUnavailable] = useState(false)
 
   const {
     data: task,
@@ -112,7 +119,7 @@ export function RequestDetailsPage() {
   const declaredLocation = useMemo(() => readTaskDeclaredLocation(task), [task])
   const neededSkills = useMemo(() => readTaskNeededSkills(task), [task])
   const title = task?.title?.trim() || 'Cerere fără titlu'
-  const isTaskUnavailable = Boolean(task?.status && task.status !== 'OPEN')
+  const isTaskUnavailable = hasMarkedTaskUnavailable || Boolean(task?.status && task.status !== 'OPEN')
   const isVolunteer = Boolean(volunteerProfile)
   const shouldDisableHelpAction = isTaskUnavailable
 
@@ -139,7 +146,58 @@ export function RequestDetailsPage() {
   }
 
   function handleOfferDialogChange(nextOpen: boolean) {
+    if (!nextOpen && isSubmittingOffer) {
+      return
+    }
+
+    if (!nextOpen) {
+      setOfferMessage('')
+      setOfferError(null)
+    }
+
     setIsOfferDialogOpen(nextOpen)
+  }
+
+  async function handleOfferSubmit() {
+    if (!taskId || shouldDisableHelpAction || isSubmittingOffer) {
+      return
+    }
+
+    const normalizedMessage = offerMessage.trim()
+
+    if (!normalizedMessage) {
+      setOfferError('Mesajul de introducere este obligatoriu.')
+      return
+    }
+
+    setIsSubmittingOffer(true)
+    setOfferError(null)
+
+    try {
+      const response = await backend.offers.createForTask(taskId, {
+        message: normalizedMessage,
+      })
+
+      if (!response.success) {
+        const mappedError = mapOfferSubmitErrorMessage(response.message)
+
+        if (response.message === 'HelpRequest is not OPEN') {
+          setHasMarkedTaskUnavailable(true)
+        }
+
+        setOfferError(mappedError)
+        return
+      }
+
+      setOfferMessage('')
+      setOfferError(null)
+      setIsOfferDialogOpen(false)
+      toast.success('Oferta ta a fost trimisă. Așteaptă răspunsul utilizatorului!')
+    } catch {
+      setOfferError('Nu am putut trimite oferta de ajutor. Încearcă din nou.')
+    } finally {
+      setIsSubmittingOffer(false)
+    }
   }
 
   return (
@@ -353,31 +411,53 @@ export function RequestDetailsPage() {
         <DialogContent className="rounded-[28px] p-0 sm:max-w-lg" showCloseButton={false}>
           <DialogHeader className="px-6 pt-6">
             <DialogTitle className="text-xl font-bold text-brand-black">
-              Vreau să ajut
+              Ofertă de ajutor
             </DialogTitle>
             <DialogDescription className="pt-2 text-sm leading-7 text-brand-gray-text">
-              Din această pagină se deschide fluxul de trimitere a ofertei de ajutor pentru
-              cererea selectată.
+              Lasă un mesaj scurt prin care te prezinți și explici cum poți interveni pentru
+              această cerere.
             </DialogDescription>
           </DialogHeader>
 
           <div className="px-6 pb-6 pt-2">
-            <div className="rounded-[24px] border border-brand-gray/80 bg-brand-cream/60 px-5 py-5">
-              <p className="text-base font-semibold text-brand-black">Pasul următor al fluxului</p>
-              <p className="mt-3 text-sm leading-7 text-brand-gray-text">
-                Formularul complet pentru trimiterea ofertei de ajutor continuă în taskul dedicat
-                acestui pas. Pentru `FE-020`, aici validăm doar faptul că utilizatorul ajunge corect
-                din detaliile cererii în etapa următoare.
-              </p>
-            </div>
+            <label className="block text-base font-semibold text-brand-black" htmlFor="offer-message">
+              Mesaj de introducere
+            </label>
+            <Textarea
+              aria-invalid={offerError ? 'true' : 'false'}
+              className="mt-4 min-h-52 rounded-[28px] border-brand-gray/80 px-5 py-4 text-base leading-7"
+              disabled={isSubmittingOffer}
+              id="offer-message"
+              onChange={(event) => {
+                setOfferMessage(event.target.value)
+
+                if (offerError) {
+                  setOfferError(null)
+                }
+              }}
+              placeholder="Spune cine ești și cum poți ajuta concret."
+              value={offerMessage}
+            />
+
+            {offerError ? (
+              <p className="mt-4 text-sm font-medium text-brand-red">{offerError}</p>
+            ) : null}
           </div>
 
           <DialogFooter className="rounded-b-[28px] px-6">
-            <Button onClick={() => handleOfferDialogChange(false)} variant="ghost">
+            <Button
+              disabled={isSubmittingOffer}
+              onClick={() => handleOfferDialogChange(false)}
+              variant="ghost"
+            >
               Închide
             </Button>
-            <Button onClick={() => handleOfferDialogChange(false)} variant="auth">
-              Continuă
+            <Button
+              disabled={isSubmittingOffer || shouldDisableHelpAction}
+              onClick={handleOfferSubmit}
+              variant="auth"
+            >
+              {isSubmittingOffer ? 'Trimitem oferta...' : 'Trimite oferta de ajutor'}
             </Button>
           </DialogFooter>
         </DialogContent>

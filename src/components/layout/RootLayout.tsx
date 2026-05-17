@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 
+import { Toaster } from '@/components/ui/sonner'
 import { Footer } from './Footer'
 import { Navbar } from './Navbar'
 import { ChatFab } from '@/pages/chat/ChatFab'
@@ -13,6 +14,7 @@ export function RootLayout() {
       </main>
       <Footer />
       <ChatFab />
+      <Toaster position="top-right" richColors />
     </div>
   )
 }
