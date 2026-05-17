@@ -3,10 +3,15 @@ import type { TaskCategoryType, TaskResponseType, TaskUrgencyType } from '@/sdk/
 export const UNSPECIFIED_REQUEST_DETAIL = 'Nespecificat'
 
 const AUDIO_DESCRIPTION_PATTERN = /AUDIOCONTENT[:\s-]*(https?:\/\/\S+)/i
-const LANGUAGE_PATTERN = /(?:^|\n)Limba necesara:\s*(.+?)(?=\n|$)/i
-const SAFETY_PATTERN = /(?:^|\n)Siguranta:\s*(.+?)(?=\n|$)/i
-const LOCATION_PATTERN = /(?:^|\n)Locatie declarata:\s*(.+?)(?=\n|$)/i
-const SKILLS_PATTERN = /(?:^|\n)(?:Skills needed|Abilitati necesare):\s*(.+?)(?=\n|$)/i
+const LOCATION_DESCRIPTION_PATTERN = /Locatie declarata:\s*(.+)/i
+const LOCATION_DESCRIPTION_PATTERN_WITH_DIACRITICS = /Locație declarată:\s*(.+)/i
+const LANGUAGE_DESCRIPTION_PATTERN = /Limba necesara:\s*(.+)/i
+const LANGUAGE_DESCRIPTION_PATTERN_WITH_DIACRITICS = /Limbă necesară:\s*(.+)/i
+const SAFETY_DESCRIPTION_PATTERN = /Siguranta:\s*(.+)/i
+const SAFETY_DESCRIPTION_PATTERN_WITH_DIACRITICS = /Siguranță:\s*(.+)/i
+const SKILLS_DESCRIPTION_PATTERN = /Skills needed:\s*(.+)/i
+const ROMANIAN_SKILLS_DESCRIPTION_PATTERN = /Abilitati necesare:\s*(.+)/i
+const ROMANIAN_SKILLS_DESCRIPTION_PATTERN_WITH_DIACRITICS = /Abilități necesare:\s*(.+)/i
 
 export type RequestDetailsPayload = {
   notes?: string
@@ -26,11 +31,6 @@ type TaskUrgencyMeta = {
   label: string
 }
 
-type RequestSummary = {
-  location: string
-  skills: string[]
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -39,23 +39,42 @@ function readTrimmedString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function matchDescriptionField(description: string | null, pattern: RegExp) {
+function readMetadataValue(description: string | null, ...patterns: RegExp[]): string | null {
   if (!description) {
     return null
   }
 
-  const matchedValue = description.match(pattern)?.[1]
-  return readTrimmedString(matchedValue)
+  for (const pattern of patterns) {
+    const matchedValue = description.match(pattern)?.[1]
+    const normalizedValue = readTrimmedString(matchedValue)
+
+    if (normalizedValue) {
+      return normalizedValue
+    }
+  }
+
+  return null
 }
 
-function removeDescriptionMetadata(description: string) {
+function removeMetadataLines(description: string) {
   return description
-    .replace(AUDIO_DESCRIPTION_PATTERN, '')
-    .replace(LANGUAGE_PATTERN, '')
-    .replace(SAFETY_PATTERN, '')
-    .replace(LOCATION_PATTERN, '')
-    .replace(SKILLS_PATTERN, '')
-    .replace(/\n{3,}/g, '\n\n')
+    .split(/\n+/)
+    .map((line) => line.replace(AUDIO_DESCRIPTION_PATTERN, '').trim())
+    .filter(Boolean)
+    .filter(
+      (line) =>
+        !AUDIO_DESCRIPTION_PATTERN.test(line) &&
+        !LANGUAGE_DESCRIPTION_PATTERN.test(line) &&
+        !LANGUAGE_DESCRIPTION_PATTERN_WITH_DIACRITICS.test(line) &&
+        !SAFETY_DESCRIPTION_PATTERN.test(line) &&
+        !SAFETY_DESCRIPTION_PATTERN_WITH_DIACRITICS.test(line) &&
+        !LOCATION_DESCRIPTION_PATTERN.test(line) &&
+        !LOCATION_DESCRIPTION_PATTERN_WITH_DIACRITICS.test(line) &&
+        !SKILLS_DESCRIPTION_PATTERN.test(line) &&
+        !ROMANIAN_SKILLS_DESCRIPTION_PATTERN.test(line) &&
+        !ROMANIAN_SKILLS_DESCRIPTION_PATTERN_WITH_DIACRITICS.test(line),
+    )
+    .join('\n\n')
     .trim()
 }
 
@@ -100,11 +119,19 @@ export function readRequestDetails(task: TaskResponseType | null | undefined) {
       UNSPECIFIED_REQUEST_DETAIL,
     languageNeeded:
       readTrimmedString(rawDetails.languageNeeded) ??
-      matchDescriptionField(description, LANGUAGE_PATTERN) ??
+      readMetadataValue(
+        description,
+        LANGUAGE_DESCRIPTION_PATTERN,
+        LANGUAGE_DESCRIPTION_PATTERN_WITH_DIACRITICS,
+      ) ??
       UNSPECIFIED_REQUEST_DETAIL,
     safetyNotes:
       readTrimmedString(rawDetails.safetyNotes) ??
-      matchDescriptionField(description, SAFETY_PATTERN) ??
+      readMetadataValue(
+        description,
+        SAFETY_DESCRIPTION_PATTERN,
+        SAFETY_DESCRIPTION_PATTERN_WITH_DIACRITICS,
+      ) ??
       UNSPECIFIED_REQUEST_DETAIL,
   }
 }
@@ -134,7 +161,7 @@ export function readTaskTextDescription(task: TaskResponseType | null | undefine
     return null
   }
 
-  const cleanedDescription = removeDescriptionMetadata(description)
+  const cleanedDescription = removeMetadataLines(description)
 
   return cleanedDescription || null
 }
@@ -145,63 +172,68 @@ export function readTaskCategoryLabel(category?: TaskCategoryType | null) {
   }
 
   if (category === 'MESSAGES_ONLY') {
-    return 'Mesaje'
+    return 'Doar mesaje'
   }
 
   return UNSPECIFIED_REQUEST_DETAIL
 }
 
-export function readRequestSummary(task: TaskResponseType | null | undefined): RequestSummary {
+export function readTaskDeclaredLocation(task: TaskResponseType | null | undefined) {
   const description = readTrimmedString(task?.description)
-  const parsedSkills =
-    matchDescriptionField(description, SKILLS_PATTERN)
-      ?.split(',')
-      .map((skill) => skill.trim())
-      .filter(Boolean) ?? []
 
-  return {
-    location:
-      readTrimmedString(task?.city) ??
-      readTrimmedString(task?.addressText) ??
-      matchDescriptionField(description, LOCATION_PATTERN) ??
-      UNSPECIFIED_REQUEST_DETAIL,
-    skills: parsedSkills,
+  return (
+    readTrimmedString(task?.city) ??
+    readTrimmedString(task?.addressText) ??
+    readMetadataValue(
+      description,
+      LOCATION_DESCRIPTION_PATTERN,
+      LOCATION_DESCRIPTION_PATTERN_WITH_DIACRITICS,
+    ) ??
+    UNSPECIFIED_REQUEST_DETAIL
+  )
+}
+
+export function readTaskNeededSkills(task: TaskResponseType | null | undefined): string[] {
+  const description = readTrimmedString(task?.description)
+  const rawSkills = readMetadataValue(
+    description,
+    SKILLS_DESCRIPTION_PATTERN,
+    ROMANIAN_SKILLS_DESCRIPTION_PATTERN,
+    ROMANIAN_SKILLS_DESCRIPTION_PATTERN_WITH_DIACRITICS,
+  )
+
+  if (!rawSkills) {
+    return []
   }
+
+  return rawSkills
+    .split(',')
+    .map((skill) => skill.trim())
+    .filter(Boolean)
 }
 
 export function mapOfferSubmitErrorMessage(message?: string | null) {
-  const normalizedMessage = message?.trim().toLowerCase()
+  const normalizedMessage = readTrimmedString(message)
 
   if (!normalizedMessage) {
     return 'Nu am putut trimite oferta de ajutor. Încearcă din nou.'
   }
 
-  if (
-    normalizedMessage.includes('volunteer already has a pending offer for this task') ||
-    normalizedMessage.includes('a pending offer already exists for this volunteer and task')
-  ) {
-    return 'Ai deja o ofertă în așteptare pentru această cerere.'
+  switch (normalizedMessage) {
+    case 'A pending offer already exists for this volunteer and task':
+    case 'Volunteer already has a pending offer for this task':
+      return 'Ai deja o ofertă în așteptare pentru această cerere.'
+    case 'HelpRequest is not OPEN':
+      return 'Această cerere de ajutor a fost deja preluată de alt voluntar.'
+    case 'Only volunteers can submit offers for tasks':
+    case 'Only volunteers can create offers':
+      return 'Doar voluntarii pot trimite oferte pentru cereri.'
+    case 'A user cannot create an offer on his own task':
+    case 'Task owner cannot create offers':
+      return 'Nu poți trimite o ofertă la propria ta cerere.'
+    default:
+      return normalizedMessage
   }
-
-  if (normalizedMessage.includes('helprequest is not open')) {
-    return 'Această cerere de ajutor a fost deja preluată de alt voluntar.'
-  }
-
-  if (
-    normalizedMessage.includes('only volunteers can create offers') ||
-    normalizedMessage.includes('only volunteers can submit offers for tasks')
-  ) {
-    return 'Doar voluntarii pot trimite oferte pentru cereri.'
-  }
-
-  if (
-    normalizedMessage.includes('task owner cannot create offers') ||
-    normalizedMessage.includes('cannot create an offer on his own task')
-  ) {
-    return 'Nu poți trimite o ofertă pentru propria ta cerere.'
-  }
-
-  return message ?? 'Nu am putut trimite oferta de ajutor. Încearcă din nou.'
 }
 
 export function readTaskUrgencyMeta(urgency?: TaskUrgencyType | null): TaskUrgencyMeta {
@@ -210,25 +242,25 @@ export function readTaskUrgencyMeta(urgency?: TaskUrgencyType | null): TaskUrgen
       return {
         accentClassName: 'bg-brand-green',
         badgeClassName: 'bg-brand-green/12 text-brand-green',
-        label: 'Urgenta scazuta',
+        label: 'Urgență scăzută',
       }
     case 'MEDIUM':
       return {
         accentClassName: 'bg-brand-orange',
         badgeClassName: 'bg-brand-orange/12 text-brand-orange',
-        label: 'Urgenta medie',
+        label: 'Urgență medie',
       }
     case 'HIGH':
       return {
         accentClassName: 'bg-brand-red/85',
         badgeClassName: 'bg-brand-red/12 text-brand-red/90',
-        label: 'Urgenta ridicata',
+        label: 'Urgență ridicată',
       }
     case 'CRITICAL':
       return {
         accentClassName: 'bg-brand-red',
         badgeClassName: 'bg-brand-red/12 text-brand-red',
-        label: 'Urgenta critica',
+        label: 'Urgență critică',
       }
     default:
       return {

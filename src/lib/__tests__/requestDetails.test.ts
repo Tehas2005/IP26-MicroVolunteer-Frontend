@@ -5,10 +5,11 @@ import type { TaskResponseType } from '@/sdk/types'
 import {
   extractTaskResponseData,
   mapOfferSubmitErrorMessage,
-  readRequestSummary,
   readRequestDetails,
   readTaskAudioUrl,
   readTaskCategoryLabel,
+  readTaskDeclaredLocation,
+  readTaskNeededSkills,
   readTaskTextDescription,
   UNSPECIFIED_REQUEST_DETAIL,
 } from '../requestDetails'
@@ -55,42 +56,39 @@ describe('requestDetails helpers', () => {
     expect(readTaskAudioUrl(task)).toBe('https://cdn.example.com/audio/request.mp3')
   })
 
-  it('removes audio markers from the visible text description', () => {
+  it('separates free text from metadata saved in the task description', () => {
     const task = {
       description:
-        'Am nevoie de sprijin la traducere. AUDIOCONTENT: https://cdn.example.com/audio/request.mp3',
+        'MERGEȚI REPEDE\n\nLimbă necesară: Română\n\nSiguranță: Nu este niciun risc, calm.\n\nLocație declarată: Iași\n\nAbilități necesare: Ridicare medicamente, Traducere',
     } as TaskResponseType
 
-    expect(readTaskTextDescription(task)).toBe('Am nevoie de sprijin la traducere.')
-  })
-
-  it('extrage sumarul cererii din descrierea compusă', () => {
-    const task = {
-      description:
-        'Arde\n\nLimba necesara: Romana\n\nSiguranta: Nu este niciun risc, calm.\n\nLocatie declarata: Iasi\n\nSkills needed: Transport local, Sprijin emotional',
-    } as TaskResponseType
-
+    expect(readTaskTextDescription(task)).toBe('MERGEȚI REPEDE')
     expect(readRequestDetails(task)).toEqual({
-      notes: 'Arde',
-      languageNeeded: 'Romana',
+      notes: 'MERGEȚI REPEDE',
+      languageNeeded: 'Română',
       safetyNotes: 'Nu este niciun risc, calm.',
     })
-    expect(readRequestSummary(task)).toEqual({
-      location: 'Iasi',
-      skills: ['Transport local', 'Sprijin emotional'],
-    })
+    expect(readTaskDeclaredLocation(task)).toBe('Iași')
+    expect(readTaskNeededSkills(task)).toEqual(['Ridicare medicamente', 'Traducere'])
   })
 
-  it('normalizeaza eticheta categoriei pentru cererile fizice', () => {
+  it('normalizes category labels for request details', () => {
     expect(readTaskCategoryLabel('FACE_TO_FACE')).toBe('Față în față')
+    expect(readTaskCategoryLabel('MESSAGES_ONLY')).toBe('Doar mesaje')
   })
 
-  it('traduce mesajele backend pentru submit-ul ofertei', () => {
+  it('translates backend errors for help offer submission', () => {
+    expect(mapOfferSubmitErrorMessage('A pending offer already exists for this volunteer and task')).toBe(
+      'Ai deja o ofertă în așteptare pentru această cerere.',
+    )
+    expect(mapOfferSubmitErrorMessage('Volunteer already has a pending offer for this task')).toBe(
+      'Ai deja o ofertă în așteptare pentru această cerere.',
+    )
     expect(mapOfferSubmitErrorMessage('HelpRequest is not OPEN')).toBe(
       'Această cerere de ajutor a fost deja preluată de alt voluntar.',
     )
-    expect(
-      mapOfferSubmitErrorMessage('A pending offer already exists for this volunteer and task'),
-    ).toBe('Ai deja o ofertă în așteptare pentru această cerere.')
+    expect(mapOfferSubmitErrorMessage('Only volunteers can create offers')).toBe(
+      'Doar voluntarii pot trimite oferte pentru cereri.',
+    )
   })
 })

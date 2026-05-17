@@ -109,7 +109,7 @@ export function RequestDetailsPage() {
     isLoading: isCheckingVolunteerAccess,
   } = useQuery({
     queryKey: ['request-details-volunteer-access', authUser?.id],
-    enabled: Boolean(authUser) && !isGuest && authUser?.role !== 'volunteer' && !volunteerProfile,
+    enabled: Boolean(authUser) && !isGuest && !volunteerProfile,
     retry: false,
     queryFn: async () => {
       const response = await backend.offers.getMine(1, 1)
@@ -126,12 +126,10 @@ export function RequestDetailsPage() {
   const neededSkills = useMemo(() => readTaskNeededSkills(task), [task])
   const title = task?.title?.trim() || 'Cerere fără titlu'
   const isTaskUnavailable = Boolean(task?.status && task.status !== 'OPEN')
-  const isVolunteer =
-    authUser?.role === 'volunteer' || Boolean(volunteerProfile) || hasVolunteerAccess
+  const isVolunteer = Boolean(volunteerProfile) || hasVolunteerAccess
   const shouldDisableHelpAction =
     isTaskUnavailable ||
     (Boolean(authUser) &&
-      authUser?.role !== 'volunteer' &&
       !volunteerProfile &&
       isCheckingVolunteerAccess)
 
@@ -344,7 +342,7 @@ export function RequestDetailsPage() {
             >
               {isTaskUnavailable
                 ? 'Cerere deja preluată'
-                : isCheckingVolunteerAccess && !volunteerProfile && authUser?.role !== 'volunteer'
+                : isCheckingVolunteerAccess && !volunteerProfile
                   ? 'Verificăm accesul...'
                   : 'Vreau să ajut'}
             </Button>
