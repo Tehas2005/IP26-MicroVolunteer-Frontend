@@ -131,10 +131,33 @@ export type TaskSubmissionPayloadType = {
   [key: string]: unknown
 }
 
-export type TaskDetailsPayloadType = {
+export type GuestSessionResponseType = {
+  sessionId?: string
+  [key: string]: unknown
+}
+
+export type GuestTaskSubmissionPayloadType = {
+  title: string
+  description?: string
+  audioUrl?: string
+  urgency?: 'LOW' | 'MEDIUM' | 'HIGH'
+  location?: {
+    x: number
+    y: number
+  }
+  city?: string
+  addressText?: string
+  skillsNeeded?: string[]
   notes?: string
   languageNeeded?: string
   safetyNotes?: string
+  [key: string]: unknown
+}
+
+export type TaskDetailsPayloadType = {
+  notes: string
+  languageNeeded: string
+  safetyNotes: string
   [key: string]: unknown
 }
 

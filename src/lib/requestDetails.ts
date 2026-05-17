@@ -21,3 +21,13 @@ export function hasRequestDetailsInput(requestDetails: RequestDetailsPayload) {
     requestDetails.notes || requestDetails.languageNeeded || requestDetails.safetyNotes,
   )
 }
+
+export function hasCompleteRequestDetailsInput(requestDetails: RequestDetailsPayload) {
+  return Boolean(
+    requestDetails.notes && requestDetails.languageNeeded && requestDetails.safetyNotes,
+  )
+}
+
+export function hasPartialRequestDetailsInput(requestDetails: RequestDetailsPayload) {
+  return hasRequestDetailsInput(requestDetails) && !hasCompleteRequestDetailsInput(requestDetails)
+}

@@ -3,14 +3,15 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { SkillTagSelector } from '@/components/shared/SkillTagSelector'
 import { backend } from '@/lib/backend'
 import {
-  decrementGuestRequestLimit,
-  getGuestRequestLimit,
-} from '@/lib/guestRequestLimit'
-import { getGuestSessionId } from '@/lib/guestSession'
-import { extractCreatedTaskId, rememberCreatedTaskId } from '@/lib/liveRequests'
+  extractGuestSessionId,
+  getStoredGuestSessionId,
+  storeGuestSessionId,
+} from '@/lib/guestSession'
+import { extractCreatedTaskId, extractTasksList, rememberCreatedTaskId } from '@/lib/liveRequests'
 import {
   buildRequestDetailsPayload,
   hasRequestDetailsInput,
+  hasPartialRequestDetailsInput,
   type RequestDetailsPayload,
 } from '@/lib/requestDetails'
 import {
@@ -21,7 +22,11 @@ import {
 } from '@/lib/romania-city-coordinates'
 import { COMMON_SKILL_SUGGESTIONS } from '@/lib/skillSuggestions'
 import { useAuthStore } from '@/store/authStore'
-import type { TaskSubmissionPayloadType, TaskUrgencyType } from '@/sdk/types'
+import type {
+  GuestTaskSubmissionPayloadType,
+  TaskSubmissionPayloadType,
+  TaskUrgencyType,
+} from '@/sdk/types'
 
 type TaskCategory = 'MESSAGES_ONLY' | 'FACE_TO_FACE'
 
@@ -41,9 +46,10 @@ type CreateTaskPayload = TaskSubmissionPayloadType & {
   anonymousMode: boolean
   location: TaskLocationPayload
   city?: string
-  guestSessionId?: string
   skillsNeeded?: string[]
 }
+
+const GUEST_ACTIVE_TASK_LIMIT = 3
 
 function mapRequestTypeToCategory(requestType: 'Online' | 'Fizic'): TaskCategory {
   return requestType === 'Fizic' ? 'FACE_TO_FACE' : 'MESSAGES_ONLY'
@@ -55,6 +61,17 @@ function mapUrgencyToBackend(urgency: 'Verde' | 'Galben' | 'Rosu'): TaskUrgencyT
       return 'MEDIUM'
     case 'Rosu':
       return 'CRITICAL'
+    default:
+      return 'LOW'
+  }
+}
+
+function mapGuestUrgencyToBackend(urgency: 'Verde' | 'Galben' | 'Rosu'): GuestTaskSubmissionPayloadType['urgency'] {
+  switch (urgency) {
+    case 'Galben':
+      return 'MEDIUM'
+    case 'Rosu':
+      return 'HIGH'
     default:
       return 'LOW'
   }
@@ -117,9 +134,13 @@ function getValidationErrors(data: unknown): ValidationErrorItem[] {
   )
 }
 
-function getTaskSubmitErrorMessage(response: { isUnauthorized: boolean; message: string | null }) {
+function getTaskSubmitErrorMessage(response: { isUnauthorized: boolean; message: string | null; status: number }) {
   if (response.isUnauthorized) {
     return 'Nu am putut trimite cererea ca vizitator momentan. Te rugam sa te autentifici sau incearca din nou mai tarziu.'
+  }
+
+  if (response.status === 429) {
+    return 'Ai atins limita de cereri active pentru un cont de vizitator. Te rugam sa astepti inchiderea unei cereri sau sa creezi un cont gratuit.'
   }
 
   return response.message || 'Nu am putut trimite cererea catre backend. Incearca din nou.'
@@ -707,7 +728,7 @@ export function AskForHelpPage() {
   const [locationTouched, setLocationTouched] = useState(false)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [guestSessionId, setGuestSessionId] = useState('')
-  const [requestLimit, setRequestLimit] = useState(0)
+  const [requestLimit, setRequestLimit] = useState(GUEST_ACTIVE_TASK_LIMIT)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
@@ -721,19 +742,73 @@ export function AskForHelpPage() {
   const audioChunksRef = useRef<Blob[]>([])
   const activeStreamRef = useRef<MediaStream | null>(null)
 
+  const refreshGuestRequestLimit = useCallback(async (sessionId: string) => {
+    const response = await backend.guest.listTasks(sessionId, {
+      page: 1,
+      pageSize: GUEST_ACTIVE_TASK_LIMIT,
+      status: 'OPEN',
+    })
+
+    if (!response.success) {
+      return
+    }
+
+    const openTasksCount = extractTasksList(response.data).length
+    setRequestLimit(Math.max(0, GUEST_ACTIVE_TASK_LIMIT - openTasksCount))
+  }, [])
+
+  const ensureGuestSession = useCallback(async () => {
+    const storedSessionId = getStoredGuestSessionId()
+
+    if (storedSessionId) {
+      setGuestSessionId(storedSessionId)
+      return storedSessionId
+    }
+
+    const response = await backend.guest.createSession()
+    const sessionId = response.success ? extractGuestSessionId(response.data) : null
+
+    if (!sessionId) {
+      return null
+    }
+
+    storeGuestSessionId(sessionId)
+    setGuestSessionId(sessionId)
+    return sessionId
+  }, [])
+
   useEffect(() => {
     setIsGuest(authIsGuest)
   }, [authIsGuest])
 
   useEffect(() => {
+    let isMounted = true
+
     if (!isGuest) {
       setGuestSessionId('')
+      setRequestLimit(0)
       return
     }
 
-    setGuestSessionId(getGuestSessionId())
-    setRequestLimit(getGuestRequestLimit())
-  }, [isGuest])
+    async function hydrateGuestSession() {
+      const sessionId = await ensureGuestSession()
+
+      if (!isMounted || !sessionId) {
+        if (isMounted) {
+          setRequestLimit(0)
+        }
+        return
+      }
+
+      await refreshGuestRequestLimit(sessionId)
+    }
+
+    void hydrateGuestSession()
+
+    return () => {
+      isMounted = false
+    }
+  }, [ensureGuestSession, isGuest, refreshGuestRequestLimit])
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
@@ -884,6 +959,11 @@ export function AskForHelpPage() {
     const requestDetails = buildRequestDetailsPayload(notes, languageNeeded, safetyNotes)
     const resolvedLocation = resolveTaskLocation(location)
 
+    if (hasPartialRequestDetailsInput(requestDetails)) {
+      setError('Completeaza toate campurile de detalii aditionale sau lasa-le pe toate goale.')
+      return
+    }
+
     if (!resolvedLocation) {
       setError('Alege un oras din lista, ca sa putem trimite coordonatele cerute de backend.')
       return
@@ -912,20 +992,54 @@ export function AskForHelpPage() {
         }
       }
 
+      const description = buildTaskDescription(requestDetails, location, nextSkills, uploadedAudioUrl)
+      const city = location.trim() || undefined
+
       const payload: CreateTaskPayload = {
         title: titlu.trim(),
-        description: buildTaskDescription(requestDetails, location, nextSkills, uploadedAudioUrl),
+        description,
         status: 'OPEN' as const,
         urgency: mapUrgencyToBackend(urgency),
         category: mapRequestTypeToCategory(requestType),
         location: resolvedLocation,
         anonymousMode: isAnonymous,
-        city: location.trim() || undefined,
-        guestSessionId: isGuest ? guestSessionId : undefined,
+        city,
         skillsNeeded: nextSkills,
       }
 
-      const response = await backend.tasks.create(payload)
+      let response
+
+      if (isGuest) {
+        const sessionId = guestSessionId || await ensureGuestSession()
+
+        if (!sessionId) {
+          setError('Nu am putut pregati sesiunea de vizitator. Incearca din nou.')
+          return
+        }
+
+        const guestPayload: GuestTaskSubmissionPayloadType = {
+          title: payload.title,
+          description,
+          urgency: mapGuestUrgencyToBackend(urgency),
+          location: resolvedLocation,
+          city,
+          skillsNeeded: nextSkills.length > 0 ? nextSkills : undefined,
+        }
+
+        if (uploadedAudioUrl) {
+          guestPayload.audioUrl = uploadedAudioUrl
+        }
+
+        if (hasRequestDetailsInput(requestDetails)) {
+          guestPayload.notes = requestDetails.notes
+          guestPayload.languageNeeded = requestDetails.languageNeeded
+          guestPayload.safetyNotes = requestDetails.safetyNotes
+        }
+
+        response = await backend.guest.createTask(sessionId, guestPayload)
+      } else {
+        response = await backend.tasks.create(payload)
+      }
 
       if (!response.success) {
         const validationErrors = getValidationErrors(response.data)
@@ -961,7 +1075,11 @@ export function AskForHelpPage() {
       }
 
       if (isGuest) {
-        setRequestLimit(decrementGuestRequestLimit())
+        const sessionId = guestSessionId || getStoredGuestSessionId()
+
+        if (sessionId) {
+          await refreshGuestRequestLimit(sessionId)
+        }
       }
 
       setSuccessMessage('Cererea ta a fost trimisa voluntarilor!')

@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const navigateMock = vi.fn()
 const listTasksMock = vi.fn()
+const listGuestTasksMock = vi.fn()
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
@@ -20,6 +21,9 @@ vi.mock('@/lib/backend', () => ({
   backend: {
     tasks: {
       list: (...args: unknown[]) => listTasksMock(...args),
+    },
+    guest: {
+      listTasks: (...args: unknown[]) => listGuestTasksMock(...args),
     },
   },
 }))
@@ -60,10 +64,20 @@ describe('HomePage help offers flow', () => {
   beforeEach(() => {
     localStorage.clear()
     navigateMock.mockReset()
+    listTasksMock.mockReset()
+    listGuestTasksMock.mockReset()
     listTasksMock.mockResolvedValue({
       success: true,
       data: {
         data: [],
+      },
+    })
+    listGuestTasksMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [],
+        },
       },
     })
 
@@ -231,5 +245,47 @@ describe('HomePage help offers flow', () => {
     expect(
       screen.getAllByText('O altă ofertă a fost deja acceptată pentru această cerere.'),
     ).toHaveLength(2)
+  })
+
+  it('incarca cererile guest din endpointul dedicat', async () => {
+    localStorage.setItem('mvcr-guest-session-id', '550e8400-e29b-41d4-a716-446655440000')
+    listGuestTasksMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 42,
+              requestedByUserId: null,
+              title: 'Cerere guest reala',
+              description: 'Am nevoie de ajutor ca vizitator',
+              urgency: 'LOW',
+              category: 'MESSAGES_ONLY',
+              anonymousMode: true,
+              status: 'OPEN',
+              details: null,
+            },
+          ],
+        },
+      },
+    })
+    useAuthStore.setState({
+      user: null,
+      isGuest: true,
+      sessionStatus: 'ready',
+    })
+
+    renderHomePage()
+
+    expect(await screen.findByText('Cerere guest reala')).toBeInTheDocument()
+    expect(listGuestTasksMock).toHaveBeenCalledWith(
+      '550e8400-e29b-41d4-a716-446655440000',
+      {
+        page: 1,
+        pageSize: 50,
+        status: 'OPEN',
+      },
+    )
+    expect(listTasksMock).not.toHaveBeenCalled()
   })
 })

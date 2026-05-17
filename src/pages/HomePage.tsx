@@ -10,6 +10,7 @@ import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
+import { getStoredGuestSessionId } from '@/lib/guestSession'
 import {
   extractTasksList,
   isTaskOwnedByCurrentUser,
@@ -55,8 +56,9 @@ export function HomePage() {
   const [offersRevision, setOffersRevision] = useState(0)
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
+  const guestSessionId = isGuest ? getStoredGuestSessionId() : null
 
-  const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
+  const { data: liveTasksData, isLoading: isLoadingAuthenticatedLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
     enabled: sessionStatus === 'ready' && !isGuest,
     refetchInterval: 15000,
@@ -75,10 +77,49 @@ export function HomePage() {
       return extractTasksList(response.data)
     },
   })
+
+  const { data: guestLiveTasksData, isLoading: isLoadingGuestLiveRequests } = useQuery({
+    queryKey: ['guest-live-requests', guestSessionId],
+    enabled: sessionStatus === 'ready' && isGuest && Boolean(guestSessionId),
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
+    queryFn: async () => {
+      if (!guestSessionId) {
+        return EMPTY_TASKS
+      }
+
+      const response = await backend.guest.listTasks(guestSessionId, {
+        page: 1,
+        pageSize: 50,
+        status: 'OPEN',
+      })
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut încărca cererile tale.')
+      }
+
+      return extractTasksList(response.data)
+    },
+  })
+
   const liveTasks = liveTasksData ?? EMPTY_TASKS
+  const guestLiveTasks = guestLiveTasksData ?? EMPTY_TASKS
+  const isLoadingLiveRequests = isLoadingAuthenticatedLiveRequests || isLoadingGuestLiveRequests
 
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
-    if (isGuest || !authUser) {
+    if (isGuest) {
+      return {
+        myRequests: guestLiveTasks.map((task) =>
+          mapTaskToLiveRequestCard(task, {
+            currentUserName: 'Vizitator',
+            isOwnedByCurrentUser: true,
+          }),
+        ),
+        volunteerFeedRequests: EMPTY_REQUESTS,
+      }
+    }
+
+    if (!authUser) {
       return {
         myRequests: EMPTY_REQUESTS,
         volunteerFeedRequests: EMPTY_REQUESTS,
@@ -114,11 +155,11 @@ export function HomePage() {
         }),
       ),
     }
-  }, [authUser, isGuest, liveTasks])
+  }, [authUser, guestLiveTasks, isGuest, liveTasks])
 
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
-    !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
+    !isGuest && !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
 
   const displayedMyRequests = shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
   const displayedVolunteerRequests = shouldUseMockLiveRequests
