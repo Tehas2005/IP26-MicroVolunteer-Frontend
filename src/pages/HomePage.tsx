@@ -852,7 +852,11 @@ export function HomePage() {
               canCancelRequest(request) ? (
                 <Button
                   className="w-full text-brand-red hover:text-brand-red sm:w-auto"
-                  onClick={() => handleCancelRequestStart(request)}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    handleCancelRequestStart(request)
+                  }}
                   variant="ghost"
                 >
                   Anulează Cererea

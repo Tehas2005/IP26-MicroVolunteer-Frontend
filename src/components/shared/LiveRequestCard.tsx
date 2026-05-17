@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 
 export type LiveRequestUrgencyLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 export type LiveRequestCategory = 'FACETOFACE' | 'MESSAGES_ONLY'
@@ -83,28 +83,29 @@ export function LiveRequestCard({ request, onClick, footerActions }: LiveRequest
   const categoryLabel = getCategoryLabel(request.category)
   const displayName = getDisplayName(request)
   const isInteractive = typeof onClick === 'function'
+  const contentClassName = [
+    'flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between',
+    isInteractive ? 'cursor-pointer' : '',
+  ].join(' ')
+  const handleKeyDown =
+    isInteractive
+      ? (event: KeyboardEvent<HTMLDivElement>) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onClick?.()
+          }
+        }
+      : undefined
 
   return (
-    <article
-      className={[
-        'group rounded-[24px] border border-brand-gray/90 bg-[#F8FAFD] px-5 py-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-200 hover:border-brand-purple/35 hover:bg-white hover:shadow-[0_0_0_1px_rgba(123,47,190,0.08),0_2px_5px_rgba(26,26,26,0.08)]',
-        isInteractive ? 'cursor-pointer' : '',
-      ].join(' ')}
-      onClick={onClick}
-      onKeyDown={
-        isInteractive
-          ? (event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                onClick?.()
-              }
-            }
-          : undefined
-      }
-      role={isInteractive ? 'button' : undefined}
-      tabIndex={isInteractive ? 0 : undefined}
-    >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <article className="group rounded-[24px] border border-brand-gray/90 bg-[#F8FAFD] px-5 py-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-200 hover:border-brand-purple/35 hover:bg-white hover:shadow-[0_0_0_1px_rgba(123,47,190,0.08),0_2px_5px_rgba(26,26,26,0.08)]">
+      <div
+        className={contentClassName}
+        onClick={onClick}
+        onKeyDown={handleKeyDown}
+        role={isInteractive ? 'button' : undefined}
+        tabIndex={isInteractive ? 0 : undefined}
+      >
         <div className="min-w-0 flex-1">
           <h3 className="text-base font-semibold text-brand-black transition-colors duration-200 group-hover:text-brand-purple-dark sm:text-[1.05rem]">
             {request.title?.trim() || FALLBACK_TEXT}
@@ -140,6 +141,9 @@ export function LiveRequestCard({ request, onClick, footerActions }: LiveRequest
         <div
           className="mt-4 border-t border-brand-gray/70 pt-3"
           onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
         >
           {footerActions}
         </div>

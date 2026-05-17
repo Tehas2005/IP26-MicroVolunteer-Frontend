@@ -182,6 +182,44 @@ describe('HomePage cancel request flow', () => {
     ).toBe(true)
   })
 
+  it('inchide dialogul fara stergere cand utilizatorul apasa Nu', async () => {
+    const user = userEvent.setup()
+
+    renderHomePage()
+
+    await user.click(await screen.findByRole('button', { name: 'Anulează Cererea' }))
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Nu' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Anulează Cererea' })).toBeInTheDocument()
+    expect(deleteTaskMock).not.toHaveBeenCalled()
+    expect(deleteGuestTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('inchide dialogul la Escape fara sa stearga cererea', async () => {
+    const user = userEvent.setup()
+
+    renderHomePage()
+
+    await user.click(await screen.findByRole('button', { name: 'Anulează Cererea' }))
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Anulează Cererea' })).toBeInTheDocument()
+    expect(deleteTaskMock).not.toHaveBeenCalled()
+    expect(deleteGuestTaskMock).not.toHaveBeenCalled()
+  })
+
   it('trimite DELETE pentru cererea reala si o scoate instant din feed dupa succes', async () => {
     const user = userEvent.setup()
 

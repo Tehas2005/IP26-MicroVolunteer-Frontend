@@ -29,14 +29,20 @@ const urgencyCases: Array<{
 
 function renderCard(request: LiveRequestCardData = baseRequest) {
   const view = render(<LiveRequestCard request={request} onClick={vi.fn()} />)
-  const card = screen.getByRole('button')
+  const interactiveArea = screen.getByRole('button')
+  const card = interactiveArea.closest('article')
+
+  if (!(card instanceof HTMLElement)) {
+    throw new Error('Card container was not rendered.')
+  }
+
   const accentBar = card.querySelector('[aria-hidden="true"]')
 
   if (!(accentBar instanceof HTMLElement)) {
     throw new Error('Accent bar was not rendered.')
   }
 
-  return { ...view, card, accentBar }
+  return { ...view, card, interactiveArea, accentBar }
 }
 
 describe('LiveRequestCard', () => {
