@@ -11,7 +11,7 @@ import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
-import { getGuestSessionId } from '@/lib/guestSession'
+import { ensureGuestSessionId, getGuestSessionId } from '@/lib/guestSession'
 import {
   extractTasksList,
   isTaskOwnedByCurrentUser,
@@ -53,7 +53,9 @@ export function HomePage() {
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
   const viewerIdentity = useMemo(() => resolveChatViewerIdentity(authUser), [authUser])
-  const guestSessionId = useMemo(() => (isGuest ? getGuestSessionId() : null), [isGuest])
+  const [guestSessionId, setGuestSessionId] = useState<string | null>(() =>
+    isGuest ? getGuestSessionId() : null,
+  )
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const [cancelErrorMessage, setCancelErrorMessage] = useState<string | null>(null)
   const [cancelledRequestIds, setCancelledRequestIds] = useState<string[]>([])
@@ -66,9 +68,34 @@ export function HomePage() {
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
 
+  useEffect(() => {
+    let isMounted = true
+
+    if (!isGuest) {
+      setGuestSessionId(null)
+      return () => {
+        isMounted = false
+      }
+    }
+
+    setGuestSessionId(getGuestSessionId())
+
+    void ensureGuestSessionId().then((nextGuestSessionId) => {
+      if (!isMounted) {
+        return
+      }
+
+      setGuestSessionId(nextGuestSessionId)
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [isGuest])
+
   const { data: liveTasksData, isLoading: isLoadingLiveRequests, refetch: refetchLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id, guestSessionId],
-    enabled: sessionStatus === 'ready',
+    enabled: sessionStatus === 'ready' && (!isGuest || Boolean(guestSessionId)),
     refetchInterval: 15000,
     refetchIntervalInBackground: true,
     queryFn: async () => {
@@ -136,12 +163,14 @@ export function HomePage() {
     return {
       myRequests: ownedTasks.map((task) =>
         mapTaskToLiveRequestCard(task, {
+          currentUserId: authUser.id,
           currentUserName: authUser.name,
           isOwnedByCurrentUser: true,
         }),
       ),
       volunteerFeedRequests: publicTasks.map((task) =>
         mapTaskToLiveRequestCard(task, {
+          currentUserId: authUser.id,
           currentUserName: authUser.name,
           isOwnedByCurrentUser: false,
         }),
@@ -361,6 +390,11 @@ export function HomePage() {
       if (shouldUseMockLiveRequests) {
         cancelMockLiveRequest(requestPendingCancellation.id)
       } else {
+        if (isGuest && !guestSessionId) {
+          setCancelErrorMessage('Nu am putut inițializa sesiunea de vizitator. Încearcă din nou.')
+          return
+        }
+
         const response =
           isGuest && guestSessionId
             ? await backend.tasks.deleteGuest(requestPendingCancellation.id, guestSessionId)

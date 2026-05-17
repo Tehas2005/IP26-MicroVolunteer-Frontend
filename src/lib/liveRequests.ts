@@ -204,14 +204,22 @@ export function mapTaskToLiveRequestCard(
   task: TaskResponseType,
   options: {
     currentUserName?: string | null
+    currentUserId?: string | null
     isOwnedByCurrentUser: boolean
   },
 ): LiveRequestCardData {
-  const { currentUserName, isOwnedByCurrentUser } = options
+  const { currentUserId, currentUserName, isOwnedByCurrentUser } = options
   const isAnonymous = Boolean(task.anonymousMode)
+  const normalizedTaskId = normalizeTaskId(task.id) ?? crypto.randomUUID()
+  const ownerRequesterKey =
+    isOwnedByCurrentUser && currentUserId ? `user:${currentUserId}` : null
+  const fallbackRequesterKey =
+    task.requestedByUserId
+      ? `user:${task.requestedByUserId}`
+      : `guest-request:${normalizedTaskId}`
 
   return {
-    id: normalizeTaskId(task.id) ?? crypto.randomUUID(),
+    id: normalizedTaskId,
     title: task.title,
     description: task.description,
     category: mapCategory(task.category),
@@ -221,10 +229,8 @@ export function mapTaskToLiveRequestCard(
     name: isOwnedByCurrentUser ? currentUserName?.trim() || GENERIC_REQUESTER_NAME : GENERIC_REQUESTER_NAME,
     city: readTaskCity(task),
     skillsNeeded: readTaskSkillsNeeded(task),
-    requesterKey: task.requestedByUserId
-      ? `user:${task.requestedByUserId}`
-      : `guest-request:${normalizeTaskId(task.id) ?? crypto.randomUUID()}`,
-    requesterKind: task.requestedByUserId ? 'user' : 'guest',
+    requesterKey: ownerRequesterKey ?? fallbackRequesterKey,
+    requesterKind: ownerRequesterKey || task.requestedByUserId ? 'user' : 'guest',
     requesterLabel: isAnonymous
       ? ANONYMOUS_DISPLAY_NAME
       : isOwnedByCurrentUser

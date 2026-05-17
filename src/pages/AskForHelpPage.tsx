@@ -6,7 +6,7 @@ import {
   decrementGuestRequestLimit,
   getGuestRequestLimit,
 } from '@/lib/guestRequestLimit'
-import { getGuestSessionId } from '@/lib/guestSession'
+import { ensureGuestSessionId, getGuestSessionId } from '@/lib/guestSession'
 import { extractCreatedTaskId, rememberCreatedTaskId } from '@/lib/liveRequests'
 import {
   buildRequestDetailsPayload,
@@ -731,8 +731,22 @@ export function AskForHelpPage() {
       return
     }
 
+    let isMounted = true
+
     setGuestSessionId(getGuestSessionId())
     setRequestLimit(getGuestRequestLimit())
+
+    void ensureGuestSessionId().then((nextGuestSessionId) => {
+      if (!isMounted) {
+        return
+      }
+
+      setGuestSessionId(nextGuestSessionId)
+    })
+
+    return () => {
+      isMounted = false
+    }
   }, [isGuest])
 
   useEffect(() => {
@@ -874,6 +888,11 @@ export function AskForHelpPage() {
       return
     }
 
+    if (isGuest && !guestSessionId) {
+      setError('Pregatim sesiunea de vizitator. Incearca din nou imediat.')
+      return
+    }
+
     if (requestType === 'Fizic' && !location.trim()) {
       setLocationTouched(true)
       setError('Completeaza locatia pentru cererile fizice.')
@@ -925,7 +944,10 @@ export function AskForHelpPage() {
         skillsNeeded: nextSkills,
       }
 
-      const response = await backend.tasks.create(payload)
+      const response =
+        isGuest && guestSessionId
+          ? await backend.tasks.createGuest(guestSessionId, payload)
+          : await backend.tasks.create(payload)
 
       if (!response.success) {
         const validationErrors = getValidationErrors(response.data)

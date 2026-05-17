@@ -18,6 +18,17 @@ export class TasksFetcher {
     return this.fetcher.post<TaskResponseType>('/api/tasks', payload)
   }
 
+  public createGuest(
+    guestSessionId: string,
+    payload: TaskSubmissionPayloadType,
+  ): Promise<ApiResponse<TaskResponseType>> {
+    return this.fetcher.post<TaskResponseType>('/api/guest/tasks', payload, {
+      headers: {
+        'X-Guest-Session': guestSessionId,
+      },
+    })
+  }
+
   public list(filters?: TaskFiltersType): Promise<ApiResponse<PaginatedTaskListType>> {
     return this.fetcher.get<PaginatedTaskListType>('/api/tasks', { query: filters })
   }

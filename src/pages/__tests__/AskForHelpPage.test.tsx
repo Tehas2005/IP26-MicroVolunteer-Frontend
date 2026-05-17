@@ -173,7 +173,7 @@ describe("AskForHelpPage guest details", () => {
 
   it("afiseaza detaliile aditionale si trimite guestSessionId cu descrierea compusa", async () => {
     const user = userEvent.setup()
-    const createSpy = vi.spyOn(backend.tasks, "create").mockResolvedValue(successResponse)
+    const createGuestSpy = vi.spyOn(backend.tasks, "createGuest").mockResolvedValue(successResponse)
 
     setGuestSession()
     setGuestRequestLimit(3)
@@ -197,13 +197,13 @@ describe("AskForHelpPage guest details", () => {
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledTimes(1)
+      expect(createGuestSpy).toHaveBeenCalledTimes(1)
     })
 
-    const payload = createSpy.mock.calls[0][0]
+    const [guestSessionId, payload] = createGuestSpy.mock.calls[0]
+    expect(guestSessionId).toEqual(expect.any(String))
     expect(payload).toMatchObject({
       title: "Ajutor online",
-      guestSessionId: expect.any(String),
     })
     expect(payload.description).toContain("Am nevoie de context")
     expect(payload.description).toContain("Limba necesara: engleza")
@@ -213,7 +213,7 @@ describe("AskForHelpPage guest details", () => {
 
   it("blocheaza submit-ul pentru guest cand limita este zero", async () => {
     const user = userEvent.setup()
-    const createSpy = vi.spyOn(backend.tasks, "create").mockResolvedValue(successResponse)
+    const createGuestSpy = vi.spyOn(backend.tasks, "createGuest").mockResolvedValue(successResponse)
 
     setGuestSession()
     setGuestRequestLimit(0)
@@ -232,12 +232,12 @@ describe("AskForHelpPage guest details", () => {
         "ai atins limita de cereri pentru un cont de vizitator. te rugam sa creezi un cont gratuit!",
       ),
     ).toBeInTheDocument()
-    expect(createSpy).not.toHaveBeenCalled()
+    expect(createGuestSpy).not.toHaveBeenCalled()
   })
 
   it("afiseaza mesaj prietenos pentru 401 si pastreaza limita guest", async () => {
     const user = userEvent.setup()
-    const createSpy = vi.spyOn(backend.tasks, "create").mockResolvedValue(unauthorizedResponse)
+    const createGuestSpy = vi.spyOn(backend.tasks, "createGuest").mockResolvedValue(unauthorizedResponse)
 
     setGuestSession()
     setGuestRequestLimit(3)
@@ -250,7 +250,7 @@ describe("AskForHelpPage guest details", () => {
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledTimes(1)
+      expect(createGuestSpy).toHaveBeenCalledTimes(1)
     })
 
     expect(

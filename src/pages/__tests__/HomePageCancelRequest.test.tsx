@@ -35,6 +35,7 @@ import {
   getMockConversationThread,
   resolveChatViewerIdentity,
 } from '@/lib/mockChat'
+import { rememberCreatedTaskId } from '@/lib/liveRequests'
 import HomePage from '@/pages/HomePage'
 import { useAuthStore } from '@/store/authStore'
 
@@ -221,6 +222,36 @@ describe('HomePage cancel request flow', () => {
     })
 
     expect(await screen.findByText('Cererea ta a fost anulată.')).toBeInTheDocument()
+  })
+
+  it('pastreaza butonul de anulare pentru cererea anonima a userului logat', async () => {
+    rememberCreatedTaskId('user-123', 142)
+
+    listTasksMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 142,
+              title: 'Cerere anonimă a userului logat',
+              description: 'Cerere trimisă anonim, dar creată de mine',
+              category: 'MESSAGES_ONLY',
+              urgency: 'HIGH',
+              status: 'OPEN',
+              requestedByUserId: null,
+              anonymousMode: true,
+            },
+          ],
+        },
+      },
+    })
+
+    renderHomePage()
+
+    expect(
+      await screen.findByRole('button', { name: 'Anulează Cererea' }),
+    ).toBeInTheDocument()
   })
 
   it('foloseste endpoint-ul guest cand visitorul anuleaza o cerere reala', async () => {
