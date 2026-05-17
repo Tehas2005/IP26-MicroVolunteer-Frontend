@@ -9,12 +9,14 @@ import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 import VolunteerProfilePage from './VolunteerProfilePage'
 
 const {
+  mockBecomeVolunteer,
   mockCreateVolunteerProfile,
   mockGetByUserId,
   mockGetVolunteerProfile,
   mockUpdateMe,
   mockUpdateVolunteerProfile,
 } = vi.hoisted(() => ({
+  mockBecomeVolunteer: vi.fn(),
   mockCreateVolunteerProfile: vi.fn(),
   mockGetByUserId: vi.fn(),
   mockGetVolunteerProfile: vi.fn(),
@@ -39,6 +41,9 @@ vi.mock('@/lib/backend', () => ({
       createMe: mockCreateVolunteerProfile,
       getMe: mockGetVolunteerProfile,
       updateMe: mockUpdateVolunteerProfile,
+    },
+    users: {
+      becomeVolunteer: mockBecomeVolunteer,
     },
   },
 }))
@@ -67,11 +72,16 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
       profilesByUserId: {},
     })
     mockCreateVolunteerProfile.mockReset()
+    mockBecomeVolunteer.mockReset()
     mockGetByUserId.mockReset()
     mockGetVolunteerProfile.mockReset()
     mockUpdateMe.mockReset()
     mockUpdateVolunteerProfile.mockReset()
 
+    mockBecomeVolunteer.mockResolvedValue({
+      success: true,
+      data: { message: 'You are now a volunteer', volunteerId: 1 },
+    })
     mockGetByUserId.mockResolvedValue({
       success: true,
       data: { hiddenIdentity: false },
@@ -243,6 +253,7 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
         maxDistanceKm: 12.5,
         skills: [],
       })
+      expect(mockBecomeVolunteer).toHaveBeenCalled()
       expect(mockUpdateMe).toHaveBeenCalledWith({ hiddenIdentity: false })
       expect(useVolunteerProfileStore.getState().profilesByUserId['1']).toMatchObject({
         hiddenIdentity: false,
@@ -254,6 +265,17 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
   })
 
   it('actualizeaza store-ul si pe fallback local cand endpoint-ul de voluntar nu este disponibil', async () => {
+    mockBecomeVolunteer.mockResolvedValueOnce({
+      success: false,
+      data: null,
+      message: 'not found',
+      status: 404,
+      isClientError: true,
+      isServerError: false,
+      isNotFound: true,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
     mockCreateVolunteerProfile.mockResolvedValueOnce({
       success: false,
       data: null,
@@ -300,6 +322,63 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
         locationCoordinates: { x: 23.5899542, y: 46.769379 },
         skills: [],
       })
+    })
+  })
+
+  it('creeaza intai inregistrarea de voluntar si nu afiseaza fallback cand profilul se salveaza remote', async () => {
+    mockGetVolunteerProfile.mockResolvedValueOnce({
+      success: false,
+      data: null,
+      message: 'not found',
+      status: 404,
+      isClientError: true,
+      isServerError: false,
+      isNotFound: true,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+    mockBecomeVolunteer.mockResolvedValueOnce({
+      success: true,
+      data: { message: 'You are now a volunteer', volunteerId: 1 },
+    })
+    mockCreateVolunteerProfile.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          volunteer: { id: 1, userId: '1' },
+          profile: {
+            maxDistanceKm: 16,
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            knownLocations: [],
+            skills: [],
+          },
+        },
+      },
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.type(screen.getByLabelText(/Distanta maxima/i), '16')
+    await user.type(screen.getByLabelText(/Locatia curenta/i), 'Cluj-Napoca')
+    await user.click(screen.getByRole('button', { name: /Salveaza profilul/i }))
+
+    await waitFor(() => {
+      expect(mockBecomeVolunteer).toHaveBeenCalled()
+      expect(mockCreateVolunteerProfile).toHaveBeenCalledWith({
+        currentLocation: { x: 23.5899542, y: 46.769379 },
+        knownLocations: [],
+        maxDistanceKm: 16,
+        skills: [],
+      })
+      expect(
+        screen.queryByText(
+          /Datele au fost salvate local. Sincronizarea cu backend-ul pentru profilul de voluntar nu este inca disponibila./i,
+        ),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByText(/Setarile profilului au fost salvate si sincronizate./i),
+      ).toBeInTheDocument()
     })
   })
 

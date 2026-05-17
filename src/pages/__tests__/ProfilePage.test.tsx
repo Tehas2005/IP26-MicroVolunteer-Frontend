@@ -80,7 +80,9 @@ describe('ProfilePage volunteer profile', () => {
     localStorage.clear()
     vi.spyOn(backend.profile, 'create').mockResolvedValue(createSuccessResponse({ hiddenIdentity: false }))
     vi.spyOn(backend.profile, 'updateMe').mockResolvedValue(createSuccessResponse({ hiddenIdentity: false }))
-    vi.spyOn(backend.users, 'becomeVolunteer').mockResolvedValue(createSuccessResponse({ success: true }))
+    vi.spyOn(backend.users, 'becomeVolunteer').mockResolvedValue(
+      createSuccessResponse({ message: 'You are now a volunteer', volunteerId: 1 }),
+    )
     vi.spyOn(backend.volunteers, 'getMeProfile').mockResolvedValue(createNotFoundResponse())
     vi.spyOn(backend.volunteers, 'createMeProfile').mockResolvedValue(
       createSuccessResponse({ hiddenIdentity: false }),

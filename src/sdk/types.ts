@@ -145,6 +145,11 @@ export type VolunteerProfilePayloadType = {
   availability?: boolean
 }
 
+export type BecomeVolunteerResponseType = {
+  message: string
+  volunteerId: number
+}
+
 export type TaskUrgencyType = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | string
 export type TaskStatusType =
   | 'OPEN'

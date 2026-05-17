@@ -452,15 +452,44 @@ export default function VolunteerProfilePage() {
   }
 
   async function saveVolunteerProfile(payload: VolunteerProfilePayloadType) {
-    const primaryResponse = hasRemoteVolunteerProfile
-      ? await backend.volunteerProfiles.updateMe(payload)
-      : await backend.volunteerProfiles.createMe(payload)
+    async function ensureVolunteerRecord() {
+      const response = await backend.users.becomeVolunteer()
+
+      if (response.success || /already.*volunteer/i.test(response.message ?? '')) {
+        return true
+      }
+
+      return false
+    }
+
+    if (!hasRemoteVolunteerProfile) {
+      const hasVolunteerRecord = await ensureVolunteerRecord()
+      const createResponse = await backend.volunteerProfiles.createMe(payload)
+
+      if (createResponse.success) {
+        return createResponse
+      }
+
+      if (createResponse.isClientError && hasVolunteerRecord) {
+        return backend.volunteerProfiles.updateMe(payload)
+      }
+
+      return createResponse
+    }
+
+    const primaryResponse = await backend.volunteerProfiles.updateMe(payload)
 
     if (primaryResponse.success) {
       return primaryResponse
     }
 
     if (primaryResponse.isNotFound && hasRemoteVolunteerProfile) {
+      const hasVolunteerRecord = await ensureVolunteerRecord()
+
+      if (!hasVolunteerRecord) {
+        return primaryResponse
+      }
+
       return backend.volunteerProfiles.createMe(payload)
     }
 

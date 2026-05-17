@@ -1,11 +1,11 @@
 import type { Fetcher } from './Fetcher'
-import type { ApiResponse, InteractionResponseType } from './types'
+import type { ApiResponse, BecomeVolunteerResponseType, InteractionResponseType } from './types'
 
 export class UsersFetcher {
   constructor(private readonly fetcher: Fetcher) {}
 
-  public becomeVolunteer(): Promise<ApiResponse<{ success?: boolean }>> {
-    return this.fetcher.post<{ success?: boolean }>('/api/users/become-volunteer')
+  public becomeVolunteer(): Promise<ApiResponse<BecomeVolunteerResponseType>> {
+    return this.fetcher.post<BecomeVolunteerResponseType>('/api/users/become-volunteer')
   }
 
   public getInteractions(
