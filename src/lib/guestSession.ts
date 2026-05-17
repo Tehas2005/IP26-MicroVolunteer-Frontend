@@ -1,7 +1,12 @@
 const STORAGE_KEY = 'mvcr-guest-session-id'
+const SOURCE_STORAGE_KEY = 'mvcr-guest-session-source'
 
 type ResponseEnvelope<T> = {
   data?: T | null
+}
+
+function canUseStorage() {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -20,20 +25,49 @@ function normalizeSessionId(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function readStoredGuestSessionSource(): 'local' | 'server' | null {
+  if (!canUseStorage()) {
+    return null
+  }
+
+  const source = window.localStorage.getItem(SOURCE_STORAGE_KEY)
+  return source === 'local' || source === 'server' ? source : null
+}
+
 export function getStoredGuestSessionId(): string | null {
-  return normalizeSessionId(localStorage.getItem(STORAGE_KEY))
+  if (!canUseStorage()) {
+    return null
+  }
+
+  return normalizeSessionId(window.localStorage.getItem(STORAGE_KEY))
 }
 
-export function getGuestSessionId(): string {
-  return getStoredGuestSessionId() ?? ''
-}
+export function storeGuestSessionId(sessionId: string, source: 'local' | 'server' = 'server') {
+  if (!canUseStorage()) {
+    return
+  }
 
-export function storeGuestSessionId(sessionId: string) {
-  localStorage.setItem(STORAGE_KEY, sessionId)
+  window.localStorage.setItem(STORAGE_KEY, sessionId)
+  window.localStorage.setItem(SOURCE_STORAGE_KEY, source)
 }
 
 export function clearGuestSessionId() {
-  localStorage.removeItem(STORAGE_KEY)
+  if (!canUseStorage()) {
+    return
+  }
+
+  window.localStorage.removeItem(STORAGE_KEY)
+  window.localStorage.removeItem(SOURCE_STORAGE_KEY)
+}
+
+function createLocalGuestSessionId() {
+  const sessionId = crypto.randomUUID()
+  storeGuestSessionId(sessionId, 'local')
+  return sessionId
+}
+
+export function getGuestSessionId(): string {
+  return getStoredGuestSessionId() ?? createLocalGuestSessionId()
 }
 
 export function extractGuestSessionId(payload: unknown): string | null {
@@ -52,4 +86,35 @@ export function extractGuestSessionId(payload: unknown): string | null {
   }
 
   return normalizeSessionId(sessionPayload.sessionId)
+}
+
+export async function ensureGuestSessionId(): Promise<string> {
+  const existing = getStoredGuestSessionId()
+  const source = readStoredGuestSessionSource()
+
+  if (existing && source === 'server') {
+    return existing
+  }
+
+  try {
+    const response = await fetch('/api/guest/session', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const payload = (await response.json().catch(() => null)) as unknown
+    const sessionId = response.ok ? extractGuestSessionId(payload) : null
+
+    if (sessionId) {
+      storeGuestSessionId(sessionId, 'server')
+      return sessionId
+    }
+  } catch {
+    // Preserve the local fallback so guest flows still work if backend session bootstrap fails.
+  }
+
+  return existing ?? createLocalGuestSessionId()
 }

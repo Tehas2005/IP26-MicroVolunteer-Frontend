@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
+import CancelRequestDialog from '@/components/shared/CancelRequestDialog'
 import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
@@ -29,6 +30,7 @@ import {
   readCreatedTaskIds,
 } from '@/lib/liveRequests'
 import {
+  cancelMockRequestConversations,
   ensureMockConversationForAcceptedOffer,
   resolveChatViewerIdentity,
 } from '@/lib/mockChat'
@@ -36,10 +38,11 @@ import {
   listMockHelpOffers,
   updateMockHelpOfferStatus,
 } from '@/lib/mockHelpOffers'
-import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
+import { cancelMockLiveRequest, getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import {
   buildNotificationsWebSocketUrl,
   createVolunteerNotification,
+  getVolunteerNotificationId,
   isBackendNotificationId,
   mapNotificationRecordsToItems,
   mapNotificationSocketFrameToItem,
@@ -91,8 +94,18 @@ export function HomePage() {
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
+  const viewerIdentity = useMemo(() => resolveChatViewerIdentity(authUser), [authUser])
+  const [guestSessionId, setGuestSessionId] = useState<string | null>(() =>
+    getStoredGuestSessionId(),
+  )
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
+  const [cancelErrorMessage, setCancelErrorMessage] = useState<string | null>(null)
+  const [cancelledRequestIds, setCancelledRequestIds] = useState<string[]>([])
+  const [isCancellingRequest, setIsCancellingRequest] = useState(false)
+  const [requestPendingCancellation, setRequestPendingCancellation] =
+    useState<LiveRequestCardData | null>(null)
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
+  const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null)
   const [offersRevision, setOffersRevision] = useState(0)
   const [offerActionErrorMessage, setOfferActionErrorMessage] = useState<string | null>(null)
   const [notificationTransportStatus, setNotificationTransportStatus] = useState<
@@ -100,9 +113,6 @@ export function HomePage() {
   >('idle')
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
-  const [guestSessionId, setGuestSessionId] = useState<string | null>(() =>
-    getStoredGuestSessionId(),
-  )
   const requestLookupRef = useRef<Map<string, LiveRequestCardData>>(new Map())
 
   useEffect(() => {
@@ -125,7 +135,11 @@ export function HomePage() {
     return nextSessionId
   }, [])
 
-  const { data: liveTasksData, isLoading: isLoadingAuthenticatedLiveRequests } = useQuery({
+  const {
+    data: liveTasksData,
+    isLoading: isLoadingAuthenticatedLiveRequests,
+    refetch: refetchAuthenticatedLiveRequests,
+  } = useQuery({
     queryKey: ['live-requests', authUser?.id],
     enabled: sessionStatus === 'ready' && !isGuest,
     refetchInterval: 15000,
@@ -145,7 +159,11 @@ export function HomePage() {
     },
   })
 
-  const { data: guestLiveTasksData, isLoading: isLoadingGuestLiveRequests } = useQuery({
+  const {
+    data: guestLiveTasksData,
+    isLoading: isLoadingGuestLiveRequests,
+    refetch: refetchGuestLiveRequests,
+  } = useQuery({
     queryKey: ['guest-live-requests', guestSessionId],
     enabled: sessionStatus === 'ready' && isGuest && Boolean(guestSessionId),
     refetchInterval: 15000,
@@ -188,12 +206,19 @@ export function HomePage() {
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
     if (isGuest) {
       return {
-        myRequests: guestLiveTasks.map((task) =>
-          mapTaskToLiveRequestCard(task, {
+        myRequests: guestLiveTasks.map((task) => {
+          const request = mapTaskToLiveRequestCard(task, {
             currentUserName: 'Vizitator',
             isOwnedByCurrentUser: true,
-          }),
-        ),
+          })
+
+          return {
+            ...request,
+            requesterKey: viewerIdentity.key,
+            requesterKind: 'guest' as const,
+            requesterLabel: viewerIdentity.displayName,
+          }
+        }),
         volunteerFeedRequests: EMPTY_REQUESTS,
       }
     }
@@ -209,7 +234,11 @@ export function HomePage() {
     const ownedTaskIds = new Set<string>()
 
     const ownedTasks = liveTasks.filter((task) => {
-      const isOwnedByCurrentUser = isTaskOwnedByCurrentUser(task, authUser.id, locallyTrackedTaskIds)
+      const isOwnedByCurrentUser = isTaskOwnedByCurrentUser(
+        task,
+        authUser.id,
+        locallyTrackedTaskIds,
+      )
 
       if (isOwnedByCurrentUser) {
         ownedTaskIds.add(String(task.id))
@@ -223,18 +252,20 @@ export function HomePage() {
     return {
       myRequests: ownedTasks.map((task) =>
         mapTaskToLiveRequestCard(task, {
+          currentUserId: authUser.id,
           currentUserName: authUser.name,
           isOwnedByCurrentUser: true,
         }),
       ),
       volunteerFeedRequests: publicTasks.map((task) =>
         mapTaskToLiveRequestCard(task, {
+          currentUserId: authUser.id,
           currentUserName: authUser.name,
           isOwnedByCurrentUser: false,
         }),
       ),
     }
-  }, [authUser, guestLiveTasks, isGuest, liveTasks])
+  }, [authUser, guestLiveTasks, isGuest, liveTasks, viewerIdentity])
 
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
@@ -243,8 +274,11 @@ export function HomePage() {
   const shouldUseBackendNotifications =
     shouldAttemptBackendNotifications && notificationTransportStatus !== 'failed'
   const shouldUseBackendOffers = sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
+  const cancelledRequestIdsSet = useMemo(() => new Set(cancelledRequestIds), [cancelledRequestIds])
 
-  const displayedMyRequests = shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
+  const displayedMyRequests = (
+    shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
+  ).filter((request) => !cancelledRequestIdsSet.has(request.id))
   const displayedVolunteerRequests = shouldUseMockLiveRequests
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
@@ -340,6 +374,20 @@ export function HomePage() {
       return [...currentNotifications, ...nextNotifications].slice(-4)
     })
   }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
+
+  useEffect(() => {
+    if (!successToastMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccessToastMessage(null)
+    }, 3500)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [successToastMessage])
 
   const { data: unreadNotificationsPayload = null, isSuccess: hasLoadedUnreadNotifications } =
     useQuery({
@@ -695,6 +743,84 @@ export function HomePage() {
     ],
   )
 
+  const canCancelRequest = useCallback(
+    (request: LiveRequestCardData) =>
+      Boolean(request.requesterKey && request.requesterKey === viewerIdentity.key),
+    [viewerIdentity.key],
+  )
+
+  const handleCancelRequestStart = useCallback((request: LiveRequestCardData) => {
+    setCancelErrorMessage(null)
+    setRequestPendingCancellation(request)
+  }, [])
+
+  const handleCancelRequestConfirm = useCallback(async () => {
+    if (!requestPendingCancellation) {
+      return
+    }
+
+    setIsCancellingRequest(true)
+
+    try {
+      if (shouldUseMockLiveRequests) {
+        cancelMockLiveRequest(requestPendingCancellation.id)
+      } else {
+        if (isGuest && !guestSessionId) {
+          setCancelErrorMessage('Nu am putut inițializa sesiunea de vizitator. Încearcă din nou.')
+          return
+        }
+
+        const response =
+          isGuest && guestSessionId
+            ? await backend.guest.deleteTask(guestSessionId, requestPendingCancellation.id)
+            : await backend.tasks.delete(requestPendingCancellation.id)
+
+        if (!response.success) {
+          setCancelErrorMessage(response.message || 'Nu am putut anula cererea selectată.')
+          return
+        }
+      }
+
+      cancelMockRequestConversations(requestPendingCancellation.id, viewerIdentity)
+      setCancelledRequestIds((currentIds) =>
+        currentIds.includes(requestPendingCancellation.id)
+          ? currentIds
+          : [...currentIds, requestPendingCancellation.id],
+      )
+      setActiveNotifications((currentNotifications) =>
+        currentNotifications.filter(
+          (notification) =>
+            notification.request?.id !== requestPendingCancellation.id &&
+            notification.id !== getVolunteerNotificationId(requestPendingCancellation.id),
+        ),
+      )
+      setCancelErrorMessage(null)
+      setSelectedMyRequestId((currentRequestId) =>
+        currentRequestId === requestPendingCancellation.id ? null : currentRequestId,
+      )
+      setRequestPendingCancellation(null)
+      setSuccessToastMessage('Cererea ta a fost anulată.')
+
+      if (!shouldUseMockLiveRequests) {
+        if (isGuest) {
+          void refetchGuestLiveRequests()
+        } else {
+          void refetchAuthenticatedLiveRequests()
+        }
+      }
+    } finally {
+      setIsCancellingRequest(false)
+    }
+  }, [
+    guestSessionId,
+    isGuest,
+    refetchAuthenticatedLiveRequests,
+    refetchGuestLiveRequests,
+    requestPendingCancellation,
+    shouldUseMockLiveRequests,
+    viewerIdentity,
+  ])
+
   return (
     <div className="bg-brand-cream">
       <VolunteerNotificationStack
@@ -766,6 +892,21 @@ export function HomePage() {
             myRequests={displayedMyRequestsWithOfferSummary}
             onMyRequestOpen={handleMyRequestOpen}
             onVolunteerRequestOpen={handleVolunteerRequestOpen}
+            renderMyRequestActions={(request) =>
+              canCancelRequest(request) ? (
+                <Button
+                  className="w-full text-brand-red hover:text-brand-red sm:w-auto"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    handleCancelRequestStart(request)
+                  }}
+                  variant="ghost"
+                >
+                  Anulează Cererea
+                </Button>
+              ) : null
+            }
             volunteerRequests={displayedVolunteerRequests}
           />
         </div>
@@ -785,6 +926,27 @@ export function HomePage() {
         open={selectedMyRequest !== null}
         request={selectedMyRequest}
       />
+
+      <CancelRequestDialog
+        errorMessage={cancelErrorMessage}
+        isSubmitting={isCancellingRequest}
+        onConfirm={() => void handleCancelRequestConfirm()}
+        onOpenChange={(open) => {
+          if (!open && !isCancellingRequest) {
+            setCancelErrorMessage(null)
+            setRequestPendingCancellation(null)
+          }
+        }}
+        open={requestPendingCancellation !== null}
+      />
+
+      {successToastMessage ? (
+        <div className="pointer-events-none fixed inset-x-4 top-20 z-[65] flex justify-center sm:top-24">
+          <div className="rounded-full border border-brand-green/25 bg-white px-4 py-2 text-sm font-medium text-brand-black shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
+            {successToastMessage}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  cancelMockRequestConversations,
   dismissMockConversationRatingPrompt,
   ensureMockConversation,
+  ensureMockConversationForAcceptedOffer,
   getMockConversationThread,
   submitMockConversationRating,
   type ChatViewerIdentity,
@@ -71,5 +73,36 @@ describe('mockChat rating flow', () => {
 
     expect(getMockConversationThread(conversation.id, requesterIdentity)?.conversation.ratingPromptPending).toBe(false)
     expect(getMockConversationThread(conversation.id, volunteerIdentity)?.conversation.ratingPromptPending).toBe(false)
+  })
+
+  it('inchide conversatia si adauga mesaj de sistem cand autorul anuleaza cererea', () => {
+    const conversation = ensureMockConversationForAcceptedOffer(
+      {
+        id: 'request-cancel-1',
+        title: 'Ajutor anulare',
+        requesterKey: requesterIdentity.key,
+        requesterLabel: requesterIdentity.displayName,
+        requesterKind: 'user',
+      },
+      requesterIdentity,
+      {
+        volunteerKey: volunteerIdentity.key,
+        volunteerName: volunteerIdentity.displayName,
+      },
+    )
+
+    cancelMockRequestConversations('request-cancel-1', requesterIdentity)
+
+    const volunteerThread = getMockConversationThread(conversation.id, volunteerIdentity)
+
+    expect(volunteerThread?.conversation.status).toBe('closed')
+    expect(
+      volunteerThread?.messages.some(
+        (message) =>
+          message.from === 'system' &&
+          message.content.type === 'text' &&
+          message.content.text === 'Autorul a anulat această cerere.',
+      ),
+    ).toBe(true)
   })
 })
