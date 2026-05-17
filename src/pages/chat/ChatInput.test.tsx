@@ -1,21 +1,35 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ChatInput } from './ChatInput'
 
-vi.mock('./hooks/useAudioRecorder', () => ({
-  useAudioRecorder: () => ({
+const audioRecorderMock = vi.hoisted(() => ({
+  state: {
     isRecording: false,
-    audioBlob: null,
-    audioUrl: null,
+    audioBlob: null as Blob | null,
+    audioUrl: null as string | null,
     micError: '',
     startRecording: vi.fn(),
     stopRecording: vi.fn(),
     clearAudio: vi.fn(),
-  }),
+  },
+}))
+
+vi.mock('./hooks/useAudioRecorder', () => ({
+  useAudioRecorder: () => audioRecorderMock.state,
 }))
 
 describe('ChatInput', () => {
+  beforeEach(() => {
+    audioRecorderMock.state.isRecording = false
+    audioRecorderMock.state.audioBlob = null
+    audioRecorderMock.state.audioUrl = null
+    audioRecorderMock.state.micError = ''
+    audioRecorderMock.state.startRecording.mockClear()
+    audioRecorderMock.state.stopRecording.mockClear()
+    audioRecorderMock.state.clearAudio.mockClear()
+  })
+
   it('renders input and action buttons', () => {
     render(<ChatInput onSend={vi.fn()} />)
 
@@ -51,7 +65,60 @@ describe('ChatInput', () => {
     fireEvent.click(screen.getByRole('button', { name: /Trimite mesajul/i }))
 
     expect(onSend).toHaveBeenCalledWith({ type: 'text', text: 'Buna ziua' })
-    expect(screen.getByPlaceholderText('Scrie un mesaj...')).toHaveValue('')
+    return waitFor(() => {
+      expect(screen.getByPlaceholderText('Scrie un mesaj...')).toHaveValue('')
+    })
+  })
+
+  it('keeps text when sending fails', async () => {
+    const onSend = vi.fn().mockResolvedValue(false)
+
+    render(<ChatInput onSend={onSend} />)
+
+    fireEvent.change(screen.getByPlaceholderText('Scrie un mesaj...'), {
+      target: { value: 'Buna ziua' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Trimite mesajul/i }))
+
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledWith({ type: 'text', text: 'Buna ziua' })
+    })
+    expect(screen.getByPlaceholderText('Scrie un mesaj...')).toHaveValue('Buna ziua')
+  })
+
+  it('keeps audio preview when sending fails', async () => {
+    const audioBlob = new Blob(['audio'], { type: 'audio/webm' })
+    const onSend = vi.fn().mockResolvedValue(false)
+    audioRecorderMock.state.audioBlob = audioBlob
+    audioRecorderMock.state.audioUrl = 'blob:test-audio'
+
+    render(<ChatInput onSend={onSend} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Trimite mesajul/i }))
+
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledWith({
+        type: 'audio',
+        blob: audioBlob,
+        previewUrl: 'blob:test-audio',
+      })
+    })
+    expect(audioRecorderMock.state.clearAudio).not.toHaveBeenCalled()
+  })
+
+  it('clears audio preview when sending succeeds', async () => {
+    const audioBlob = new Blob(['audio'], { type: 'audio/webm' })
+    const onSend = vi.fn().mockResolvedValue(true)
+    audioRecorderMock.state.audioBlob = audioBlob
+    audioRecorderMock.state.audioUrl = 'blob:test-audio'
+
+    render(<ChatInput onSend={onSend} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Trimite mesajul/i }))
+
+    await waitFor(() => {
+      expect(audioRecorderMock.state.clearAudio).toHaveBeenCalled()
+    })
   })
 
   it('calls onSend on Enter key press', () => {
@@ -64,7 +131,9 @@ describe('ChatInput', () => {
     fireEvent.change(input, { target: { value: 'Test' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    expect(onSend).toHaveBeenCalledWith({ type: 'text', text: 'Test' })
+    return waitFor(() => {
+      expect(onSend).toHaveBeenCalledWith({ type: 'text', text: 'Test' })
+    })
   })
 
   it('does not send on Shift+Enter', () => {

@@ -174,6 +174,7 @@ describe("AskForHelpPage", () => {
       title: "Ridicare medicamente de la farmacie",
       description:
         "Am nevoie de ajutor pana la ora 18:00.\n\nLimba necesara: romana\n\nSiguranta: intrare prin curte\n\nLocatie declarata: Cluj-Napoca\n\nSkills needed: Transport local",
+      audioUrl: undefined,
       status: "OPEN",
       urgency: "MEDIUM",
       category: "FACE_TO_FACE",

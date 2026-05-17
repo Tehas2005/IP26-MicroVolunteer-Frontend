@@ -964,6 +964,7 @@ export function AskForHelpPage() {
         : await backend.tasks.create({
             title: titlu.trim(),
             description: buildTaskDescription(requestDetails, location, nextSkills, uploadedAudioUrl),
+            audioUrl: uploadedAudioUrl || undefined,
             status: 'OPEN' as const,
             urgency: mapUrgencyToBackend(urgency),
             category: mapRequestTypeToCategory(requestType),

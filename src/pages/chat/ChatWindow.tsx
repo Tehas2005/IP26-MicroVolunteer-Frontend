@@ -388,21 +388,21 @@ export function ChatWindow({ conversation }: Props) {
       setActionError(
         'Acest chat nu este legat de un task sincronizat cu backendul, deci mesajele nu pot fi trimise.',
       )
-      return
+      return false
     }
 
     if (!user?.id && !isGuestRequesterViewing) {
       setActionError(
         'Trimiterea mesajelor in timp real este disponibila doar daca sesiunea autentificata sau guest este valida.',
       )
-      return
+      return false
     }
 
     const socket = socketRef.current
 
     if (!socket || socket.readyState !== WebSocket.OPEN || !isSocketReady) {
       setActionError('Conexiunea de chat nu este pregatita. Reincearca in cateva secunde.')
-      return
+      return false
     }
 
     setIsSendingMessage(true)
@@ -430,14 +430,14 @@ export function ChatWindow({ conversation }: Props) {
           setActionError(
             uploadResponse.message || 'Nu am putut incarca mesajul vocal. Incearca din nou.',
           )
-          return
+          return false
         }
 
         const audioUrl = readUploadedAssetUrl(uploadResponse.data)
 
         if (!audioUrl) {
           setActionError('Backendul nu a returnat URL-ul mesajului vocal incarcat.')
-          return
+          return false
         }
 
         appendOptimisticMessage({
@@ -457,6 +457,7 @@ export function ChatWindow({ conversation }: Props) {
       }
 
       scheduleMessagesRefresh()
+      return true
     } finally {
       setIsSendingMessage(false)
     }
@@ -688,7 +689,7 @@ export function ChatWindow({ conversation }: Props) {
       </div>
 
       <ChatInput
-        onSend={(content) => void handleSend(content)}
+        onSend={handleSend}
         conversationClosed={isConversationClosed}
         sendingMessage={isSendingMessage}
       />

@@ -5,7 +5,7 @@ import type { OutgoingMessageContent } from './types'
 import { useAudioRecorder } from './hooks/useAudioRecorder'
 
 interface Props {
-  onSend: (content: OutgoingMessageContent) => void
+  onSend: (content: OutgoingMessageContent) => void | boolean | Promise<void | boolean>
   conversationClosed?: boolean
   sendingMessage?: boolean
 }
@@ -23,14 +23,16 @@ export function ChatInput({
     !conversationClosed && !sendingMessage && (text.trim().length > 0 || audioUrl !== null)
   const inputDisabled = conversationClosed || isRecording || audioUrl !== null || sendingMessage
 
-  function handleSend() {
+  async function handleSend() {
     if (!canSend) return
 
     if (audioUrl && audioBlob) {
-      onSend({ type: 'audio', blob: audioBlob, previewUrl: audioUrl })
+      const result = await onSend({ type: 'audio', blob: audioBlob, previewUrl: audioUrl })
+      if (result === false) return
       clearAudio()
     } else if (text.trim()) {
-      onSend({ type: 'text', text: text.trim() })
+      const result = await onSend({ type: 'text', text: text.trim() })
+      if (result === false) return
       setText('')
     }
   }
@@ -38,7 +40,7 @@ export function ChatInput({
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      handleSend()
+      void handleSend()
     }
   }
 
@@ -123,7 +125,9 @@ export function ChatInput({
 
         <button
           type="button"
-          onClick={handleSend}
+          onClick={() => {
+            void handleSend()
+          }}
           disabled={!canSend}
           aria-label="Trimite mesajul"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-purple text-white transition-colors hover:bg-brand-purple-dark disabled:cursor-not-allowed disabled:opacity-40"
