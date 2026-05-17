@@ -106,7 +106,7 @@ export class Fetcher {
     try {
       const response = await fetch(fullURL, requestOptions)
 
-      if (response.status === 401) {
+      if (response.status === 401 && !options?.suppressUnauthorizedEvent) {
         window.dispatchEvent(new CustomEvent('auth:unauthorized'))
       }
 
@@ -219,7 +219,8 @@ export class Fetcher {
     if (!payload) return null
     if (typeof payload === 'string') return payload
     if (typeof payload === 'object' && payload !== null) {
-      const message = 'message' in payload ? payload.message : null
+      const message =
+        ('message' in payload ? payload.message : null) ?? ('error' in payload ? payload.error : null)
       return typeof message === 'string' ? message : null
     }
     return null

@@ -100,6 +100,10 @@ function mapUrgency(urgency?: string | null): LiveRequestUrgencyLevel | null {
 }
 
 function readTaskCity(task: TaskResponseType): string | null {
+  if (typeof task.city === 'string' && task.city.trim()) {
+    return task.city.trim()
+  }
+
   const details = task.details
 
   if (!isRecord(details)) {
@@ -112,6 +116,12 @@ function readTaskCity(task: TaskResponseType): string | null {
 }
 
 function readTaskSkillsNeeded(task: TaskResponseType): string[] {
+  if (Array.isArray(task.skillsNeeded)) {
+    return task.skillsNeeded
+      .filter((skill): skill is string => typeof skill === 'string' && Boolean(skill.trim()))
+      .map((skill) => skill.trim())
+  }
+
   const details = task.details
 
   if (!isRecord(details)) {
@@ -184,6 +194,16 @@ export function extractTasksList(payload: unknown): TaskResponseType[] {
   const tasksData = (paginatedPayload as PaginatedTasksPayload).data
 
   return Array.isArray(tasksData) ? tasksData.filter(isRecord) as TaskResponseType[] : []
+}
+
+export function extractTask(payload: unknown): TaskResponseType | null {
+  const taskPayload = readEnvelopeData<unknown>(payload)
+
+  if (!isRecord(taskPayload)) {
+    return null
+  }
+
+  return taskPayload as TaskResponseType
 }
 
 export function isTaskOwnedByCurrentUser(

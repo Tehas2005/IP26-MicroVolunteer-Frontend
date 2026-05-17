@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { isRestrictedAccountStatus } from '@/lib/accountStatus'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/store/authStore'
 
@@ -37,7 +38,7 @@ export interface AuthPageProps {
 export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
-  const { isGuest, sessionStatus, setAuthSession } = useAuthStore()
+  const { isGuest, sessionStatus, setAuthSession, user } = useAuthStore()
   const [mode, setMode] = useState<AuthMode>(routeMode === 'signup' ? 'register' : 'login')
   const [success, setSuccess] = useState(false)
 
@@ -48,9 +49,14 @@ export default function AuthPage({ mode: routeMode = 'login' }: AuthPageProps) {
 
   useEffect(() => {
     if (!success && sessionStatus === 'ready' && !isGuest) {
+      if (isRestrictedAccountStatus(user?.accountStatus)) {
+        navigate('/cont-blocat')
+        return
+      }
+
       navigate('/')
     }
-  }, [isGuest, navigate, sessionStatus, success])
+  }, [isGuest, navigate, sessionStatus, success, user?.accountStatus])
 
   function syncMode(nextMode: AuthMode) {
     setMode(nextMode)

@@ -5,7 +5,6 @@ import { act } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
-import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import type { VolunteerNotificationItem } from '@/lib/volunteerNotifications'
 import { createVolunteerNotification } from '@/lib/volunteerNotifications'
 
@@ -31,7 +30,7 @@ function NotificationsHarness({
 }: {
   initialNotifications: VolunteerNotificationItem[]
   autoDismissMs?: number
-  onViewDetails?: (request: LiveRequestCardData) => void
+  onViewDetails?: (notification: VolunteerNotificationItem) => void
 }) {
   const [notifications, setNotifications] = useState(initialNotifications)
 
@@ -114,5 +113,28 @@ describe('VolunteerNotificationStack', () => {
     })
 
     expect(screen.queryByTestId('volunteer-toast-request-1')).not.toBeInTheDocument()
+  })
+
+  it('apeleaza onViewDetails cu notificarea selectata', async () => {
+    const user = userEvent.setup()
+    const onViewDetails = vi.fn()
+
+    render(
+      <NotificationsHarness
+        initialNotifications={[createNotificationOverrides()]}
+        onViewDetails={onViewDetails}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Vezi detalii' }))
+
+    expect(onViewDetails).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'volunteer-alert:request-1',
+        request: expect.objectContaining({
+          id: 'request-1',
+        }),
+      }),
+    )
   })
 })
