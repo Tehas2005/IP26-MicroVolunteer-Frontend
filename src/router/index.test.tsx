@@ -11,6 +11,7 @@ vi.mock("@/pages/InteractionHistoryPage", () => ({ default: () => null }))
 vi.mock("@/pages/ProfilePage", () => ({ default: () => null }))
 vi.mock("@/pages/ResetPasswordPage", () => ({ default: () => null }))
 vi.mock("@/pages/UserProfilePage", () => ({ default: () => null }))
+vi.mock("@/pages/VolunteerProfilePage", () => ({ default: () => null }))
 
 import { router } from "@/router"
 

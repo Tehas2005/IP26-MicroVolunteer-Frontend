@@ -1,9 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AuthSessionBootstrap } from './AuthSessionBootstrap'
+import { backend } from '@/lib/backend'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
+import { AuthSessionBootstrap } from './AuthSessionBootstrap'
 
 const { getSessionMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
@@ -17,6 +18,9 @@ vi.mock('@/main', () => ({
 
 vi.mock('@/lib/backend', () => ({
   backend: {
+    auth: {
+      clearAuthToken: vi.fn(),
+    },
     profile: {
       getMe: vi.fn(),
     },
@@ -26,13 +30,34 @@ vi.mock('@/lib/backend', () => ({
     offers: {
       listMine: vi.fn(),
     },
-    auth: {
-      clearAuthToken: vi.fn(),
-    },
   },
 }))
 
-import { backend } from '@/lib/backend'
+function renderBootstrap() {
+  render(
+    <AuthSessionBootstrap>
+      <div>Aplicatie</div>
+    </AuthSessionBootstrap>,
+  )
+}
+
+function setPersistedAuthenticatedSession() {
+  useAuthStore.setState({
+    user: {
+      id: 'user-1',
+      name: 'Ion',
+      email: 'ion@example.com',
+      accountStatus: 'ACTIVE',
+    },
+    isGuest: false,
+    sessionStatus: 'ready',
+    accountStatus: 'active',
+    volunteerStatus: 'volunteer',
+    knownVolunteerUserIds: {
+      'user-1': true,
+    },
+  })
+}
 
 describe('AuthSessionBootstrap', () => {
   beforeEach(() => {
@@ -49,6 +74,7 @@ describe('AuthSessionBootstrap', () => {
     useVolunteerProfileStore.setState({
       profilesByUserId: {},
     })
+
     vi.mocked(backend.profile.getMe).mockResolvedValue({
       success: true,
       data: {
@@ -87,27 +113,13 @@ describe('AuthSessionBootstrap', () => {
   })
 
   it('curata sesiunea locala daca backendul nu mai intoarce o sesiune valida', async () => {
-    useAuthStore.setState({
-      user: {
-        id: 'user-1',
-        name: 'Ion',
-        email: 'ion@example.com',
-        accountStatus: 'ACTIVE',
-      },
-      isGuest: false,
-      sessionStatus: 'ready',
-    })
-
+    setPersistedAuthenticatedSession()
     getSessionMock.mockResolvedValue({
       data: null,
       error: null,
     })
 
-    render(
-      <AuthSessionBootstrap>
-        <div>Aplicatie</div>
-      </AuthSessionBootstrap>,
-    )
+    renderBootstrap()
 
     await waitFor(() => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()
@@ -115,32 +127,34 @@ describe('AuthSessionBootstrap', () => {
 
     expect(useAuthStore.getState().isGuest).toBe(true)
     expect(useAuthStore.getState().user).toBeNull()
+    expect(useAuthStore.getState().accountStatus).toBe('unknown')
+    expect(useAuthStore.getState().volunteerStatus).toBe('unknown')
   })
 
-  it('curata sesiunea persistata daca bootstrap-ul arunca o eroare', async () => {
-    useAuthStore.setState({
-      user: {
-        id: 'user-1',
-        name: 'Ion',
-        email: 'ion@example.com',
-        accountStatus: 'ACTIVE',
-      },
-      isGuest: false,
-      sessionStatus: 'ready',
-      accountStatus: 'active',
-      volunteerStatus: 'volunteer',
-      knownVolunteerUserIds: {
-        'user-1': true,
-      },
+  it('curata sesiunea locala daca getSession intoarce response.error', async () => {
+    setPersistedAuthenticatedSession()
+    getSessionMock.mockResolvedValue({
+      data: null,
+      error: { message: 'unauthorized' },
     })
 
-    getSessionMock.mockRejectedValue(new Error('network down'))
+    renderBootstrap()
 
-    render(
-      <AuthSessionBootstrap>
-        <div>Aplicatie</div>
-      </AuthSessionBootstrap>,
-    )
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+    })
+
+    expect(useAuthStore.getState().isGuest).toBe(true)
+    expect(useAuthStore.getState().user).toBeNull()
+    expect(useAuthStore.getState().accountStatus).toBe('unknown')
+    expect(useAuthStore.getState().volunteerStatus).toBe('unknown')
+  })
+
+  it('curata sesiunea locala daca getSession arunca exceptie', async () => {
+    setPersistedAuthenticatedSession()
+    getSessionMock.mockRejectedValue(new Error('network failed'))
+
+    renderBootstrap()
 
     await waitFor(() => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()
@@ -166,7 +180,6 @@ describe('AuthSessionBootstrap', () => {
     })
     vi.mocked(backend.profile.getMe).mockResolvedValue({
       success: false,
-      isForbidden: true,
       data: null,
       message: null,
       status: 403,
@@ -174,13 +187,10 @@ describe('AuthSessionBootstrap', () => {
       isServerError: false,
       isNotFound: false,
       isUnauthorized: false,
+      isForbidden: true,
     })
 
-    render(
-      <AuthSessionBootstrap>
-        <div>Aplicatie</div>
-      </AuthSessionBootstrap>,
-    )
+    renderBootstrap()
 
     await waitFor(() => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()
@@ -205,7 +215,6 @@ describe('AuthSessionBootstrap', () => {
         'old-user': true,
       },
     })
-
     getSessionMock.mockResolvedValue({
       data: {
         user: {
@@ -218,11 +227,7 @@ describe('AuthSessionBootstrap', () => {
       error: null,
     })
 
-    render(
-      <AuthSessionBootstrap>
-        <div>Aplicatie</div>
-      </AuthSessionBootstrap>,
-    )
+    renderBootstrap()
 
     await waitFor(() => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()
@@ -232,6 +237,144 @@ describe('AuthSessionBootstrap', () => {
     expect(useAuthStore.getState().volunteerStatus).toBe('not-volunteer')
     expect(useAuthStore.getState().knownVolunteerUserIds).toEqual({
       'old-user': true,
+    })
+  })
+
+  it('hidrateaza store-ul de voluntar din profilul remote la bootstrap', async () => {
+    getSessionMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          name: 'Ion',
+          email: 'ion@example.com',
+          role: 'requester',
+        },
+      },
+      error: null,
+    })
+    vi.mocked(backend.profile.getMe).mockResolvedValue({
+      success: true,
+      data: {
+        hiddenIdentity: true,
+        status: 'ACTIVE',
+      },
+      message: null,
+      status: 200,
+      isClientError: false,
+      isServerError: false,
+      isNotFound: false,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+    vi.mocked(backend.volunteers.getMeProfile).mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          volunteer: { id: 1, userId: 'user-1' },
+          profile: {
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            skills: ['transport'],
+          },
+        },
+      },
+      message: null,
+      status: 200,
+      isClientError: false,
+      isServerError: false,
+      isNotFound: false,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+
+    renderBootstrap()
+
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
+        hiddenIdentity: true,
+        location: 'Cluj-Napoca',
+        locationCoordinates: { x: 23.5899542, y: 46.769379 },
+        skills: ['transport'],
+      })
+      expect(useAuthStore.getState().volunteerStatus).toBe('volunteer')
+    })
+  })
+
+  it('hidrateaza store-ul de voluntar din draft local cand backend-ul intoarce 404', async () => {
+    localStorage.setItem(
+      'mvcr-volunteer-profile-draft:user-1',
+      JSON.stringify({
+        currentLocation: 'Cluj-Napoca',
+        hiddenIdentity: false,
+        knownLocations: [],
+        maxDistanceKm: '15',
+        selectedCity: '',
+        skillInput: '',
+        skills: ['transport'],
+        specificAddress: '',
+      }),
+    )
+    getSessionMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          name: 'Ion',
+          email: 'ion@example.com',
+          role: 'requester',
+        },
+      },
+      error: null,
+    })
+
+    renderBootstrap()
+
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
+        hiddenIdentity: false,
+        location: 'Cluj-Napoca',
+        locationCoordinates: { x: 23.5899542, y: 46.769379 },
+        skills: ['transport'],
+      })
+      expect(useAuthStore.getState().volunteerStatus).toBe('volunteer')
+      expect(useAuthStore.getState().knownVolunteerUserIds).toMatchObject({
+        'user-1': true,
+      })
+    })
+    expect(backend.offers.listMine).not.toHaveBeenCalled()
+  })
+
+  it('sterge profilul local de voluntar daca backend-ul nu il gaseste si nu exista fallback local', async () => {
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {
+        'user-1': {
+          userId: 'user-1',
+          location: 'Cluj-Napoca',
+          locationCoordinates: { x: 23.5899542, y: 46.769379 },
+          skills: ['transport'],
+          hiddenIdentity: false,
+          createdAt: '2026-05-17T00:00:00.000Z',
+          updatedAt: '2026-05-17T00:00:00.000Z',
+        },
+      },
+    })
+    getSessionMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          name: 'Ion',
+          email: 'ion@example.com',
+          role: 'requester',
+        },
+      },
+      error: null,
+    })
+
+    renderBootstrap()
+
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toBeUndefined()
     })
   })
 })
