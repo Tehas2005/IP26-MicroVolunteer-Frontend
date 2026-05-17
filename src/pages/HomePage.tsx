@@ -31,6 +31,7 @@ import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import {
   buildNotificationsWebSocketUrl,
   createVolunteerNotification,
+  isBackendNotificationId,
   mapNotificationRecordsToItems,
   mapNotificationSocketFrameToItem,
   type VolunteerNotificationItem,
@@ -427,7 +428,7 @@ export function HomePage() {
 
   const handleNotificationOpen = useCallback(
     async (notification: VolunteerNotificationItem) => {
-      if (shouldUseBackendNotifications) {
+      if (shouldUseBackendNotifications && isBackendNotificationId(notification.id)) {
         const markAsReadResponse = await backend.notifications.markAsRead(notification.id)
 
         if (!markAsReadResponse.success) {

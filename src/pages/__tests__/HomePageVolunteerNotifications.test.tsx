@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -67,6 +68,21 @@ describe('HomePage volunteer notifications', () => {
       })),
     })
 
+    class MockWebSocket {
+      public onopen: (() => void) | null = null
+
+      constructor() {
+        window.setTimeout(() => this.onopen?.(), 0)
+      }
+
+      close() {}
+    }
+
+    Object.defineProperty(window, 'WebSocket', {
+      writable: true,
+      value: MockWebSocket,
+    })
+
     listNotificationsMock.mockResolvedValue({
       success: true,
       data: {
@@ -97,8 +113,10 @@ describe('HomePage volunteer notifications', () => {
   })
 
   it(
-    'afiseaza toast pentru o cerere noua din volunteer feed dupa refetch',
+    'afiseaza toast pentru o cerere noua din volunteer feed dupa refetch si deschide detaliile',
     async () => {
+      const user = userEvent.setup()
+
       listTasksMock
         .mockResolvedValueOnce({
           success: true,
@@ -165,6 +183,11 @@ describe('HomePage volunteer notifications', () => {
       expect(
         screen.getByText('A aparut acum si trebuie semnalata voluntarului.'),
       ).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Vezi detalii' }))
+
+      expect(markNotificationAsReadMock).not.toHaveBeenCalled()
+      expect(navigateMock).toHaveBeenCalledWith(expect.stringMatching(/^\/chat\//))
     },
     20000,
   )

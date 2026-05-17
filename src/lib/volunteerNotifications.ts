@@ -80,6 +80,10 @@ export function getVolunteerNotificationId(requestId: string) {
   return `volunteer-alert:${requestId}`
 }
 
+export function isBackendNotificationId(notificationId: string) {
+  return /^\d+$/.test(notificationId)
+}
+
 export function buildVolunteerNotificationMessage(request: LiveRequestCardData) {
   const description = getPrimaryDescription(request.description)
   const contextFragments = buildContextFragments(request)
