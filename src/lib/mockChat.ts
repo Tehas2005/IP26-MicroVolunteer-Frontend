@@ -13,6 +13,7 @@ const CHANGE_EVENT = 'mvcr-mock-chat-change'
 const DEFAULT_REQUESTER_NAME = 'Solicitant'
 const DEFAULT_VOLUNTEER_NAME = 'Voluntar'
 const AUDIO_PREVIEW_TEXT = 'Mesaj vocal'
+const REQUEST_CANCELLED_SYSTEM_MESSAGE = 'Autorul a anulat această cerere.'
 
 type StoredMessage = {
   id: string
@@ -198,6 +199,14 @@ function getConversationPreview(messages: StoredMessage[], requestTitle: string)
     return requestTitle ? `Cerere: ${requestTitle}` : 'Conversație nouă'
   }
 
+  if (
+    lastMessage.senderKey.startsWith('system:') &&
+    lastMessage.content.type === 'text' &&
+    lastMessage.content.text.trim()
+  ) {
+    return lastMessage.content.text
+  }
+
   return lastMessage.content.type === 'audio' ? AUDIO_PREVIEW_TEXT : lastMessage.content.text
 }
 
@@ -347,7 +356,11 @@ export function getMockConversationThread(
     messages: conversation.messages.map((message) => ({
       id: message.id,
       content: message.content,
-      from: message.senderKey === identity.key ? 'me' : 'them',
+      from: message.senderKey.startsWith('system:')
+        ? 'system'
+        : message.senderKey === identity.key
+          ? 'me'
+          : 'them',
       senderId: message.senderKey,
       timestamp: new Date(message.sentAt),
     })),
@@ -417,6 +430,9 @@ export function ensureMockConversationForAcceptedOffer(
   seed: ChatRequestSeed,
   requesterIdentity: ChatViewerIdentity,
   volunteer: MatchedVolunteerSeed,
+  options?: {
+    preferredConversationId?: string | null
+  },
 ): Conversation {
   const state = readState()
   const requesterKey = seed.requesterKey?.trim() || `guest-request:${seed.id}`
@@ -433,7 +449,7 @@ export function ensureMockConversationForAcceptedOffer(
 
   const now = new Date().toISOString()
   const nextConversation: StoredConversation = {
-    id: crypto.randomUUID(),
+    id: options?.preferredConversationId?.trim() || crypto.randomUUID(),
     requestId: seed.id,
     requestTitle: seed.title?.trim() || 'Cerere fără titlu',
     requesterKey,
@@ -634,4 +650,48 @@ export function dismissMockConversationRatingPrompt(
   writeState({ conversations: nextConversations })
 
   return getMockConversationThread(conversationId, identity)
+}
+
+export function cancelMockRequestConversations(
+  requestId: string,
+  requesterIdentity: ChatViewerIdentity,
+) {
+  const state = readState()
+  const nextConversations = state.conversations.map((conversation) => {
+    if (conversation.requestId !== requestId || conversation.requesterKey !== requesterIdentity.key) {
+      return conversation
+    }
+
+    const alreadyMarkedCancelled = conversation.messages.some(
+      (message) =>
+        message.senderKey === 'system:request-cancelled' &&
+        message.content.type === 'text' &&
+        message.content.text === REQUEST_CANCELLED_SYSTEM_MESSAGE,
+    )
+
+    const nextMessages = alreadyMarkedCancelled
+      ? conversation.messages
+      : [
+          ...conversation.messages,
+          {
+            id: crypto.randomUUID(),
+            senderKey: 'system:request-cancelled',
+            content: {
+              type: 'text' as const,
+              text: REQUEST_CANCELLED_SYSTEM_MESSAGE,
+            },
+            sentAt: new Date().toISOString(),
+          } satisfies StoredMessage,
+        ]
+
+    return {
+      ...conversation,
+      status: 'closed' as const,
+      updatedAt: new Date().toISOString(),
+      messages: nextMessages,
+      ratingPromptDismissedBy: [conversation.requesterKey, conversation.volunteerKey],
+    }
+  })
+
+  writeState({ conversations: nextConversations })
 }

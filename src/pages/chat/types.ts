@@ -28,7 +28,7 @@ export type OutgoingMessageContent = OutgoingTextMessageContent | OutgoingAudioM
 export type Message = {
   id: string;
   content: MessageContent;
-  from: 'me' | 'them';
+  from: 'me' | 'them' | 'system';
   senderId: number | string;
   timestamp: Date;
 };

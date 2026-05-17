@@ -61,14 +61,17 @@ describe('liveRequests helpers', () => {
         anonymousMode: true,
       },
       {
+        currentUserId: 'user-1',
         currentUserName: 'Ion Socol',
-        isOwnedByCurrentUser: false,
+        isOwnedByCurrentUser: true,
       },
     )
 
     expect(anonymousCard.username).toBe('utilizator_anonim')
-    expect(anonymousCard.name).toBe('Solicitant')
+    expect(anonymousCard.name).toBe('Ion Socol')
     expect(anonymousCard.category).toBe('MESSAGES_ONLY')
     expect(anonymousCard.urgencyLevel).toBe('MEDIUM')
+    expect(anonymousCard.requesterKey).toBe('user:user-1')
+    expect(anonymousCard.requesterKind).toBe('user')
   })
 })
