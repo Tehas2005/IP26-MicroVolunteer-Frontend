@@ -1,7 +1,9 @@
 import { type ReactNode, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
 import { authClient } from '@/main'
 import { backend } from '@/lib/backend'
+import { AUTH_SESSION_QUERY_KEY } from '@/lib/authSessionQuery'
 import type { ProfileType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
@@ -57,15 +59,30 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
   volunteerProfilesByUserIdRef.current = volunteerProfilesByUserId
   const knownVolunteerUserIdsRef = useRef(knownVolunteerUserIds)
   knownVolunteerUserIdsRef.current = knownVolunteerUserIds
+  const sessionQuery = useQuery({
+    queryKey: AUTH_SESSION_QUERY_KEY,
+    queryFn: () => authClient.getSession(),
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
 
   useEffect(() => {
     let isMounted = true
 
     async function syncSession() {
+      if (sessionQuery.isPending) {
+        setSessionStatus('loading')
+        return
+      }
+
       setSessionStatus('loading')
 
       try {
-        const response = await authClient.getSession()
+        if (sessionQuery.error) {
+          throw sessionQuery.error
+        }
+
+        const response = sessionQuery.data
 
         if (!isMounted) {
           return
@@ -166,6 +183,9 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
   }, [
     clearAuthSession,
     rememberVolunteerUser,
+    sessionQuery.data,
+    sessionQuery.error,
+    sessionQuery.isPending,
     setAccountStatus,
     setAuthSession,
     setSessionStatus,

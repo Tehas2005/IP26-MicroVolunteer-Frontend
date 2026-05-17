@@ -101,6 +101,63 @@ export type CreateProfilePayloadType = {
 
 export type UpdateProfilePayloadType = Partial<CreateProfilePayloadType>
 
+export type VolunteerLocationPointType = {
+  x: number
+  y: number
+}
+
+export type VolunteerKnownLocationType = {
+  id?: string | number
+  city?: string | null
+  addressText?: string | null
+  location?: VolunteerLocationPointType | null
+}
+
+export type VolunteerRecordType = {
+  id?: string | number
+  userId?: string | null
+  availability?: boolean | null
+  trustScore?: number | null
+  completedTasks?: number | null
+  [key: string]: unknown
+}
+
+export type CurrentVolunteerProfileType = {
+  id?: string | number
+  volunteerId?: string | number | null
+  skills?: string[] | null
+  maxDistanceKm?: number | null
+  currentLocation?: VolunteerLocationPointType | null
+  knownLocations?: VolunteerKnownLocationType[] | null
+  [key: string]: unknown
+}
+
+export type CurrentVolunteerProfileResponseType = {
+  volunteer?: VolunteerRecordType | null
+  profile?: CurrentVolunteerProfileType | null
+  [key: string]: unknown
+}
+
+export type VolunteerKnownLocationPayloadType = {
+  city?: string | null
+  addressText?: string | null
+  location: VolunteerLocationPointType
+}
+
+export type VolunteerProfilePayloadType = {
+  skills?: string[]
+  maxDistanceKm?: number | null
+  currentLocation?: VolunteerLocationPointType | null
+  knownLocations?: VolunteerKnownLocationPayloadType[]
+  availability?: boolean
+}
+
+export type BecomeVolunteerResponseType = {
+  message?: string
+  volunteerId?: number
+  success?: boolean
+}
+
 export type TaskUrgencyType = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | string
 export type TaskStatusType =
   | 'OPEN'

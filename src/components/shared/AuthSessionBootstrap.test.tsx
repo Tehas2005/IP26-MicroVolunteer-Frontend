@@ -1,4 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthSessionBootstrap } from './AuthSessionBootstrap'
@@ -33,6 +35,22 @@ vi.mock('@/lib/backend', () => ({
 }))
 
 import { backend } from '@/lib/backend'
+
+function renderBootstrap(children: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AuthSessionBootstrap>{children}</AuthSessionBootstrap>
+    </QueryClientProvider>,
+  )
+}
 
 describe('AuthSessionBootstrap', () => {
   beforeEach(() => {
@@ -103,11 +121,7 @@ describe('AuthSessionBootstrap', () => {
       error: null,
     })
 
-    render(
-      <AuthSessionBootstrap>
-        <div>Aplicatie</div>
-      </AuthSessionBootstrap>,
-    )
+    renderBootstrap(<div>Aplicatie</div>)
 
     await waitFor(() => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()
@@ -136,11 +150,7 @@ describe('AuthSessionBootstrap', () => {
 
     getSessionMock.mockRejectedValue(new Error('network down'))
 
-    render(
-      <AuthSessionBootstrap>
-        <div>Aplicatie</div>
-      </AuthSessionBootstrap>,
-    )
+    renderBootstrap(<div>Aplicatie</div>)
 
     await waitFor(() => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()
@@ -176,11 +186,7 @@ describe('AuthSessionBootstrap', () => {
       isUnauthorized: false,
     })
 
-    render(
-      <AuthSessionBootstrap>
-        <div>Aplicatie</div>
-      </AuthSessionBootstrap>,
-    )
+    renderBootstrap(<div>Aplicatie</div>)
 
     await waitFor(() => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()
@@ -218,11 +224,7 @@ describe('AuthSessionBootstrap', () => {
       error: null,
     })
 
-    render(
-      <AuthSessionBootstrap>
-        <div>Aplicatie</div>
-      </AuthSessionBootstrap>,
-    )
+    renderBootstrap(<div>Aplicatie</div>)
 
     await waitFor(() => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()

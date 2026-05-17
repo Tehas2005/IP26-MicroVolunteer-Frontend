@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 import type { TaskLocationPayload } from '@/lib/romania-city-coordinates'
+import type { VolunteerKnownLocationPayloadType } from '@/sdk/types'
 
 export interface VolunteerProfile {
   userId: string
@@ -9,6 +10,9 @@ export interface VolunteerProfile {
   locationCoordinates: TaskLocationPayload
   skills: string[]
   hiddenIdentity: boolean
+  availability?: boolean
+  maxDistanceKm?: number | null
+  knownLocations?: VolunteerKnownLocationPayloadType[]
   createdAt: string
   updatedAt: string
 }
@@ -18,6 +22,9 @@ interface VolunteerProfileInput {
   locationCoordinates: TaskLocationPayload
   skills: string[]
   hiddenIdentity: boolean
+  availability?: boolean
+  maxDistanceKm?: number | null
+  knownLocations?: VolunteerKnownLocationPayloadType[]
 }
 
 interface VolunteerProfileState {
@@ -44,6 +51,9 @@ export const useVolunteerProfileStore = create<VolunteerProfileState>()(
                 locationCoordinates: profile.locationCoordinates,
                 skills: profile.skills,
                 hiddenIdentity: profile.hiddenIdentity,
+                availability: profile.availability,
+                maxDistanceKm: profile.maxDistanceKm,
+                knownLocations: profile.knownLocations,
                 createdAt: existingProfile?.createdAt ?? timestamp,
                 updatedAt: timestamp,
               },
