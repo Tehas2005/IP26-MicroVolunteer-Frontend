@@ -30,6 +30,9 @@ export type BetterAuthUserType = {
   email: string
   image?: string | null
   emailVerified?: boolean
+  accountStatus?: string | null
+  accountstatus?: string | null
+  [key: string]: unknown
 }
 
 export type BetterAuthSessionType = {
