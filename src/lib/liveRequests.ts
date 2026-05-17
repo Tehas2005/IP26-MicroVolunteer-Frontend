@@ -99,6 +99,46 @@ function mapUrgency(urgency?: string | null): LiveRequestUrgencyLevel | null {
   return null
 }
 
+function readTaskCity(task: TaskResponseType): string | null {
+  if (typeof task.city === 'string' && task.city.trim()) {
+    return task.city.trim()
+  }
+
+  const details = task.details
+
+  if (!isRecord(details)) {
+    return null
+  }
+
+  const city = details.city
+
+  return typeof city === 'string' && city.trim() ? city.trim() : null
+}
+
+function readTaskSkillsNeeded(task: TaskResponseType): string[] {
+  if (Array.isArray(task.skillsNeeded)) {
+    return task.skillsNeeded
+      .filter((skill): skill is string => typeof skill === 'string' && Boolean(skill.trim()))
+      .map((skill) => skill.trim())
+  }
+
+  const details = task.details
+
+  if (!isRecord(details)) {
+    return []
+  }
+
+  const skillsNeeded = details.skillsNeeded
+
+  if (!Array.isArray(skillsNeeded)) {
+    return []
+  }
+
+  return skillsNeeded
+    .filter((skill): skill is string => typeof skill === 'string' && Boolean(skill.trim()))
+    .map((skill) => skill.trim())
+}
+
 export function readCreatedTaskIds(userId?: string | null): string[] {
   if (!userId) {
     return []
@@ -127,6 +167,14 @@ export function rememberCreatedTaskId(userId: string, taskId: string | number | 
 }
 
 export function extractCreatedTaskId(payload: unknown): string | null {
+  if (isRecord(payload)) {
+    const directTaskId = normalizeTaskId(payload.id as string | number | null | undefined)
+
+    if (directTaskId) {
+      return directTaskId
+    }
+  }
+
   const task = readEnvelopeData<unknown>(payload)
 
   if (!isRecord(task)) {
@@ -148,6 +196,16 @@ export function extractTasksList(payload: unknown): TaskResponseType[] {
   return Array.isArray(tasksData) ? tasksData.filter(isRecord) as TaskResponseType[] : []
 }
 
+export function extractTask(payload: unknown): TaskResponseType | null {
+  const taskPayload = readEnvelopeData<unknown>(payload)
+
+  if (!isRecord(taskPayload)) {
+    return null
+  }
+
+  return taskPayload as TaskResponseType
+}
+
 export function isTaskOwnedByCurrentUser(
   task: TaskResponseType,
   currentUserId?: string | null,
@@ -166,24 +224,33 @@ export function mapTaskToLiveRequestCard(
   task: TaskResponseType,
   options: {
     currentUserName?: string | null
+    currentUserId?: string | null
     isOwnedByCurrentUser: boolean
   },
 ): LiveRequestCardData {
-  const { currentUserName, isOwnedByCurrentUser } = options
+  const { currentUserId, currentUserName, isOwnedByCurrentUser } = options
   const isAnonymous = Boolean(task.anonymousMode)
+  const normalizedTaskId = normalizeTaskId(task.id) ?? crypto.randomUUID()
+  const ownerRequesterKey =
+    isOwnedByCurrentUser && currentUserId ? `user:${currentUserId}` : null
+  const fallbackRequesterKey =
+    task.requestedByUserId
+      ? `user:${task.requestedByUserId}`
+      : `guest-request:${normalizedTaskId}`
 
   return {
-    id: normalizeTaskId(task.id) ?? crypto.randomUUID(),
+    id: normalizedTaskId,
     title: task.title,
+    description: task.description,
     category: mapCategory(task.category),
     urgencyLevel: mapUrgency(task.urgency),
     anonymousMode: isAnonymous,
     username: isAnonymous ? ANONYMOUS_DISPLAY_NAME : null,
     name: isOwnedByCurrentUser ? currentUserName?.trim() || GENERIC_REQUESTER_NAME : GENERIC_REQUESTER_NAME,
-    requesterKey: task.requestedByUserId
-      ? `user:${task.requestedByUserId}`
-      : `guest-request:${normalizeTaskId(task.id) ?? crypto.randomUUID()}`,
-    requesterKind: task.requestedByUserId ? 'user' : 'guest',
+    city: readTaskCity(task),
+    skillsNeeded: readTaskSkillsNeeded(task),
+    requesterKey: ownerRequesterKey ?? fallbackRequesterKey,
+    requesterKind: ownerRequesterKey || task.requestedByUserId ? 'user' : 'guest',
     requesterLabel: isAnonymous
       ? ANONYMOUS_DISPLAY_NAME
       : isOwnedByCurrentUser

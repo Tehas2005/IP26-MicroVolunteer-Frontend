@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect } from 'react'
 
+import { readAccountStatusFromUser } from '@/lib/accountStatus'
 import { backend } from '@/lib/backend'
 import { useAuthStore } from '@/store/authStore'
 import { authClient } from '@/main'
@@ -25,8 +26,9 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
 
         if (!isMounted) return;
 
-        if(response.error){
-          console.log(response.error.message || 'get-session failed');
+        if (response.error) {
+          console.log(response.error.message || 'get-session failed')
+          return
         }
 
         if (response.data) {
@@ -35,10 +37,13 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
               id: response.data.user.id,
               name: response.data.user.name,
               email: response.data.user.email,
+              accountStatus: readAccountStatusFromUser(response.data.user),
             },
           })
           return;
         }
+
+        clearAuthSession()
       } catch {
         if (!isMounted) return
       } finally {

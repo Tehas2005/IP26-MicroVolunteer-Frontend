@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BLOCKED_LOGIN_MESSAGE, isRestrictedAccountStatus, readAccountStatusFromUser } from '@/lib/accountStatus';
 import { backend } from '@/lib/backend';
 import { Field, TextInput, PasswordInput, ErrorBanner } from './components';
 import { validateEmail } from './validators';
@@ -52,11 +53,27 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
         return;
       }
 
+      const accountStatus = readAccountStatusFromUser(response.data.user)
+
+      if (isRestrictedAccountStatus(accountStatus)) {
+        try {
+          await backend.auth.signOut()
+        } catch {
+          // Clear the local auth token even if sign-out fails.
+        } finally {
+          backend.auth.clearAuthToken()
+        }
+
+        setApiError(BLOCKED_LOGIN_MESSAGE)
+        return
+      }
+
       onSuccess({
         user: {
           id: response.data.user.id,
           name: response.data.user.name,
           email: response.data.user.email,
+          accountStatus,
         },
       });
     } catch (err: unknown) {

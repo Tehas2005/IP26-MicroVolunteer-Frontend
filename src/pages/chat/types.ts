@@ -14,12 +14,23 @@ export type MessageContent = TextContent | AudioContent;
 export type Message = {
   id: string;
   content: MessageContent;
-  from: 'me' | 'them';
+  from: 'me' | 'them' | 'system';
   senderId: number | string;
   timestamp: Date;
 };
 
 export type ConversationStatus = 'open' | 'closed';
+
+export type ConversationViewerRole = 'requester' | 'volunteer';
+
+export type RatingValue = 1 | 2 | 3 | 4 | 5;
+
+export type Rating = {
+  id: string;
+  targetUserId: string;
+  value: RatingValue;
+  createdAt: Date;
+};
 
 export type Conversation = {
   id: string;
@@ -30,4 +41,15 @@ export type Conversation = {
   status: ConversationStatus;
   requestId?: string;
   requestTitle?: string;
+  targetUserId: string;
+  targetUserName: string;
+  viewerRole: ConversationViewerRole;
+  viewerHasRated: boolean;
+  ratingPromptPending: boolean;
+  viewerRating?: Rating | null;
+};
+
+export type ConversationThread = {
+  conversation: Conversation;
+  messages: Message[];
 };

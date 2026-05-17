@@ -1,30 +1,20 @@
-import type { ReactNode } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 
 import RootLayout from '@/components/layout/RootLayout'
 import AboutPage from '@/pages/AboutPage'
 import AskForHelpPage from '@/pages/AskForHelpPage'
 import AuthPage from '@/pages/AuthPage'
+import BlockedAccountPage from '@/pages/BlockedAccountPage'
 import ChatPage from '@/pages/ChatPage'
 import HomePage from '@/pages/HomePage'
+import InteractionHistoryPage from '@/pages/InteractionHistoryPage'
 import ProfilePage from '@/pages/ProfilePage'
+import RequestDetailsPage from '@/pages/RequestDetailsPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
-import { useAuthStore } from '@/store/authStore'
-
-function RequireAuthenticatedUser({ children }: { children: ReactNode }) {
-  const isGuest = useAuthStore((state) => state.isGuest)
-  const sessionStatus = useAuthStore((state) => state.sessionStatus)
-
-  if (sessionStatus === 'loading') {
-    return null
-  }
-
-  if (isGuest) {
-    return <Navigate to="/auth/login" replace />
-  }
-
-  return <>{children}</>
-}
+import UserProfilePage from '@/pages/UserProfilePage'
+import RequireAuthenticatedUser from './RequireAuthenticatedUser'
+import RequireAvailableAccount from './RequireAvailableAccount'
+import RequireRestrictedAccount from './RequireRestrictedAccount'
 
 export const router = createBrowserRouter([
   { path: '/auth', element: <AuthPage mode="login" /> },
@@ -32,8 +22,20 @@ export const router = createBrowserRouter([
   { path: '/auth/signup', element: <AuthPage mode="signup" /> },
   { path: '/auth/reset-password', element: <ResetPasswordPage /> },
   {
+    path: '/cont-blocat',
+    element: (
+      <RequireRestrictedAccount>
+        <BlockedAccountPage />
+      </RequireRestrictedAccount>
+    ),
+  },
+  {
     path: '/',
-    element: <RootLayout />,
+    element: (
+      <RequireAvailableAccount>
+        <RootLayout />
+      </RequireAvailableAccount>
+    ),
     children: [
       { index: true, element: <HomePage /> },
       { path: 'cere-ajutor', element: <AskForHelpPage /> },
@@ -41,11 +43,28 @@ export const router = createBrowserRouter([
         path: 'profil',
         element: (
           <RequireAuthenticatedUser>
+            <UserProfilePage />
+          </RequireAuthenticatedUser>
+        ),
+      },
+      {
+        path: 'devino-voluntar',
+        element: (
+          <RequireAuthenticatedUser>
             <ProfilePage />
           </RequireAuthenticatedUser>
         ),
       },
       { path: 'despre-noi', element: <AboutPage /> },
+      { path: 'cereri/:taskId', element: <RequestDetailsPage /> },
+      {
+        path: 'istoric-interactiuni',
+        element: (
+          <RequireAuthenticatedUser>
+            <InteractionHistoryPage />
+          </RequireAuthenticatedUser>
+        ),
+      },
       { path: 'chat/:conversationId', element: <ChatPage /> },
       { path: 'chat', element: <ChatPage /> },
     ],
