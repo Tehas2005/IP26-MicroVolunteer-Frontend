@@ -1,19 +1,20 @@
 name: CD Pipeline
 
 on:
-  workflow_run:
-    workflows: ["CI Pipeline"]
-    types:
-      - completed
-  # push:
+  # workflow_run:
+  #   workflows: ["CI Pipeline"]
+  #   types:
+  #     - completed
+  push:
     branches:
       - main
+      - test
+      - nginx
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     #Deployment triggers only if CI-Pipeline checks successfully
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     name: Deploy FE to Railway
     runs-on: ubuntu-latest
 
@@ -47,8 +48,30 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      #Deployment
-      - name: Deploy to Railway
-        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
+      #1.a) Deployment for main branch
+      - name: Deploy to Railway (Main Branch)
+        if: ${{ github.event.workflow_run.head_branch == 'main' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') }}
+        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      #1.b) Deployment for test branch
+      - name: Deploy to Railway (Test Branch)
+        if: ${{ github.event.workflow_run.head_branch == 'test' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'test') }}
+        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID_TEST_BRANCH }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+            #1.b) Deployment for test branch
+      - name: Deploy to Railway (Test Branch)
+        if: ${{ github.event.workflow_run.head_branch == 'nginx' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'nginx') }}
+        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID_TEST_BRANCH }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      
+      #2. Redeploy NGINX service for fresh BE intern URL
+      - name: Redeploy Nginx Proxy
+        run: railway redeploy --service ${{ secrets.RAILWAY_NGINX_SERVICE_ID }} --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
