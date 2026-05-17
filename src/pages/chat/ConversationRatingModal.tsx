@@ -17,7 +17,7 @@ interface ConversationRatingModalProps {
   targetName: string
   targetUserId: string | null
   viewerRole: 'requester' | 'volunteer'
-  onSubmit: (stars: RatingValue, targetUserId: string) => void
+  onSubmit: (stars: RatingValue, comment: string, targetUserId: string) => void
   onSkip: () => void
 }
 
@@ -39,12 +39,14 @@ export function ConversationRatingModal({
 }: ConversationRatingModalProps) {
   const [hoveredStars, setHoveredStars] = useState(0)
   const [selectedStars, setSelectedStars] = useState<0 | RatingValue>(0)
+  const [comment, setComment] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     if (!isOpen) {
       setHoveredStars(0)
       setSelectedStars(0)
+      setComment('')
       setErrorMessage('')
     }
   }, [isOpen])
@@ -62,12 +64,19 @@ export function ConversationRatingModal({
       return
     }
 
+    const trimmedComment = comment.trim()
+
+    if (!trimmedComment) {
+      setErrorMessage('Te rugam sa adaugi un scurt comentariu')
+      return
+    }
+
     if (!targetUserId) {
       return
     }
 
     setErrorMessage('')
-    onSubmit(selectedStars, targetUserId)
+    onSubmit(selectedStars, trimmedComment, targetUserId)
   }
 
   return (
@@ -86,7 +95,7 @@ export function ConversationRatingModal({
             {dialogTitle}
           </DialogTitle>
           <DialogDescription className="text-sm leading-6 text-brand-gray-text">
-            Alege intre 1 si 5 stele pentru a evalua experienta acestei conversatii.
+            Alege intre 1 si 5 stele si lasa un scurt comentariu despre experienta acestei conversatii.
           </DialogDescription>
         </DialogHeader>
 
@@ -128,6 +137,25 @@ export function ConversationRatingModal({
             <p className="text-sm font-medium text-brand-gray-text">
               {selectedStars ? `${selectedStars}/5 stele selectate` : 'Selecteaza un rating'}
             </p>
+
+            <label className="w-full max-w-md">
+              <span className="mb-2 block text-left text-sm font-medium text-brand-black">
+                Comentariu
+              </span>
+              <textarea
+                aria-label="Comentariu"
+                value={comment}
+                onChange={(event) => {
+                  setComment(event.target.value)
+                  if (errorMessage) {
+                    setErrorMessage('')
+                  }
+                }}
+                rows={4}
+                placeholder="Spune pe scurt cum a fost colaborarea."
+                className="w-full rounded-3xl border border-brand-gray/80 bg-brand-cream/40 px-4 py-3 text-sm text-brand-black outline-none transition-colors placeholder:text-brand-gray-text/80 focus:border-brand-purple focus:ring-2 focus:ring-brand-purple/20"
+              />
+            </label>
 
             {errorMessage ? (
               <p className="text-sm font-medium text-red-600" role="alert">

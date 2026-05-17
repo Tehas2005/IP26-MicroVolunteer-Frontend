@@ -4,8 +4,98 @@ import { History } from 'lucide-react'
 
 import InteractionHistoryList from '@/components/shared/InteractionHistoryList'
 import { backend } from '@/lib/backend'
-import { mapInteractionToHistoryEntry } from '@/lib/interactionHistory'
+import { mapInteractionToHistoryEntry, type InteractionHistoryEntry } from '@/lib/interactionHistory'
+import type { InteractionResponseType, RatingResponseType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
+
+function extractInteractionItems(payload: unknown) {
+  if (Array.isArray(payload)) {
+    return payload
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return []
+  }
+
+  const candidate = payload as { data?: unknown }
+  return Array.isArray(candidate.data) ? candidate.data : []
+}
+
+function extractRatings(payload: unknown) {
+  return Array.isArray(payload) ? payload : []
+}
+
+function mapRatingToHistoryEntry(rating: RatingResponseType): InteractionHistoryEntry {
+  const ratingValue = typeof rating.stars === 'number' ? rating.stars : null
+  const comment = typeof rating.comment === 'string' ? rating.comment.trim() : ''
+
+  return {
+    id: `rating:${rating.id ?? rating.taskAssignmentId ?? crypto.randomUUID()}`,
+    date: typeof rating.createdAt === 'string' ? rating.createdAt : null,
+    summary: comment || 'Evaluare primita pentru o interactiune finalizata.',
+    rating: ratingValue,
+  }
+}
+
+function readInteractionAssignmentId(entry: InteractionResponseType) {
+  const candidates = [entry.taskAssignmentId, entry.id]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isInteger(candidate) && candidate > 0) {
+      return candidate
+    }
+
+    if (typeof candidate === 'string' && candidate.trim()) {
+      const parsedValue = Number(candidate.trim())
+      if (Number.isInteger(parsedValue) && parsedValue > 0) {
+        return parsedValue
+      }
+    }
+  }
+
+  return null
+}
+
+function readRatingAssignmentId(entry: RatingResponseType) {
+  if (typeof entry.taskAssignmentId === 'number' && Number.isInteger(entry.taskAssignmentId)) {
+    return entry.taskAssignmentId
+  }
+
+  if (typeof entry.taskAssignmentId === 'string' && entry.taskAssignmentId.trim()) {
+    const parsedValue = Number(entry.taskAssignmentId.trim())
+    return Number.isInteger(parsedValue) ? parsedValue : null
+  }
+
+  return null
+}
+
+function mergeHistoryEntries(
+  interactions: InteractionResponseType[],
+  ratings: RatingResponseType[],
+) {
+  const entries = interactions.map((entry) => mapInteractionToHistoryEntry(entry))
+  const seenAssignmentIds = new Set(
+    interactions
+      .map((entry) => readInteractionAssignmentId(entry))
+      .filter((assignmentId): assignmentId is number => assignmentId !== null),
+  )
+
+  ratings.forEach((rating) => {
+    const assignmentId = readRatingAssignmentId(rating)
+
+    if (assignmentId !== null && seenAssignmentIds.has(assignmentId)) {
+      return
+    }
+
+    entries.push(mapRatingToHistoryEntry(rating))
+  })
+
+  return entries.sort((left, right) => {
+    const leftTime = left.date ? new Date(left.date).getTime() : 0
+    const rightTime = right.date ? new Date(right.date).getTime() : 0
+    return rightTime - leftTime
+  })
+}
 
 export function InteractionHistoryPage() {
   const authUser = useAuthStore((state) => state.user)
@@ -14,21 +104,39 @@ export function InteractionHistoryPage() {
     queryKey: ['user-interactions', authUser?.id],
     enabled: Boolean(authUser?.id),
     queryFn: async () => {
-      const response = await backend.users.getInteractions(authUser!.id, {
-        page: 1,
-        limit: 50,
-      })
+      const [interactionsResponse, ratingsResponse] = await Promise.all([
+        backend.users.getInteractions(authUser!.id, {
+          page: 1,
+          limit: 50,
+        }),
+        backend.ratings.getForUser(authUser!.id),
+      ])
 
-      if (!response.success) {
-        throw new Error(response.message || 'Nu am putut incarca istoricul interactiunilor.')
+      if (!interactionsResponse.success && !ratingsResponse.success) {
+        throw new Error(
+          interactionsResponse.message ||
+            ratingsResponse.message ||
+            'Nu am putut incarca istoricul interactiunilor.',
+        )
       }
 
-      return Array.isArray(response.data) ? response.data : []
+      return {
+        interactions: interactionsResponse.success
+          ? extractInteractionItems(interactionsResponse.data) as InteractionResponseType[]
+          : [],
+        ratings: ratingsResponse.success
+          ? extractRatings(ratingsResponse.data) as RatingResponseType[]
+          : [],
+      }
     },
   })
 
   const items = useMemo(
-    () => (interactionsQuery.data ?? []).map((entry) => mapInteractionToHistoryEntry(entry)),
+    () =>
+      mergeHistoryEntries(
+        interactionsQuery.data?.interactions ?? [],
+        interactionsQuery.data?.ratings ?? [],
+      ),
     [interactionsQuery.data],
   )
 

@@ -31,4 +31,21 @@ describe("interactionHistory helpers", () => {
     expect(history.rating).toBe(5)
     expect(history.summary).toContain("Formular local")
   })
+
+  it("mapeaza payloadul real de interactiune cu rating nested", () => {
+    const history = mapInteractionToHistoryEntry({
+      interactionId: 12,
+      date: "2026-05-17T20:30:00.000Z",
+      summary: "Task finalizat: \"History task\"",
+      rating: {
+        id: 4,
+        stars: 4,
+        comment: "Foarte bine",
+      },
+    })
+
+    expect(history.id).toBe("12")
+    expect(history.rating).toBe(4)
+    expect(history.summary).toContain("History task")
+  })
 })

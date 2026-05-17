@@ -7,7 +7,7 @@ export interface HelpOfferData {
   requestId: string
   volunteerKey: string
   volunteerName: string
-  averageRating: number
+  averageRating: number | null
   createdAt: string
   message: string
   status: HelpOfferStatus
@@ -125,11 +125,27 @@ export function extractOfferList(payload: unknown): OfferResponseType[] {
 
 export function readOfferVolunteerId(offer: OfferResponseType) {
   return (
-    normalizeString(offer.volunteerId) ||
     normalizeString(offer.volunteerUserId) ||
     normalizeString(offer.userId) ||
+    normalizeString(offer.volunteerId) ||
     ''
   )
+}
+
+function readAverageRatingFromProfile(profile: ProfileType | null | undefined) {
+  if (!profile || !isRecord(profile)) {
+    return null
+  }
+
+  const rawRating = profile['averageRating']
+
+  if (rawRating === null || rawRating === undefined || rawRating === '') {
+    return null
+  }
+
+  const ratingValue = Number(rawRating)
+
+  return Number.isFinite(ratingValue) ? ratingValue : null
 }
 
 export function readOfferTaskId(offer: OfferResponseType) {
@@ -151,13 +167,17 @@ export function mapOfferToHelpOffer(options: {
   const volunteerId = readOfferVolunteerId(offer)
   const fallbackVolunteerName = volunteerId ? `Voluntar ${volunteerId}` : 'Voluntar'
   const ratingValue = Number(ratingSummary?.averageRating)
+  const ratingsCount =
+    typeof ratingSummary?.ratingsCount === 'number' ? ratingSummary.ratingsCount : null
+  const hasRating = Number.isFinite(ratingValue) && (ratingsCount === null || ratingsCount > 0)
+  const nestedVolunteerRating = readAverageRatingFromProfile(offer.volunteer ?? null)
 
   return {
     id: normalizeString(offer.id) || `${requestId}-${volunteerId || 'offer'}`,
     requestId,
     volunteerKey: volunteerId ? `user:${volunteerId}` : 'user:unknown-volunteer',
     volunteerName: readProfileDisplayName(profile ?? offer.volunteer ?? null, fallbackVolunteerName),
-    averageRating: Number.isFinite(ratingValue) ? ratingValue : 0,
+    averageRating: hasRating ? ratingValue : nestedVolunteerRating,
     createdAt: normalizeString(offer.createdAt) || new Date().toISOString(),
     message: normalizeString(offer.message) || 'Voluntarul nu a adaugat un mesaj.',
     status: normalizeOfferStatus(offer.status),

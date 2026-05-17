@@ -43,6 +43,22 @@ function normalizeString(value: unknown) {
   return ''
 }
 
+function readNumericRating(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (value && typeof value === 'object') {
+    const nestedStars = (value as { stars?: unknown }).stars
+
+    if (typeof nestedStars === 'number' && Number.isFinite(nestedStars)) {
+      return nestedStars
+    }
+  }
+
+  return null
+}
+
 export function mapInteractionToHistoryEntry(entry: InteractionResponseType): InteractionHistoryEntry {
   const title = normalizeString(entry.taskTitle) || normalizeString(entry.task?.title)
   const summary =
@@ -51,13 +67,16 @@ export function mapInteractionToHistoryEntry(entry: InteractionResponseType): In
     normalizeString(entry.description) ||
     (title ? `Interactiune pentru taskul "${title}".` : '')
 
-  const ratingCandidate = typeof entry.rating === 'number' ? entry.rating : entry.stars
+  const ratingCandidate = readNumericRating(entry.rating) ?? readNumericRating(entry.stars)
 
   return {
-    id: normalizeString(entry.id) || crypto.randomUUID(),
-    date: normalizeString(entry.createdAt) || normalizeString(entry.updatedAt) || null,
+    id: normalizeString(entry.id) || normalizeString(entry.interactionId) || crypto.randomUUID(),
+    date:
+      normalizeString(entry.createdAt) ||
+      normalizeString(entry.updatedAt) ||
+      normalizeString(entry.date) ||
+      null,
     summary,
     rating: typeof ratingCandidate === 'number' ? ratingCandidate : null,
   }
 }
-

@@ -14,7 +14,6 @@ import {
   extractOfferList,
   mapOfferToHelpOffer,
   readOfferTaskId,
-  readOfferVolunteerId,
   type HelpOfferData,
 } from '@/lib/helpOffers'
 import {
@@ -290,38 +289,13 @@ export function HomePage() {
       }
 
       const offers = extractOfferList(response.data)
-      const volunteerIds = Array.from(
-        new Set(offers.map((offer) => readOfferVolunteerId(offer)).filter(Boolean)),
-      )
 
-      const [profiles, ratingSummaries] = await Promise.all([
-        Promise.all(
-          volunteerIds.map(async (volunteerId) => {
-            const profileResponse = await backend.profile.getByUserId(volunteerId)
-            return [volunteerId, profileResponse.success ? profileResponse.data : null] as const
-          }),
-        ),
-        Promise.all(
-          volunteerIds.map(async (volunteerId) => {
-            const ratingSummaryResponse = await backend.ratings.getSummaryForUser(volunteerId)
-            return [volunteerId, ratingSummaryResponse.success ? ratingSummaryResponse.data : null] as const
-          }),
-        ),
-      ])
-
-      const profilesById = new Map(profiles)
-      const ratingSummaryById = new Map(ratingSummaries)
-
-      return offers.map((offer) => {
-        const volunteerId = readOfferVolunteerId(offer)
-
-        return mapOfferToHelpOffer({
+      return offers.map((offer) =>
+        mapOfferToHelpOffer({
           offer,
           requestId,
-          profile: volunteerId ? profilesById.get(volunteerId) ?? null : null,
-          ratingSummary: volunteerId ? ratingSummaryById.get(volunteerId) ?? null : null,
-        })
-      })
+        }),
+      )
     },
   })
 

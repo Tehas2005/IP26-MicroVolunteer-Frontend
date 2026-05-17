@@ -1,4 +1,5 @@
 import type {
+  RatingResponseType,
   RatingSubmissionPayloadType,
   TaskResponseType,
   TaskStatusType,
@@ -66,8 +67,59 @@ function findTaskAssignmentId(source: unknown, depth = 0): number | null {
   return null
 }
 
+function readRatingValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 5) {
+    return value
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsedValue = Number(value.trim())
+
+    if (Number.isInteger(parsedValue) && parsedValue >= 1 && parsedValue <= 5) {
+      return parsedValue
+    }
+  }
+
+  return null
+}
+
 function isTaskCompleted(status: TaskStatusType | null | undefined) {
   return typeof status === 'string' && status.toUpperCase() === 'COMPLETED'
+}
+
+export function readTaskAssignmentId(task: TaskResponseType | null | undefined) {
+  if (!task) {
+    return null
+  }
+
+  return findTaskAssignmentId(task)
+}
+
+export function findExistingViewerRating(options: {
+  ratings: RatingResponseType[]
+  taskAssignmentId: number
+  viewerUserId: string
+}) {
+  const { ratings, taskAssignmentId, viewerUserId } = options
+
+  for (const rating of ratings) {
+    const ratingAssignmentId = readAssignmentId(rating.taskAssignmentId)
+    const ratingAuthorId =
+      typeof rating.writtenByUserId === 'string' && rating.writtenByUserId.trim()
+        ? rating.writtenByUserId.trim()
+        : null
+    const stars = readRatingValue(rating.stars)
+
+    if (
+      ratingAssignmentId === taskAssignmentId &&
+      ratingAuthorId === viewerUserId &&
+      stars !== null
+    ) {
+      return stars
+    }
+  }
+
+  return null
 }
 
 export function resolveRatingSubmissionPayload(options: {
@@ -75,8 +127,9 @@ export function resolveRatingSubmissionPayload(options: {
   viewerUserId?: string | null
   targetUserId?: string | null
   stars: number
+  comment: string
 }): { payload: RatingSubmissionPayloadType | null; errorMessage: string | null } {
-  const { task, viewerUserId, targetUserId, stars } = options
+  const { task, viewerUserId, targetUserId, stars, comment } = options
 
   if (!viewerUserId) {
     return {
@@ -92,6 +145,13 @@ export function resolveRatingSubmissionPayload(options: {
     }
   }
 
+  if (!comment.trim()) {
+    return {
+      payload: null,
+      errorMessage: 'Te rugam sa adaugi un comentariu pentru rating.',
+    }
+  }
+
   if (!isTaskCompleted(task.status)) {
     return {
       payload: null,
@@ -99,7 +159,7 @@ export function resolveRatingSubmissionPayload(options: {
     }
   }
 
-  const taskAssignmentId = findTaskAssignmentId(task)
+  const taskAssignmentId = readTaskAssignmentId(task)
 
   if (taskAssignmentId === null) {
     return {
@@ -115,6 +175,7 @@ export function resolveRatingSubmissionPayload(options: {
       writtenByUserId: viewerUserId,
       receivedByUserId: targetUserId,
       stars,
+      comment: comment.trim(),
     },
     errorMessage: null,
   }

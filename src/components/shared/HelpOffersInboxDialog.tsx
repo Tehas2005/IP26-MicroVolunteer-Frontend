@@ -162,10 +162,17 @@ export function HelpOffersInboxDialog({
                               <Clock3 className="h-4 w-4" />
                               {formatHelpOfferRelativeTime(offer.createdAt)}
                             </span>
-                            <span className="inline-flex items-center gap-1.5 font-medium text-brand-black">
-                              <Star className="h-4 w-4 fill-[#F59E0B] text-[#F59E0B]" />
-                              {offer.averageRating.toFixed(1)}
-                            </span>
+                            {offer.averageRating === null ? (
+                              <span className="inline-flex items-center gap-1.5 font-medium text-brand-gray-text">
+                                <Star className="h-4 w-4 text-brand-gray/70" />
+                                Fără rating
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 font-medium text-brand-black">
+                                <Star className="h-4 w-4 fill-[#F59E0B] text-[#F59E0B]" />
+                                {offer.averageRating.toFixed(1)}
+                              </span>
+                            )}
                           </div>
                         </div>
 

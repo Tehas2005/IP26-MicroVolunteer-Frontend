@@ -316,12 +316,27 @@ export type UploadResponseEnvelopeType = {
 
 export type InteractionResponseType = {
   id?: string | number
+  interactionId?: string | number
+  taskAssignmentId?: string | number | null
   createdAt?: string | null
   updatedAt?: string | null
+  date?: string | null
   summary?: string | null
   message?: string | null
   description?: string | null
-  rating?: number | null
+  rating?:
+    | number
+    | {
+        id?: string | number
+        createdAt?: string | null
+        taskAssignmentId?: string | number | null
+        writtenByUserId?: string | null
+        receivedByUserId?: string | null
+        stars?: number | null
+        comment?: string | null
+        [key: string]: unknown
+      }
+    | null
   stars?: number | null
   taskTitle?: string | null
   task?: {

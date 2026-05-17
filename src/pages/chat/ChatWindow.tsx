@@ -11,7 +11,11 @@ import type { TaskResponseType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 
 import { mapBackendMessagesToChatMessages } from './backendMessages'
-import { resolveRatingSubmissionPayload } from './backendRating'
+import {
+  findExistingViewerRating,
+  readTaskAssignmentId,
+  resolveRatingSubmissionPayload,
+} from './backendRating'
 import { ChatInput } from './ChatInput'
 import { ConversationRatingModal } from './ConversationRatingModal'
 import { MessageBubble } from './MessageBubble'
@@ -53,6 +57,10 @@ function isRealtimeEligibleTaskStatus(status: string | null | undefined) {
   )
 }
 
+function isTaskCompleted(status: string | null | undefined) {
+  return normalizeTaskStatus(status) === 'COMPLETED'
+}
+
 export function ChatWindow({ conversation }: Props) {
   const navigate = useNavigate()
   const socketRef = useRef<WebSocket | null>(null)
@@ -68,6 +76,7 @@ export function ChatWindow({ conversation }: Props) {
   const [isSocketReady, setIsSocketReady] = useState(false)
   const [ratingPromptDismissed, setRatingPromptDismissed] = useState(false)
   const [submittedRating, setSubmittedRating] = useState<RatingValue | null>(null)
+  const [hasResolvedExistingRating, setHasResolvedExistingRating] = useState(false)
 
   const requestId = conversation.requestId ?? conversation.id
   const guestSessionId = isGuest ? readGuestSessionId() : ''
@@ -75,12 +84,12 @@ export function ChatWindow({ conversation }: Props) {
   const viewerIdentityReady = Boolean(user?.id || isGuestRequesterViewing)
   const isRealtimeReady = taskSnapshot ? isRealtimeEligibleTaskStatus(taskSnapshot.status) : false
   const isConversationClosed =
-    conversation.status === 'closed' ||
-    (typeof taskSnapshot?.status === 'string' && taskSnapshot.status.toUpperCase() === 'COMPLETED')
+    conversation.status === 'closed' || isTaskCompleted(taskSnapshot?.status)
   const shouldShowRatingPrompt =
     isConversationClosed &&
     !conversation.viewerHasRated &&
     submittedRating === null &&
+    hasResolvedExistingRating &&
     !ratingPromptDismissed
 
   useEffect(() => {
@@ -88,6 +97,7 @@ export function ChatWindow({ conversation }: Props) {
     setIsSocketReady(false)
     setRatingPromptDismissed(false)
     setSubmittedRating(null)
+    setHasResolvedExistingRating(false)
     setMessages([])
   }, [conversation.id])
 
@@ -281,6 +291,72 @@ export function ChatWindow({ conversation }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  useEffect(() => {
+    if (
+      !isConversationClosed ||
+      !conversation.targetUserId ||
+      !user?.id ||
+      conversation.viewerHasRated ||
+      submittedRating !== null ||
+      ratingPromptDismissed
+    ) {
+      setHasResolvedExistingRating(true)
+      return
+    }
+
+    const taskAssignmentId = readTaskAssignmentId(taskSnapshot)
+    const viewerUserId = user.id
+
+    if (taskAssignmentId === null) {
+      if (taskSnapshot) {
+        setHasResolvedExistingRating(true)
+      }
+      return
+    }
+
+    const ensuredTaskAssignmentId: number = taskAssignmentId
+
+    let isActive = true
+
+    async function loadExistingRating() {
+      const response = await backend.ratings.getForUser(conversation.targetUserId)
+
+      if (!isActive) {
+        return
+      }
+
+      if (!response.success || !Array.isArray(response.data)) {
+        setHasResolvedExistingRating(true)
+        return
+      }
+
+      const existingRating = findExistingViewerRating({
+        ratings: response.data,
+        taskAssignmentId: ensuredTaskAssignmentId,
+        viewerUserId,
+      })
+
+      if (existingRating !== null) {
+        setSubmittedRating(existingRating as RatingValue)
+      }
+
+      setHasResolvedExistingRating(true)
+    }
+
+    void loadExistingRating()
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    conversation.targetUserId,
+    isConversationClosed,
+    ratingPromptDismissed,
+    submittedRating,
+    taskSnapshot,
+    user?.id,
+  ])
+
   function appendOptimisticMessage(content: Message['content']) {
     setMessages((currentMessages) => [
       ...currentMessages,
@@ -398,26 +474,65 @@ export function ChatWindow({ conversation }: Props) {
     setIsCompletingTask(true)
 
     try {
-      const response = await backend.tasks.updateStatus(requestId, {
-        status: 'COMPLETED',
-      }, {
+      const requestOptions = {
         headers: isGuestRequesterViewing ? buildGuestHeaders(guestSessionId) : undefined,
-      })
+      }
 
-      if (!response.success) {
-        setActionError(
-          response.message || 'Nu am putut marca taskul ca finalizat. Incearca din nou.',
-        )
+      let nextTaskSnapshot = taskSnapshot
+
+      if (!nextTaskSnapshot) {
+        const taskResponse = await backend.tasks.getById(requestId, requestOptions)
+
+        if (!taskResponse.success || !taskResponse.data) {
+          setActionError(
+            taskResponse.message || 'Nu am putut incarca taskul inainte de finalizare.',
+          )
+          return
+        }
+
+        const task = extractTaskPayload(taskResponse.data)
+
+        if (!task) {
+          setActionError('Nu am putut interpreta taskul returnat de backend.')
+          return
+        }
+
+        nextTaskSnapshot = task
+        setTaskSnapshot(task)
+      }
+
+      const currentStatus = normalizeTaskStatus(nextTaskSnapshot.status)
+      const statusesToApply =
+        currentStatus === 'MATCHED'
+          ? (['IN_PROGRESS', 'COMPLETED'] as const)
+          : currentStatus === 'IN_PROGRESS'
+            ? (['COMPLETED'] as const)
+            : currentStatus === 'COMPLETED'
+              ? []
+              : null
+
+      if (statusesToApply === null) {
+        setActionError('Taskul trebuie sa fie in MATCHED sau IN_PROGRESS pentru a fi finalizat.')
         return
       }
 
-      if (response.data) {
-        const task = extractTaskPayload(response.data)
+      for (const nextStatus of statusesToApply) {
+        const response = await backend.tasks.updateStatus(
+          requestId,
+          { status: nextStatus },
+          requestOptions,
+        )
 
-        if (task) {
-          setTaskSnapshot(task)
+        if (!response.success) {
+          setActionError(
+            response.message || 'Nu am putut marca taskul ca finalizat. Incearca din nou.',
+          )
+          return
         }
       }
+
+      await loadTaskSnapshot()
+      await loadMessages()
     } finally {
       setIsCompletingTask(false)
     }
@@ -428,7 +543,7 @@ export function ChatWindow({ conversation }: Props) {
     setRatingPromptDismissed(true)
   }
 
-  async function handleSubmitRating(value: RatingValue) {
+  async function handleSubmitRating(value: RatingValue, comment: string) {
     setActionError('')
 
     if (!conversation.targetUserId) {
@@ -447,7 +562,7 @@ export function ChatWindow({ conversation }: Props) {
     try {
       let nextTaskSnapshot = taskSnapshot
 
-      if (!nextTaskSnapshot) {
+      if (!nextTaskSnapshot || !isTaskCompleted(nextTaskSnapshot.status)) {
         const taskResponse = await backend.tasks.getById(requestId, {
           headers: isGuestRequesterViewing ? buildGuestHeaders(guestSessionId) : undefined,
         })
@@ -475,6 +590,7 @@ export function ChatWindow({ conversation }: Props) {
         viewerUserId: user?.id,
         targetUserId: conversation.targetUserId,
         stars: value,
+        comment,
       })
 
       if (!payload) {
@@ -485,6 +601,11 @@ export function ChatWindow({ conversation }: Props) {
       const response = await backend.ratings.create(payload)
 
       if (!response.success) {
+        if (response.message?.toLowerCase().includes('already exists')) {
+          setSubmittedRating(value)
+          return
+        }
+
         setActionError(response.message || 'Nu am putut trimite ratingul. Incearca din nou.')
         return
       }
@@ -576,12 +697,12 @@ export function ChatWindow({ conversation }: Props) {
         targetUserId={conversation.targetUserId}
         targetName={conversation.targetUserName}
         onSkip={handleSkipRating}
-        onSubmit={(value) => {
+        onSubmit={(value, comment) => {
           if (isSubmittingRating) {
             return
           }
 
-          void handleSubmitRating(value)
+          void handleSubmitRating(value, comment)
         }}
       />
     </div>
