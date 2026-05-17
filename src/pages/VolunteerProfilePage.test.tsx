@@ -216,4 +216,65 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
       expect(mockUpdateMe).toHaveBeenCalledWith({ hiddenIdentity: false })
     })
   })
+
+  it('nu reseteaza la un draft care a esuat la sincronizare', async () => {
+    window.localStorage.setItem(
+      'mvcr-volunteer-profile-draft:1',
+      JSON.stringify({
+        currentLocation: 'Cluj-Napoca',
+        hiddenIdentity: false,
+        knownLocations: [{ city: 'Iasi', address: 'Copou' }],
+        maxDistanceKm: '18',
+        selectedCity: '',
+        skillInput: '',
+        skills: ['transport'],
+        specificAddress: '',
+      }),
+    )
+
+    mockCreateVolunteerProfile.mockResolvedValueOnce({
+      success: false,
+      data: null,
+      message: 'sync failed',
+      status: 500,
+      isClientError: false,
+      isServerError: true,
+      isNotFound: false,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+    mockUpdateMe.mockResolvedValueOnce({
+      success: false,
+      data: null,
+      message: 'privacy failed',
+      status: 500,
+      isClientError: false,
+      isServerError: true,
+      isNotFound: false,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByLabelText(/Locatia curenta/i)).toHaveValue('Cluj-Napoca')
+
+    await user.clear(screen.getByLabelText(/Locatia curenta/i))
+    await user.type(screen.getByLabelText(/Locatia curenta/i), 'Iasi')
+    await user.clear(screen.getByLabelText(/Distanta maxima/i))
+    await user.type(screen.getByLabelText(/Distanta maxima/i), '25')
+    await user.click(screen.getByRole('button', { name: /Comuta ascunderea identitatii/i }))
+    await user.click(screen.getByRole('button', { name: /Salveaza profilul/i }))
+
+    await waitFor(() => {
+      expect(mockCreateVolunteerProfile).toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: /Salveaza profilul/i })).toBeEnabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: /Reseteaza modificarile/i }))
+
+    expect(screen.getByLabelText(/Locatia curenta/i)).toHaveValue('Cluj-Napoca')
+    expect(screen.getByLabelText(/Distanta maxima/i)).toHaveValue(18)
+  })
 })

@@ -482,19 +482,23 @@ export default function VolunteerProfilePage() {
 
       const hasSyncedVolunteerProfile = Boolean(volunteerProfileResponse?.success)
       const hasSyncedPrivacy = Boolean(privacyResponse?.success)
-
-      setLastSavedDraft(currentDraft)
+      const persistedDraft = {
+        ...currentDraft,
+        hiddenIdentity: hasSyncedPrivacy ? currentDraft.hiddenIdentity : lastSavedDraft.hiddenIdentity,
+      }
 
       if (volunteerProfileResponse?.success) {
         setHasRemoteVolunteerProfile(true)
       }
 
       if (hasSyncedVolunteerProfile && hasSyncedPrivacy) {
+        setLastSavedDraft(persistedDraft)
         setSaveMessage('Setarile profilului au fost salvate si sincronizate.')
         return
       }
 
       if (hasSyncedVolunteerProfile) {
+        setLastSavedDraft(persistedDraft)
         setSaveMessage(
           'Datele profilului de voluntar au fost salvate. Confidentialitatea nu a putut fi sincronizata.',
         )
@@ -505,6 +509,7 @@ export default function VolunteerProfilePage() {
         volunteerProfileResponse?.isNotFound ||
         (volunteerProfileResponse && !volunteerProfileResponse.success && volunteerProfileResponse.status === 404)
       ) {
+        setLastSavedDraft(persistedDraft)
         setSaveMessage(
           'Datele au fost salvate local. Sincronizarea cu backend-ul pentru profilul de voluntar nu este inca disponibila.',
         )
