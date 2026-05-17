@@ -152,8 +152,7 @@ export function HomePage() {
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
     !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
-  const shouldAttemptBackendNotifications =
-    sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
+  const shouldAttemptBackendNotifications = sessionStatus === 'ready' && !isGuest
   const shouldUseBackendNotifications =
     shouldAttemptBackendNotifications && notificationTransportStatus !== 'failed'
 
@@ -428,13 +427,16 @@ export function HomePage() {
 
   const handleNotificationOpen = useCallback(
     async (notification: VolunteerNotificationItem) => {
-      handleNotificationDismiss(notification.id)
-
       if (shouldUseBackendNotifications) {
-        await backend.notifications.markAsRead(notification.id)
+        const markAsReadResponse = await backend.notifications.markAsRead(notification.id)
+
+        if (!markAsReadResponse.success) {
+          return
+        }
       }
 
       if (notification.request) {
+        handleNotificationDismiss(notification.id)
         handleVolunteerRequestOpen(notification.request)
         return
       }
@@ -460,6 +462,7 @@ export function HomePage() {
         isOwnedByCurrentUser: false,
       })
 
+      handleNotificationDismiss(notification.id)
       handleVolunteerRequestOpen(request)
     },
     [

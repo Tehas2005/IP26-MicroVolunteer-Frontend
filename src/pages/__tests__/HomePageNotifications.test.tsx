@@ -136,6 +136,26 @@ describe('HomePage volunteer notifications integration', () => {
     ).toBeInTheDocument()
   })
 
+  it('încarcă notificările reale și când lista live de cereri este goală', async () => {
+    listTasksMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          data: [],
+        },
+      },
+    })
+
+    renderHomePage()
+
+    expect(await screen.findByText('Cerere nouă pentru voluntari')).toBeInTheDocument()
+    expect(listNotificationsMock).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 20,
+      unreadOnly: 'true',
+    })
+  })
+
   it('marchează notificarea ca citită și deschide detaliile cererii', async () => {
     const user = userEvent.setup()
 
@@ -147,5 +167,21 @@ describe('HomePage volunteer notifications integration', () => {
       expect(markNotificationAsReadMock).toHaveBeenCalledWith('701')
       expect(navigateMock).toHaveBeenCalledWith(expect.stringMatching(/^\/chat\//))
     })
+  })
+
+  it('păstrează notificarea vizibilă dacă marcarea ca citită eșuează', async () => {
+    const user = userEvent.setup()
+
+    markNotificationAsReadMock.mockResolvedValueOnce({
+      success: false,
+      message: 'Nu am putut actualiza notificarea.',
+    })
+
+    renderHomePage()
+
+    await user.click(await screen.findByRole('button', { name: 'Vezi detalii' }))
+
+    expect(await screen.findByText('Cerere nouă pentru voluntari')).toBeInTheDocument()
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 })
