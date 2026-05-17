@@ -165,7 +165,7 @@ describe('HomePage volunteer notifications integration', () => {
 
     await waitFor(() => {
       expect(markNotificationAsReadMock).toHaveBeenCalledWith('701')
-      expect(navigateMock).toHaveBeenCalledWith(expect.stringMatching(/^\/chat\//))
+      expect(navigateMock).toHaveBeenCalledWith('/cereri/88')
     })
   })
 

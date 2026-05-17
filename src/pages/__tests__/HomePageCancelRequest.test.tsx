@@ -21,11 +21,19 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/lib/backend', () => ({
   backend: {
+    guest: {
+      createSession: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+        },
+      }),
+      deleteTask: (...args: unknown[]) => deleteGuestTaskMock(...args),
+      listTasks: (...args: unknown[]) => listGuestTasksMock(...args),
+    },
     tasks: {
       delete: (...args: unknown[]) => deleteTaskMock(...args),
-      deleteGuest: (...args: unknown[]) => deleteGuestTaskMock(...args),
       list: (...args: unknown[]) => listTasksMock(...args),
-      listGuest: (...args: unknown[]) => listGuestTasksMock(...args),
     },
   },
 }))
@@ -115,6 +123,25 @@ describe('HomePage cancel request flow', () => {
       user: null,
       isGuest: true,
       sessionStatus: 'ready',
+    })
+
+    listGuestTasksMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 77,
+              title: 'Cerere guest reală',
+              description: 'Cererea guest venită din backend',
+              category: 'MESSAGES_ONLY',
+              urgency: 'HIGH',
+              status: 'OPEN',
+              requestedByUserId: null,
+            },
+          ],
+        },
+      },
     })
 
     renderHomePage()
@@ -332,7 +359,7 @@ describe('HomePage cancel request flow', () => {
     await user.click(await screen.findByRole('button', { name: 'Da, anulează' }))
 
     await waitFor(() => {
-      expect(deleteGuestTaskMock).toHaveBeenCalledWith('77', expect.any(String))
+      expect(deleteGuestTaskMock).toHaveBeenCalledWith(expect.any(String), '77')
       expect(deleteTaskMock).not.toHaveBeenCalled()
       expect(screen.queryByRole('button', { name: 'Cerere guest reală' })).not.toBeInTheDocument()
     })

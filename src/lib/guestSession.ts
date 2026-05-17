@@ -1,23 +1,28 @@
 const STORAGE_KEY = 'mvcr-guest-session-id'
 const SOURCE_STORAGE_KEY = 'mvcr-guest-session-source'
 
-type GuestSessionEnvelope = {
-  data?: {
-    sessionId?: string | null
-  } | null
+type ResponseEnvelope<T> = {
+  data?: T | null
 }
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 }
 
-function readStoredGuestSessionId(): string | null {
-  if (!canUseStorage()) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function readEnvelopeData<T>(payload: unknown): T | null {
+  if (!isRecord(payload) || !('data' in payload)) {
     return null
   }
 
-  const existing = window.localStorage.getItem(STORAGE_KEY)
-  return typeof existing === 'string' && existing.trim() ? existing.trim() : null
+  return (payload as ResponseEnvelope<T>).data ?? null
+}
+
+function normalizeSessionId(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function readStoredGuestSessionSource(): 'local' | 'server' | null {
@@ -29,7 +34,15 @@ function readStoredGuestSessionSource(): 'local' | 'server' | null {
   return source === 'local' || source === 'server' ? source : null
 }
 
-function writeGuestSessionId(sessionId: string, source: 'local' | 'server') {
+export function getStoredGuestSessionId(): string | null {
+  if (!canUseStorage()) {
+    return null
+  }
+
+  return normalizeSessionId(window.localStorage.getItem(STORAGE_KEY))
+}
+
+export function storeGuestSessionId(sessionId: string, source: 'local' | 'server' = 'server') {
   if (!canUseStorage()) {
     return
   }
@@ -38,39 +51,45 @@ function writeGuestSessionId(sessionId: string, source: 'local' | 'server') {
   window.localStorage.setItem(SOURCE_STORAGE_KEY, source)
 }
 
-function createLocalGuestSessionId() {
-  const id = crypto.randomUUID()
-  writeGuestSessionId(id, 'local')
-  return id
+export function clearGuestSessionId() {
+  if (!canUseStorage()) {
+    return
+  }
+
+  window.localStorage.removeItem(STORAGE_KEY)
+  window.localStorage.removeItem(SOURCE_STORAGE_KEY)
 }
 
-function extractGuestSessionId(payload: unknown): string | null {
-  if (!payload || typeof payload !== 'object') {
-    return null
-  }
-
-  const data = (payload as GuestSessionEnvelope).data
-
-  if (!data || typeof data !== 'object') {
-    return null
-  }
-
-  const sessionId = data.sessionId
-  return typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : null
+function createLocalGuestSessionId() {
+  const sessionId = crypto.randomUUID()
+  storeGuestSessionId(sessionId, 'local')
+  return sessionId
 }
 
 export function getGuestSessionId(): string {
-  const existing = readStoredGuestSessionId()
+  return getStoredGuestSessionId() ?? createLocalGuestSessionId()
+}
 
-  if (existing) {
-    return existing
+export function extractGuestSessionId(payload: unknown): string | null {
+  if (isRecord(payload)) {
+    const directSessionId = normalizeSessionId(payload.sessionId)
+
+    if (directSessionId) {
+      return directSessionId
+    }
   }
 
-  return createLocalGuestSessionId()
+  const sessionPayload = readEnvelopeData<unknown>(payload)
+
+  if (!isRecord(sessionPayload)) {
+    return null
+  }
+
+  return normalizeSessionId(sessionPayload.sessionId)
 }
 
 export async function ensureGuestSessionId(): Promise<string> {
-  const existing = readStoredGuestSessionId()
+  const existing = getStoredGuestSessionId()
   const source = readStoredGuestSessionSource()
 
   if (existing && source === 'server') {
@@ -90,11 +109,11 @@ export async function ensureGuestSessionId(): Promise<string> {
     const sessionId = response.ok ? extractGuestSessionId(payload) : null
 
     if (sessionId) {
-      writeGuestSessionId(sessionId, 'server')
+      storeGuestSessionId(sessionId, 'server')
       return sessionId
     }
   } catch {
-    // Keep the local fallback so guest demo/mock flows remain usable offline.
+    // Preserve the local fallback so guest flows still work if backend session bootstrap fails.
   }
 
   return existing ?? createLocalGuestSessionId()

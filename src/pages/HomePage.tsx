@@ -10,7 +10,12 @@ import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
-import { ensureGuestSessionId, getGuestSessionId } from '@/lib/guestSession'
+import {
+  clearGuestSessionId,
+  extractGuestSessionId,
+  getStoredGuestSessionId,
+  storeGuestSessionId,
+} from '@/lib/guestSession'
 import {
   extractOfferRedirectMeta,
   extractTaskOffers,
@@ -91,7 +96,7 @@ export function HomePage() {
   const authUser = useAuthStore((state) => state.user)
   const viewerIdentity = useMemo(() => resolveChatViewerIdentity(authUser), [authUser])
   const [guestSessionId, setGuestSessionId] = useState<string | null>(() =>
-    isGuest ? getGuestSessionId() : null,
+    getStoredGuestSessionId(),
   )
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const [cancelErrorMessage, setCancelErrorMessage] = useState<string | null>(null)
@@ -111,62 +116,99 @@ export function HomePage() {
   const requestLookupRef = useRef<Map<string, LiveRequestCardData>>(new Map())
 
   useEffect(() => {
-    let isMounted = true
+    setGuestSessionId(isGuest ? getStoredGuestSessionId() : null)
+  }, [isGuest, sessionStatus])
 
-    if (!isGuest) {
-      setGuestSessionId(null)
-      return () => {
-        isMounted = false
-      }
+  const recreateGuestSession = useCallback(async () => {
+    clearGuestSessionId()
+    setGuestSessionId(null)
+
+    const response = await backend.guest.createSession()
+    const nextSessionId = response.success ? extractGuestSessionId(response.data) : null
+
+    if (!nextSessionId) {
+      return null
     }
 
-    setGuestSessionId(getGuestSessionId())
+    storeGuestSessionId(nextSessionId)
+    setGuestSessionId(nextSessionId)
+    return nextSessionId
+  }, [])
 
-    void ensureGuestSessionId().then((nextGuestSessionId) => {
-      if (!isMounted) {
-        return
+  const {
+    data: liveTasksData,
+    isLoading: isLoadingAuthenticatedLiveRequests,
+    refetch: refetchAuthenticatedLiveRequests,
+  } = useQuery({
+    queryKey: ['live-requests', authUser?.id],
+    enabled: sessionStatus === 'ready' && !isGuest,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
+    queryFn: async () => {
+      const response = await backend.tasks.list({
+        page: 1,
+        pageSize: 50,
+        order: 'DESC',
+      })
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut încărca cererile live.')
       }
 
-      setGuestSessionId(nextGuestSessionId)
-    })
+      return extractTasksList(response.data)
+    },
+  })
 
-    return () => {
-      isMounted = false
-    }
-  }, [isGuest])
+  const {
+    data: guestLiveTasksData,
+    isLoading: isLoadingGuestLiveRequests,
+    refetch: refetchGuestLiveRequests,
+  } = useQuery({
+    queryKey: ['guest-live-requests', guestSessionId],
+    enabled: sessionStatus === 'ready' && isGuest && Boolean(guestSessionId),
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
+    queryFn: async () => {
+      if (!guestSessionId) {
+        return EMPTY_TASKS
+      }
 
-  const { data: liveTasksData, isLoading: isLoadingLiveRequests, refetch: refetchLiveRequests } =
-    useQuery({
-      queryKey: ['live-requests', authUser?.id, guestSessionId],
-      enabled: sessionStatus === 'ready' && (!isGuest || Boolean(guestSessionId)),
-      refetchInterval: 15000,
-      refetchIntervalInBackground: true,
-      queryFn: async () => {
-        const requestFilters = {
-          page: 1,
-          pageSize: 50,
-          order: 'DESC',
+      let response = await backend.guest.listTasks(guestSessionId, {
+        page: 1,
+        pageSize: 50,
+        status: 'OPEN',
+      })
+
+      if (!response.success && response.isUnauthorized) {
+        const nextSessionId = await recreateGuestSession()
+
+        if (nextSessionId) {
+          response = await backend.guest.listTasks(nextSessionId, {
+            page: 1,
+            pageSize: 50,
+            status: 'OPEN',
+          })
         }
-        const response =
-          isGuest && guestSessionId
-            ? await backend.tasks.listGuest(guestSessionId, requestFilters)
-            : await backend.tasks.list(requestFilters)
+      }
 
-        if (!response.success) {
-          throw new Error(response.message || 'Nu am putut încărca cererile live.')
-        }
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut încărca cererile tale.')
+      }
 
-        return extractTasksList(response.data)
-      },
-    })
+      return extractTasksList(response.data)
+    },
+  })
+
   const liveTasks = liveTasksData ?? EMPTY_TASKS
+  const guestLiveTasks = guestLiveTasksData ?? EMPTY_TASKS
+  const isLoadingLiveRequests = isLoadingAuthenticatedLiveRequests || isLoadingGuestLiveRequests
 
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
     if (isGuest) {
       return {
-        myRequests: liveTasks.map((task) => {
+        myRequests: guestLiveTasks.map((task) => {
           const request = mapTaskToLiveRequestCard(task, {
-            currentUserName: 'Solicitant',
+            currentUserName: 'Vizitator',
             isOwnedByCurrentUser: true,
           })
 
@@ -223,11 +265,11 @@ export function HomePage() {
         }),
       ),
     }
-  }, [authUser, isGuest, liveTasks, viewerIdentity])
+  }, [authUser, guestLiveTasks, isGuest, liveTasks, viewerIdentity])
 
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
-    !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
+    !isGuest && !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
   const shouldAttemptBackendNotifications = sessionStatus === 'ready' && !isGuest
   const shouldUseBackendNotifications =
     shouldAttemptBackendNotifications && notificationTransportStatus !== 'failed'
@@ -730,7 +772,7 @@ export function HomePage() {
 
         const response =
           isGuest && guestSessionId
-            ? await backend.tasks.deleteGuest(requestPendingCancellation.id, guestSessionId)
+            ? await backend.guest.deleteTask(guestSessionId, requestPendingCancellation.id)
             : await backend.tasks.delete(requestPendingCancellation.id)
 
         if (!response.success) {
@@ -760,7 +802,11 @@ export function HomePage() {
       setSuccessToastMessage('Cererea ta a fost anulată.')
 
       if (!shouldUseMockLiveRequests) {
-        void refetchLiveRequests()
+        if (isGuest) {
+          void refetchGuestLiveRequests()
+        } else {
+          void refetchAuthenticatedLiveRequests()
+        }
       }
     } finally {
       setIsCancellingRequest(false)
@@ -768,7 +814,8 @@ export function HomePage() {
   }, [
     guestSessionId,
     isGuest,
-    refetchLiveRequests,
+    refetchAuthenticatedLiveRequests,
+    refetchGuestLiveRequests,
     requestPendingCancellation,
     shouldUseMockLiveRequests,
     viewerIdentity,

@@ -27,9 +27,9 @@ const ROMANIAN_SKILLS_DESCRIPTION_PATTERN = /Abilitati necesare:\s*(.+)/i
 const ROMANIAN_SKILLS_DESCRIPTION_PATTERN_WITH_DIACRITICS = /Abilități necesare:\s*(.+)/i
 
 export type RequestDetailsPayload = {
-  notes?: string
-  languageNeeded?: string
-  safetyNotes?: string
+  notes: string
+  languageNeeded: string
+  safetyNotes: string
 }
 
 type RequestDetailsShape = {
@@ -238,6 +238,16 @@ export function readTaskDeclaredLocation(task: TaskResponseType | null | undefin
     ) ??
     UNSPECIFIED_REQUEST_DETAIL
   )
+}
+
+export function hasCompleteRequestDetailsInput(requestDetails: RequestDetailsPayload) {
+  return Boolean(
+    requestDetails.notes && requestDetails.languageNeeded && requestDetails.safetyNotes,
+  )
+}
+
+export function hasPartialRequestDetailsInput(requestDetails: RequestDetailsPayload) {
+  return hasRequestDetailsInput(requestDetails) && !hasCompleteRequestDetailsInput(requestDetails)
 }
 
 export function readTaskNeededSkills(task: TaskResponseType | null | undefined): string[] {
