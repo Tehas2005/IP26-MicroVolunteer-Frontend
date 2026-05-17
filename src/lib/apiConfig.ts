@@ -18,4 +18,5 @@ export const backendOrigin = backendOriginEnv
   ? normalizeOrigin(backendOriginEnv)
   : DEFAULT_BACKEND_ORIGIN
 
+export const backendRealtimeOrigin = backendOrigin
 export const backendWebSocketOrigin = backendOrigin.replace(/^http/i, 'ws')

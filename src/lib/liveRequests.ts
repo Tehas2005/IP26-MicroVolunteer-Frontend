@@ -277,17 +277,19 @@ export function isTaskOwnedByCurrentUser(
 export function mapTaskToLiveRequestCard(
   task: TaskResponseType,
   options: {
+    currentUserId?: string | null
     currentUserName?: string | null
     isOwnedByCurrentUser: boolean
   },
 ): LiveRequestCardData {
-  const { currentUserName, isOwnedByCurrentUser } = options
+  const { currentUserId, currentUserName, isOwnedByCurrentUser } = options
   const isAnonymous = Boolean(task.anonymousMode)
   const requesterUserId =
     normalizeUserId(task.requestedByUserId) ||
     normalizeUserId(task.userId) ||
     normalizeUserId(task['ownerUserId']) ||
-    normalizeUserId(task['createdByUserId'])
+    normalizeUserId(task['createdByUserId']) ||
+    (isOwnedByCurrentUser ? normalizeUserId(currentUserId) : null)
 
   return {
     id: normalizeTaskId(task.id) ?? crypto.randomUUID(),

@@ -2,7 +2,6 @@ import type { Fetcher } from './Fetcher'
 import type {
   ApiResponse,
   GuestSessionResponseType,
-  PaginatedTaskListType,
   TaskSubmissionPayloadType,
   TaskResponseType,
 } from './types'
@@ -28,8 +27,8 @@ export class GuestFetcher {
   public listTasks(
     sessionId: string,
     query?: Record<string, string | number | boolean | null | undefined>,
-  ): Promise<ApiResponse<PaginatedTaskListType>> {
-    return this.fetcher.get<PaginatedTaskListType>('/api/guest/tasks', {
+  ): Promise<ApiResponse<unknown>> {
+    return this.fetcher.get<unknown>('/api/guest/tasks', {
       headers: {
         'X-Guest-Session': sessionId,
       },

@@ -21,6 +21,7 @@ export type FetcherRequestOptionsType = {
   headers?: Record<string, string>
   signal?: AbortSignal
   query?: Record<string, string | number | boolean | null | undefined>
+  suppressUnauthorizedEvent?: boolean
 }
 
 export type BetterAuthUserType = {
@@ -29,6 +30,9 @@ export type BetterAuthUserType = {
   email: string
   image?: string | null
   emailVerified?: boolean
+  role?: string | null
+  accountStatus?: string | null
+  accountstatus?: string | null
 }
 
 export type BetterAuthSessionType = {
@@ -235,6 +239,8 @@ export type NotificationResponseType = {
   readAt?: string | null
   [key: string]: unknown
 }
+
+export type NotificationRecordType = NotificationResponseType
 
 export type NotificationFiltersType = {
   page?: number

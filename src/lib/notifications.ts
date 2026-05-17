@@ -1,4 +1,8 @@
-import type { NotificationResponseType } from '@/sdk/types'
+import type {
+  NotificationRecordType,
+  NotificationResponseType,
+  PaginatedNotificationListType,
+} from '@/sdk/types'
 
 type NotificationSocketEnvelope = {
   data?: unknown
@@ -59,6 +63,38 @@ export function extractNotificationPayload(payload: unknown): NotificationRespon
   }
 
   return null
+}
+
+export function parseNotificationSocketFrame(payload: string) {
+  return extractNotificationPayload(payload)
+}
+
+export function extractNotificationsList(payload: unknown): NotificationRecordType[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord) as NotificationRecordType[]
+  }
+
+  const parsedPayload = parsePayload(payload)
+
+  if (!isRecord(parsedPayload)) {
+    return []
+  }
+
+  const directData = (parsedPayload as PaginatedNotificationListType).data
+
+  if (Array.isArray(directData)) {
+    return directData.filter(isRecord) as NotificationRecordType[]
+  }
+
+  if (isRecord(directData)) {
+    const nestedData = (directData as PaginatedNotificationListType).data
+
+    if (Array.isArray(nestedData)) {
+      return nestedData.filter(isRecord) as NotificationRecordType[]
+    }
+  }
+
+  return []
 }
 
 export function readNotificationId(notification: NotificationResponseType) {
