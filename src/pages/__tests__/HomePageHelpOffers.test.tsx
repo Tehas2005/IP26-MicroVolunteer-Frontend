@@ -348,4 +348,71 @@ describe('HomePage help offers flow', () => {
       expect(navigateMock).toHaveBeenCalledWith('/chat/conversation-backend-42')
     })
   })
+
+  it('folosește helpRequestId pentru redirect dacă backend-ul nu întoarce conversationId', async () => {
+    const user = userEvent.setup()
+
+    listTasksMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 42,
+              title: 'Am nevoie de ajutor pentru completarea unor formulare',
+              description: 'Cererea mea reală din backend',
+              category: 'MESSAGES_ONLY',
+              urgency: 'HIGH',
+              status: 'OPEN',
+              requestedByUserId: 'user-123',
+            },
+          ],
+        },
+      },
+    })
+
+    listOffersMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 101,
+              volunteerId: 'vol-1',
+              helpRequestId: 42,
+              message: 'Pot ajuta imediat prin mesaje.',
+              status: 'PENDING',
+              createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+              volunteer: {
+                username: 'ilinca',
+                name: 'Ilinca Pop',
+                averageRating: 4.9,
+              },
+            },
+          ],
+        },
+      },
+    })
+
+    updateOfferStatusMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          id: 101,
+          status: 'ACCEPTED',
+          helpRequestId: 42,
+        },
+      },
+    })
+
+    renderHomePage()
+    await openFirstMockRequestOffers()
+
+    await user.click(await screen.findByRole('button', { name: 'Acceptă' }))
+
+    await waitFor(() => {
+      expect(updateOfferStatusMock).toHaveBeenCalledWith('101', { status: 'ACCEPTED' })
+      expect(navigateMock).toHaveBeenCalledWith('/chat/42')
+    })
+  })
 })

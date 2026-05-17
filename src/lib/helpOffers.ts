@@ -164,12 +164,14 @@ export function extractOfferRedirectMeta(payload: unknown) {
   if (!isRecord(offer)) {
     return {
       conversationId: null,
+      helpRequestId: null,
       taskAssignmentId: null,
     }
   }
 
   return {
     conversationId: normalizeId(offer.conversationId as string | number | null | undefined),
+    helpRequestId: normalizeId(offer.helpRequestId as string | number | null | undefined),
     taskAssignmentId: normalizeId(
       offer.taskAssignmentId as string | number | null | undefined,
     ),

@@ -366,7 +366,10 @@ export function HomePage() {
           volunteerName: offer.volunteerName,
         },
         {
-          preferredConversationId: redirectMeta.conversationId,
+          preferredConversationId:
+            redirectMeta.conversationId ??
+            redirectMeta.helpRequestId ??
+            redirectMeta.taskAssignmentId,
         },
       )
 
