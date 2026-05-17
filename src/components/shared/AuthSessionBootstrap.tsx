@@ -28,6 +28,8 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
 
         if(response.error){
           console.log(response.error.message || 'get-session failed');
+          clearAuthSession()
+          return
         }
 
         if (response.data) {
@@ -41,6 +43,8 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
           })
           return;
         }
+
+        clearAuthSession()
       } catch {
         if (!isMounted) return
       } finally {
