@@ -3,6 +3,8 @@ import type {
   ApiResponse,
   DeleteTaskResponseType,
   DeleteTaskDetailsResponseType,
+  OfferListFiltersType,
+  PaginatedOfferListType,
   PaginatedTaskListType,
   TaskDetailsPayloadType,
   TaskFiltersType,
@@ -61,6 +63,15 @@ export class TasksFetcher {
     payload: TaskDetailsPayloadType,
   ): Promise<ApiResponse<TaskResponseType>> {
     return this.fetcher.put<TaskResponseType>(`/api/tasks/${id}/details`, payload)
+  }
+
+  public listOffers(
+    id: string,
+    filters?: OfferListFiltersType,
+  ): Promise<ApiResponse<PaginatedOfferListType>> {
+    return this.fetcher.get<PaginatedOfferListType>(`/api/tasks/${id}/offers`, {
+      query: filters,
+    })
   }
 
   public deleteDetails(id: string): Promise<ApiResponse<DeleteTaskDetailsResponseType>> {
