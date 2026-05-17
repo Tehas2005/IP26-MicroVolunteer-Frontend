@@ -2,23 +2,20 @@ import { useEffect } from 'react'
 import { BellRing, MapPin, Sparkles, X } from 'lucide-react'
 
 import type { VolunteerNotificationItem } from '@/lib/volunteerNotifications'
-
 import { Button } from '@/components/ui/button'
-
-import type { LiveRequestCardData } from './LiveRequestCard'
 
 export interface VolunteerNotificationStackProps {
   notifications: VolunteerNotificationItem[]
   autoDismissMs?: number
   onDismiss: (notificationId: string) => void
-  onViewDetails: (request: LiveRequestCardData) => void
+  onViewDetails: (notification: VolunteerNotificationItem) => void
 }
 
 interface VolunteerNotificationToastProps {
   notification: VolunteerNotificationItem
   autoDismissMs: number
   onDismiss: (notificationId: string) => void
-  onViewDetails: (request: LiveRequestCardData) => void
+  onViewDetails: (notification: VolunteerNotificationItem) => void
 }
 
 function VolunteerNotificationToast({
@@ -42,7 +39,7 @@ function VolunteerNotificationToast({
       aria-atomic="true"
       aria-live="polite"
       className="volunteer-notification-enter pointer-events-auto rounded-[24px] border border-brand-purple/20 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.12)]"
-      data-testid={`volunteer-toast-${notification.request.id}`}
+      data-testid={`volunteer-toast-${notification.relatedRequestId ?? notification.id}`}
       role="status"
     >
       <div className="flex items-start gap-3">
@@ -58,7 +55,7 @@ function VolunteerNotificationToast({
             </div>
 
             <button
-              aria-label={`Inchide alerta pentru ${notification.request.title ?? 'cererea noua'}`}
+              aria-label={`Inchide alerta pentru ${notification.request?.title || 'cererea noua'}`}
               className="rounded-full p-1.5 text-brand-gray-text transition hover:bg-brand-cream hover:text-brand-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2"
               onClick={() => onDismiss(notification.id)}
               type="button"
@@ -67,16 +64,16 @@ function VolunteerNotificationToast({
             </button>
           </div>
 
-          {notification.request.city || notification.request.skillsNeeded?.length ? (
+          {notification.request?.city || notification.request?.skillsNeeded?.length ? (
             <div className="mt-3 flex flex-wrap gap-2">
-              {notification.request.city ? (
+              {notification.request?.city ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-brand-cream px-2.5 py-1 text-xs font-medium text-brand-black">
                   <MapPin className="size-3.5" />
-                  {notification.request.city}
+                  {notification.request?.city}
                 </span>
               ) : null}
 
-              {notification.request.skillsNeeded?.length ? (
+              {notification.request?.skillsNeeded?.length ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-brand-purple-light px-2.5 py-1 text-xs font-medium text-brand-purple-dark">
                   <Sparkles className="size-3.5" />
                   {notification.request.skillsNeeded.join(', ')}
@@ -86,11 +83,7 @@ function VolunteerNotificationToast({
           ) : null}
 
           <div className="mt-4 flex justify-end">
-            <Button
-              onClick={() => onViewDetails(notification.request)}
-              size="sm"
-              variant="auth"
-            >
+            <Button onClick={() => onViewDetails(notification)} size="sm" variant="auth">
               Vezi detalii
             </Button>
           </div>
