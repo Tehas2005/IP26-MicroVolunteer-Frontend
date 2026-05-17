@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const navigateMock = vi.fn()
 const listTasksMock = vi.fn()
+const listOffersMock = vi.fn()
+const updateOfferStatusMock = vi.fn()
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
@@ -18,8 +20,12 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/lib/backend', () => ({
   backend: {
+    offers: {
+      updateStatus: (...args: unknown[]) => updateOfferStatusMock(...args),
+    },
     tasks: {
       list: (...args: unknown[]) => listTasksMock(...args),
+      listOffers: (...args: unknown[]) => listOffersMock(...args),
     },
   },
 }))
@@ -60,10 +66,25 @@ describe('HomePage help offers flow', () => {
   beforeEach(() => {
     localStorage.clear()
     navigateMock.mockReset()
+    listOffersMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [],
+        },
+      },
+    })
     listTasksMock.mockResolvedValue({
       success: true,
       data: {
         data: [],
+      },
+    })
+    updateOfferStatusMock.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'offer-accepted',
+        status: 'ACCEPTED',
       },
     })
 
@@ -195,5 +216,203 @@ describe('HomePage help offers flow', () => {
     expect(
       screen.getAllByText('O altă ofertă a fost deja acceptată pentru această cerere.'),
     ).toHaveLength(2)
+  })
+
+  it('încarcă ofertele reale din backend când există cereri ale utilizatorului', async () => {
+    listTasksMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 42,
+              title: 'Am nevoie de ajutor pentru completarea unor formulare',
+              description: 'Cererea mea reală din backend',
+              category: 'MESSAGES_ONLY',
+              urgency: 'HIGH',
+              status: 'OPEN',
+              requestedByUserId: 'user-123',
+            },
+          ],
+        },
+      },
+    })
+
+    listOffersMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 101,
+              volunteerId: 'vol-1',
+              message: 'Pot ajuta imediat prin mesaje.',
+              status: 'PENDING',
+              createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+              volunteer: {
+                username: 'ilinca',
+                name: 'Ilinca Pop',
+                averageRating: 4.9,
+              },
+            },
+            {
+              id: 102,
+              volunteerId: 'vol-2',
+              message: 'Pot prelua cererea în aproximativ 20 de minute.',
+              status: 'PENDING',
+              createdAt: new Date(Date.now() - 12 * 60_000).toISOString(),
+              volunteer: {
+                username: 'radu',
+                name: 'Radu Pavel',
+                averageRating: 4.7,
+              },
+            },
+          ],
+        },
+      },
+    })
+
+    renderHomePage()
+    await openFirstMockRequestOffers()
+
+    expect(await screen.findByText('Oferte primite')).toBeInTheDocument()
+    expect(await screen.findByText('Ilinca Pop')).toBeInTheDocument()
+    expect(await screen.findByText('Radu Pavel')).toBeInTheDocument()
+    expect(await screen.findByText('Pot ajuta imediat prin mesaje.')).toBeInTheDocument()
+    expect(await screen.findByText('4.9')).toBeInTheDocument()
+    expect(listOffersMock).toHaveBeenCalled()
+  })
+
+  it('acceptă oferta prin backend și păstrează redirectul spre chat folosind id-ul întors', async () => {
+    const user = userEvent.setup()
+
+    listTasksMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 42,
+              title: 'Am nevoie de ajutor pentru completarea unor formulare',
+              description: 'Cererea mea reală din backend',
+              category: 'MESSAGES_ONLY',
+              urgency: 'HIGH',
+              status: 'OPEN',
+              requestedByUserId: 'user-123',
+            },
+          ],
+        },
+      },
+    })
+
+    listOffersMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 101,
+              volunteerId: 'vol-1',
+              message: 'Pot ajuta imediat prin mesaje.',
+              status: 'PENDING',
+              createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+              volunteer: {
+                username: 'ilinca',
+                name: 'Ilinca Pop',
+                averageRating: 4.9,
+              },
+            },
+          ],
+        },
+      },
+    })
+
+    updateOfferStatusMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          id: 101,
+          status: 'ACCEPTED',
+          conversationId: 'conversation-backend-42',
+        },
+      },
+    })
+
+    renderHomePage()
+    await openFirstMockRequestOffers()
+
+    await user.click(await screen.findByRole('button', { name: 'Acceptă' }))
+
+    await waitFor(() => {
+      expect(updateOfferStatusMock).toHaveBeenCalledWith('101', { status: 'ACCEPTED' })
+      expect(navigateMock).toHaveBeenCalledWith('/chat/conversation-backend-42')
+    })
+  })
+
+  it('folosește helpRequestId pentru redirect dacă backend-ul nu întoarce conversationId', async () => {
+    const user = userEvent.setup()
+
+    listTasksMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 42,
+              title: 'Am nevoie de ajutor pentru completarea unor formulare',
+              description: 'Cererea mea reală din backend',
+              category: 'MESSAGES_ONLY',
+              urgency: 'HIGH',
+              status: 'OPEN',
+              requestedByUserId: 'user-123',
+            },
+          ],
+        },
+      },
+    })
+
+    listOffersMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          data: [
+            {
+              id: 101,
+              volunteerId: 'vol-1',
+              helpRequestId: 42,
+              message: 'Pot ajuta imediat prin mesaje.',
+              status: 'PENDING',
+              createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+              volunteer: {
+                username: 'ilinca',
+                name: 'Ilinca Pop',
+                averageRating: 4.9,
+              },
+            },
+          ],
+        },
+      },
+    })
+
+    updateOfferStatusMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          id: 101,
+          status: 'ACCEPTED',
+          helpRequestId: 42,
+        },
+      },
+    })
+
+    renderHomePage()
+    await openFirstMockRequestOffers()
+
+    await user.click(await screen.findByRole('button', { name: 'Acceptă' }))
+
+    await waitFor(() => {
+      expect(updateOfferStatusMock).toHaveBeenCalledWith('101', { status: 'ACCEPTED' })
+      expect(navigateMock).toHaveBeenCalledWith('/chat/42')
+    })
   })
 })

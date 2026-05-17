@@ -10,6 +10,12 @@ import VolunteerNotificationStack from '@/components/shared/VolunteerNotificatio
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
+  extractOfferRedirectMeta,
+  extractTaskOffers,
+  getReceivedOffersSummaryFromOffers,
+  type HelpOfferData,
+} from '@/lib/helpOffers'
+import {
   extractTask,
   extractTasksList,
   isTaskOwnedByCurrentUser,
@@ -22,10 +28,8 @@ import {
   resolveChatViewerIdentity,
 } from '@/lib/mockChat'
 import {
-  getReceivedOffersSummary,
   listMockHelpOffers,
   updateMockHelpOfferStatus,
-  type HelpOfferData,
 } from '@/lib/mockHelpOffers'
 import { getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import {
@@ -41,6 +45,8 @@ import { useAuthStore } from '@/store/authStore'
 
 const EMPTY_TASKS: TaskResponseType[] = []
 const EMPTY_REQUESTS: LiveRequestCardData[] = []
+const EMPTY_OFFERS: HelpOfferData[] = []
+const FALLBACK_OFFERS_SUMMARY = 'Apasă pentru a vedea ofertele primite.'
 const NOTIFICATIONS_WS_BOOT_TIMEOUT_MS = 2500
 
 function mergeNotifications(
@@ -83,6 +89,7 @@ export function HomePage() {
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
   const [offersRevision, setOffersRevision] = useState(0)
+  const [offerActionErrorMessage, setOfferActionErrorMessage] = useState<string | null>(null)
   const [notificationTransportStatus, setNotificationTransportStatus] = useState<
     'idle' | 'active' | 'failed'
   >('idle')
@@ -156,6 +163,7 @@ export function HomePage() {
   const shouldAttemptBackendNotifications = sessionStatus === 'ready' && !isGuest
   const shouldUseBackendNotifications =
     shouldAttemptBackendNotifications && notificationTransportStatus !== 'failed'
+  const shouldUseBackendOffers = sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
 
   const displayedMyRequests = shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
   const displayedVolunteerRequests = shouldUseMockLiveRequests
@@ -357,14 +365,54 @@ export function HomePage() {
     }
   }, [notificationTransportStatus, shouldAttemptBackendNotifications])
 
+  const { data: offersSummaryEntries = [] } = useQuery({
+    queryKey: [
+      'task-offer-summaries',
+      displayedMyRequests.map((request) => request.id).join('|'),
+      offersRevision,
+    ],
+    enabled: shouldUseBackendOffers && displayedMyRequests.length > 0,
+    queryFn: async () => {
+      const results = await Promise.all(
+        displayedMyRequests.map(async (request) => {
+          const response = await backend.tasks.listOffers(request.id, {
+            page: 1,
+            pageSize: 20,
+          })
+
+          return [
+            request.id,
+            response.success ? extractTaskOffers(response.data, request.id) : [],
+          ] as const
+        }),
+      )
+
+      return results
+    },
+  })
+
+  const offersSummaryMap = useMemo(
+    () => new Map<string, HelpOfferData[]>(offersSummaryEntries),
+    [offersSummaryEntries],
+  )
+
   const displayedMyRequestsWithOfferSummary = useMemo(() => {
-    void offersRevision
+    if (shouldUseMockLiveRequests) {
+      void offersRevision
+
+      return displayedMyRequests.map((request) => ({
+        ...request,
+        supportingText: getReceivedOffersSummaryFromOffers(listMockHelpOffers(request)),
+      }))
+    }
 
     return displayedMyRequests.map((request) => ({
       ...request,
-      supportingText: getReceivedOffersSummary(request),
+      supportingText: offersSummaryMap.has(request.id)
+        ? getReceivedOffersSummaryFromOffers(offersSummaryMap.get(request.id) ?? EMPTY_OFFERS)
+        : request.supportingText?.trim() || FALLBACK_OFFERS_SUMMARY,
     }))
-  }, [displayedMyRequests, offersRevision])
+  }, [displayedMyRequests, offersRevision, offersSummaryMap, shouldUseMockLiveRequests])
 
   const selectedMyRequest = useMemo(
     () =>
@@ -373,11 +421,53 @@ export function HomePage() {
     [displayedMyRequestsWithOfferSummary, selectedMyRequestId],
   )
 
-  const selectedMyRequestOffers = useMemo(() => {
-    void offersRevision
+  useEffect(() => {
+    setOfferActionErrorMessage(null)
+  }, [selectedMyRequestId])
 
-    return selectedMyRequest ? listMockHelpOffers(selectedMyRequest) : []
-  }, [offersRevision, selectedMyRequest])
+  const {
+    data: selectedBackendOffers = EMPTY_OFFERS,
+    error: selectedOffersError,
+    isLoading: isLoadingSelectedOffers,
+    refetch: refetchSelectedOffers,
+  } = useQuery({
+    queryKey: ['task-offers', selectedMyRequest?.id, offersRevision],
+    enabled: shouldUseBackendOffers && selectedMyRequest !== null,
+    queryFn: async () => {
+      if (!selectedMyRequest) {
+        return EMPTY_OFFERS
+      }
+
+      const response = await backend.tasks.listOffers(selectedMyRequest.id, {
+        page: 1,
+        pageSize: 20,
+      })
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut încărca ofertele pentru această cerere.')
+      }
+
+      return extractTaskOffers(response.data, selectedMyRequest.id)
+    },
+  })
+
+  const selectedMyRequestOffers = useMemo(() => {
+    if (!selectedMyRequest) {
+      return EMPTY_OFFERS
+    }
+
+    if (shouldUseMockLiveRequests) {
+      void offersRevision
+
+      return listMockHelpOffers(selectedMyRequest)
+    }
+
+    return selectedBackendOffers
+  }, [offersRevision, selectedBackendOffers, selectedMyRequest, shouldUseMockLiveRequests])
+
+  const selectedOffersErrorMessage =
+    offerActionErrorMessage ||
+    (selectedOffersError instanceof Error ? selectedOffersError.message : null)
 
   const handleVolunteerRequestOpen = useCallback(
     (request: LiveRequestCardData) => {
@@ -389,22 +479,70 @@ export function HomePage() {
   )
 
   const handleMyRequestOpen = useCallback((request: LiveRequestCardData) => {
+    setOfferActionErrorMessage(null)
     setSelectedMyRequestId(request.id)
   }, [])
 
-  const handleOfferReject = useCallback((offer: HelpOfferData) => {
-    updateMockHelpOfferStatus(offer.requestId, offer.id, 'rejected')
-    setOffersRevision((currentValue) => currentValue + 1)
-  }, [])
-
-  const handleOfferAccept = useCallback(
-    (offer: HelpOfferData) => {
+  const handleOfferReject = useCallback(
+    async (offer: HelpOfferData) => {
       if (!selectedMyRequest) {
         return
       }
 
-      updateMockHelpOfferStatus(selectedMyRequest.id, offer.id, 'accepted')
+      if (shouldUseMockLiveRequests) {
+        updateMockHelpOfferStatus(offer.requestId, offer.id, 'rejected')
+        setOffersRevision((currentValue) => currentValue + 1)
+        return
+      }
+
+      const response = await backend.offers.updateStatus(offer.id, { status: 'REJECTED' })
+
+      if (!response.success) {
+        setOfferActionErrorMessage(response.message || 'Nu am putut refuza oferta selectată.')
+        return
+      }
+
+      setOfferActionErrorMessage(null)
       setOffersRevision((currentValue) => currentValue + 1)
+      void refetchSelectedOffers()
+    },
+    [refetchSelectedOffers, selectedMyRequest, shouldUseMockLiveRequests],
+  )
+
+  const handleOfferAccept = useCallback(
+    async (offer: HelpOfferData) => {
+      if (!selectedMyRequest) {
+        return
+      }
+
+      if (shouldUseMockLiveRequests) {
+        updateMockHelpOfferStatus(selectedMyRequest.id, offer.id, 'accepted')
+        setOffersRevision((currentValue) => currentValue + 1)
+
+        const conversation = ensureMockConversationForAcceptedOffer(
+          selectedMyRequest,
+          resolveChatViewerIdentity(authUser),
+          {
+            volunteerKey: offer.volunteerKey,
+            volunteerName: offer.volunteerName,
+          },
+        )
+
+        navigate(`/chat/${conversation.id}`)
+        return
+      }
+
+      const response = await backend.offers.updateStatus(offer.id, { status: 'ACCEPTED' })
+
+      if (!response.success) {
+        setOfferActionErrorMessage(response.message || 'Nu am putut accepta oferta selectată.')
+        return
+      }
+
+      setOfferActionErrorMessage(null)
+      setOffersRevision((currentValue) => currentValue + 1)
+
+      const redirectMeta = extractOfferRedirectMeta(response.data)
 
       const conversation = ensureMockConversationForAcceptedOffer(
         selectedMyRequest,
@@ -413,11 +551,17 @@ export function HomePage() {
           volunteerKey: offer.volunteerKey,
           volunteerName: offer.volunteerName,
         },
+        {
+          preferredConversationId:
+            redirectMeta.conversationId ??
+            redirectMeta.helpRequestId ??
+            redirectMeta.taskAssignmentId,
+        },
       )
 
       navigate(`/chat/${conversation.id}`)
     },
-    [authUser, navigate, selectedMyRequest],
+    [authUser, navigate, selectedMyRequest, shouldUseMockLiveRequests],
   )
 
   const handleNotificationDismiss = useCallback((notificationId: string) => {
@@ -551,6 +695,8 @@ export function HomePage() {
       </section>
 
       <HelpOffersInboxDialog
+        errorMessage={selectedOffersErrorMessage}
+        isLoading={isLoadingSelectedOffers}
         offers={selectedMyRequestOffers}
         onAccept={handleOfferAccept}
         onOpenChange={(open) => {

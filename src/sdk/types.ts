@@ -170,6 +170,48 @@ export type PaginatedTaskListType = {
   meta?: TaskListMetaType | null
 }
 
+export type OfferStatusType = 'PENDING' | 'ACCEPTED' | 'REJECTED' | string
+
+export type OfferVolunteerType = {
+  username?: string | null
+  trustScore?: number | null
+  averageRating?: number | null
+  name?: string | null
+  hiddenIdentity?: boolean | null
+  [key: string]: unknown
+}
+
+export type OfferResponseType = {
+  id: string | number
+  volunteerId?: string | number | null
+  helpRequestId?: string | number | null
+  taskId?: string | number | null
+  message?: string | null
+  status?: OfferStatusType | null
+  createdAt?: string | null
+  volunteer?: OfferVolunteerType | null
+  taskAssignmentId?: string | number | null
+  conversationId?: string | number | null
+  [key: string]: unknown
+}
+
+export type OfferStatusPayloadType = {
+  status: OfferStatusType
+  [key: string]: unknown
+}
+
+export type OfferListFiltersType = {
+  page?: number
+  pageSize?: number
+  status?: OfferStatusType
+  [key: string]: string | number | boolean | null | undefined
+}
+
+export type PaginatedOfferListType = {
+  data: OfferResponseType[]
+  meta?: TaskListMetaType | null
+}
+
 export type NotificationRecordType = {
   id: string | number
   userId?: string | null
