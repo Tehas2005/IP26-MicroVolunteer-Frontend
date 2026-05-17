@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
-import AcceptVolunteerModal from '@/components/modals/AcceptVolunteerModal'
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
 import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
@@ -70,18 +69,12 @@ function mergeNotifications(
     .slice(-4)
 }
 
-type OfferDecisionState = {
-  offer: HelpOfferData
-  request: LiveRequestCardData
-}
-
 export function HomePage() {
   const navigate = useNavigate()
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
-  const [offerDecisionState, setOfferDecisionState] = useState<OfferDecisionState | null>(null)
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
   const [offersRevision, setOffersRevision] = useState(0)
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
@@ -157,7 +150,8 @@ export function HomePage() {
   const displayedVolunteerRequests = shouldUseMockLiveRequests
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
-  const shouldUseBackendNotifications = sessionStatus === 'ready' && !isGuest
+  const shouldUseBackendNotifications =
+    sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
 
   const requestLookup = useMemo(() => {
     const nextLookup = new Map<string, LiveRequestCardData>()
@@ -185,12 +179,6 @@ export function HomePage() {
       setActiveNotifications((currentNotifications) =>
         currentNotifications.length === 0 ? currentNotifications : [],
       )
-      return
-    }
-
-    if (shouldUseBackendNotifications) {
-      seenVolunteerRequestIdsRef.current.clear()
-      hasInitializedVolunteerFeedRef.current = false
       return
     }
 
@@ -354,15 +342,11 @@ export function HomePage() {
   )
 
   const handleMyRequestOpen = useCallback((request: LiveRequestCardData) => {
-    setOfferDecisionState(null)
     setSelectedMyRequestId(request.id)
   }, [])
 
   const handleOfferReject = useCallback((offer: HelpOfferData) => {
     updateMockHelpOfferStatus(offer.requestId, offer.id, 'rejected')
-    setOfferDecisionState((currentState) =>
-      currentState?.offer.id === offer.id ? null : currentState,
-    )
     setOffersRevision((currentValue) => currentValue + 1)
   }, [])
 
@@ -372,49 +356,22 @@ export function HomePage() {
         return
       }
 
-      setOfferDecisionState({
-        offer,
-        request: selectedMyRequest,
-      })
-      setSelectedMyRequestId(null)
-    },
-    [selectedMyRequest],
-  )
-
-  const handleOfferDecisionAccept = useCallback(
-    () => {
-      if (!offerDecisionState) {
-        return
-      }
-
-      updateMockHelpOfferStatus(offerDecisionState.request.id, offerDecisionState.offer.id, 'accepted')
-      setOfferDecisionState(null)
+      updateMockHelpOfferStatus(selectedMyRequest.id, offer.id, 'accepted')
       setOffersRevision((currentValue) => currentValue + 1)
 
       const conversation = ensureMockConversationForAcceptedOffer(
-        offerDecisionState.request,
+        selectedMyRequest,
         resolveChatViewerIdentity(authUser),
         {
-          volunteerKey: offerDecisionState.offer.volunteerKey,
-          volunteerName: offerDecisionState.offer.volunteerName,
+          volunteerKey: offer.volunteerKey,
+          volunteerName: offer.volunteerName,
         },
       )
 
       navigate(`/chat/${conversation.id}`)
     },
-    [authUser, navigate, offerDecisionState],
+    [authUser, navigate, selectedMyRequest],
   )
-
-  const handleOfferDecisionReject = useCallback(() => {
-    if (!offerDecisionState) {
-      return
-    }
-
-    updateMockHelpOfferStatus(offerDecisionState.request.id, offerDecisionState.offer.id, 'rejected')
-    setOffersRevision((currentValue) => currentValue + 1)
-    setSelectedMyRequestId(offerDecisionState.request.id)
-    setOfferDecisionState(null)
-  }, [offerDecisionState])
 
   const handleNotificationDismiss = useCallback((notificationId: string) => {
     setActiveNotifications((currentNotifications) =>
@@ -424,41 +381,39 @@ export function HomePage() {
 
   const handleNotificationOpen = useCallback(
     async (notification: VolunteerNotificationItem) => {
-      let requestToOpen = notification.request
-
-      if (!requestToOpen) {
-        if (!notification.relatedRequestId) {
-          return
-        }
-
-        const response = await backend.tasks.getById(notification.relatedRequestId)
-
-        if (!response.success) {
-          return
-        }
-
-        const task = extractTask(response.data)
-
-        if (!task) {
-          return
-        }
-
-        requestToOpen = mapTaskToLiveRequestCard(task, {
-          currentUserName: authUser?.name,
-          isOwnedByCurrentUser: false,
-        })
-      }
+      handleNotificationDismiss(notification.id)
 
       if (shouldUseBackendNotifications) {
-        const markAsReadResponse = await backend.notifications.markAsRead(notification.id)
-
-        if (!markAsReadResponse.success) {
-          return
-        }
+        await backend.notifications.markAsRead(notification.id)
       }
 
-      handleNotificationDismiss(notification.id)
-      handleVolunteerRequestOpen(requestToOpen)
+      if (notification.request) {
+        handleVolunteerRequestOpen(notification.request)
+        return
+      }
+
+      if (!notification.relatedRequestId) {
+        return
+      }
+
+      const response = await backend.tasks.getById(notification.relatedRequestId)
+
+      if (!response.success) {
+        return
+      }
+
+      const task = extractTask(response.data)
+
+      if (!task) {
+        return
+      }
+
+      const request = mapTaskToLiveRequestCard(task, {
+        currentUserName: authUser?.name,
+        isOwnedByCurrentUser: false,
+      })
+
+      handleVolunteerRequestOpen(request)
     },
     [
       authUser?.name,
@@ -549,29 +504,12 @@ export function HomePage() {
         onAccept={handleOfferAccept}
         onOpenChange={(open) => {
           if (!open) {
-            setOfferDecisionState(null)
             setSelectedMyRequestId(null)
           }
         }}
         onReject={handleOfferReject}
         open={selectedMyRequest !== null}
         request={selectedMyRequest}
-      />
-
-      <AcceptVolunteerModal
-        averageRating={offerDecisionState?.offer.averageRating ?? 0}
-        isOpen={offerDecisionState !== null}
-        onClose={() => {
-          if (!offerDecisionState) {
-            return
-          }
-
-          setSelectedMyRequestId(offerDecisionState.request.id)
-          setOfferDecisionState(null)
-        }}
-        onAccept={handleOfferDecisionAccept}
-        onDecline={handleOfferDecisionReject}
-        volunteerName={offerDecisionState?.offer.volunteerName ?? ''}
       />
     </div>
   )

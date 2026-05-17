@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -117,7 +117,7 @@ describe('HomePage help offers flow', () => {
     expect(navigateMock).not.toHaveBeenCalled()
   })
 
-  it('deschide modalul real de acceptare cu scorul voluntarului din flow-ul aplicatiei', async () => {
+  it('accepta oferta, inactiveaza restul si pregateste redirectul catre chat', async () => {
     const user = userEvent.setup()
 
     renderHomePage()
@@ -126,34 +126,21 @@ describe('HomePage help offers flow', () => {
 
     const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
     await user.click(acceptButtons[1])
-
-    const dialog = await screen.findByTestId('accept-volunteer-dialog')
-
-    expect(within(dialog).getByText('Un voluntar vrea sa te ajute!')).toBeInTheDocument()
-    expect(within(dialog).getByText('Radu Pavel')).toBeInTheDocument()
-    expect(within(dialog).getByText('4.7')).toBeInTheDocument()
-    expect(navigateMock).not.toHaveBeenCalled()
-  })
-
-  it('accepta oferta din modal, inactiveaza restul si pregateste redirectul catre chat', async () => {
-    const user = userEvent.setup()
-
-    renderHomePage()
-
-    await openFirstMockRequestOffers()
-
-    const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
-    await user.click(acceptButtons[1])
-
-    const dialog = await screen.findByTestId('accept-volunteer-dialog')
-    await user.click(within(dialog).getByRole('button', { name: 'Accepta ajutorul' }))
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith(expect.stringMatching(/^\/chat\//))
     })
 
-    expect(screen.queryByText('Un voluntar vrea sa te ajute!')).not.toBeInTheDocument()
-    expect(await screen.findByText('Ajutor acceptat de la Radu Pavel')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Acceptată' })).toBeDisabled()
+
+    const remainingAcceptButtons = screen.getAllByRole('button', { name: 'Acceptă' })
+    remainingAcceptButtons.forEach((button) => {
+      expect(button).toBeDisabled()
+    })
+
+    expect(
+      screen.getAllByText('O altă ofertă a fost deja acceptată pentru această cerere.'),
+    ).toHaveLength(2)
 
     const viewerIdentity = resolveChatViewerIdentity({
       id: 'user-123',
@@ -163,25 +150,6 @@ describe('HomePage help offers flow', () => {
     const conversations = listMockConversations(viewerIdentity)
     expect(conversations).toHaveLength(1)
     expect(conversations[0]?.username).toBe('Radu Pavel')
-  })
-
-  it('refuza oferta din modal si pastreaza utilizatorul in inbox', async () => {
-    const user = userEvent.setup()
-
-    renderHomePage()
-
-    await openFirstMockRequestOffers()
-
-    const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
-    await user.click(acceptButtons[0])
-
-    const dialog = await screen.findByTestId('accept-volunteer-dialog')
-    await user.click(within(dialog).getByRole('button', { name: 'Refuza' }))
-
-    expect(screen.queryByText('Un voluntar vrea sa te ajute!')).not.toBeInTheDocument()
-    expect(await screen.findByText('Oferte primite')).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Refuzată' })).toBeDisabled()
-    expect(navigateMock).not.toHaveBeenCalled()
   })
 
   it('pastreaza sumarul corect si statusurile dupa redeschiderea unei cereri cu toate ofertele refuzate', async () => {
@@ -215,11 +183,7 @@ describe('HomePage help offers flow', () => {
 
     const acceptButtons = await screen.findAllByRole('button', { name: 'Acceptă' })
     await user.click(acceptButtons[0])
-      await user.click(
-      within(await screen.findByTestId('accept-volunteer-dialog')).getByRole('button', {
-        name: 'Accepta ajutorul',
-      }),
-    )
+    await user.click(screen.getByRole('button', { name: 'Închide ofertele' }))
 
     expect(
       await screen.findByText('Ajutor acceptat de la Ilinca Pop'),
