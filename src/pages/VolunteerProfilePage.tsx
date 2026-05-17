@@ -249,10 +249,14 @@ export default function VolunteerProfilePage() {
           const storedDraft = window.localStorage.getItem(draftKey)
 
           if (storedDraft) {
-            localDraft = sanitizeDraft(JSON.parse(storedDraft) as Partial<ProfileDraft>)
+            try {
+              localDraft = sanitizeDraft(JSON.parse(storedDraft) as Partial<ProfileDraft>)
 
-            if (isMounted) {
-              applyDraft(localDraft)
+              if (isMounted) {
+                applyDraft(localDraft)
+              }
+            } catch {
+              window.localStorage.removeItem(draftKey)
             }
           }
         }

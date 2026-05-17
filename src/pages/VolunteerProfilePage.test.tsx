@@ -177,6 +177,28 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
     profileRequest.reject(new Error('cancelled'))
   })
 
+  it('reinitializeaza persistenta chiar daca draftul din localStorage este corupt', async () => {
+    window.localStorage.setItem('mvcr-volunteer-profile-draft:1', '{invalid-json')
+
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByLabelText(/Locatia curenta/i)).toHaveValue('')
+
+    await user.type(screen.getByLabelText(/Distanta maxima/i), '14')
+    await user.type(screen.getByLabelText(/Locatia curenta/i), 'Cluj-Napoca')
+
+    await waitFor(() => {
+      const rawDraft = window.localStorage.getItem('mvcr-volunteer-profile-draft:1')
+      expect(rawDraft).not.toBeNull()
+      expect(() => JSON.parse(rawDraft ?? '')).not.toThrow()
+      expect(JSON.parse(rawDraft ?? '{}')).toMatchObject({
+        currentLocation: 'Cluj-Napoca',
+        maxDistanceKm: '14',
+      })
+    })
+  })
+
   it('reseteaza formularul la ultima stare hidratata, nu la un draft gol', async () => {
     window.localStorage.setItem(
       'mvcr-volunteer-profile-draft:1',
