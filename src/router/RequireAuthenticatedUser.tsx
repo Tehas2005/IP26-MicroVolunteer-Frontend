@@ -23,4 +23,3 @@ export function RequireAuthenticatedUser({ children }: RequireAuthenticatedUserP
 }
 
 export default RequireAuthenticatedUser
-

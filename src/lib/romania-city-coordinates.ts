@@ -51,3 +51,5 @@ export const ROMANIA_CITY_COORDINATES: Record<string, TaskLocationPayload> = {
   Vaslui: { x: 27.8036751, y: 46.496847 },
   Zalau: { x: 23.0562143, y: 47.1819416 },
 }
+
+export const ROMANIA_CITY_NAMES = Object.keys(ROMANIA_CITY_COORDINATES)
