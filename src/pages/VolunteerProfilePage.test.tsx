@@ -253,6 +253,56 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
     })
   })
 
+  it('actualizeaza store-ul si pe fallback local cand endpoint-ul de voluntar nu este disponibil', async () => {
+    mockCreateVolunteerProfile.mockResolvedValueOnce({
+      success: false,
+      data: null,
+      message: 'not found',
+      status: 404,
+      isClientError: true,
+      isServerError: false,
+      isNotFound: true,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+    mockUpdateVolunteerProfile.mockResolvedValueOnce({
+      success: false,
+      data: null,
+      message: 'not found',
+      status: 404,
+      isClientError: true,
+      isServerError: false,
+      isNotFound: true,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+    mockUpdateMe.mockResolvedValueOnce({
+      success: true,
+      data: { hiddenIdentity: false },
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.type(screen.getByLabelText(/Distanta maxima/i), '16')
+    await user.type(screen.getByLabelText(/Locatia curenta/i), 'Cluj-Napoca')
+    await user.click(screen.getByRole('button', { name: /Salveaza profilul/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /Datele au fost salvate local. Sincronizarea cu backend-ul pentru profilul de voluntar nu este inca disponibila./i,
+        ),
+      ).toBeInTheDocument()
+      expect(useVolunteerProfileStore.getState().profilesByUserId['1']).toMatchObject({
+        hiddenIdentity: false,
+        location: 'Cluj-Napoca',
+        locationCoordinates: { x: 23.5899542, y: 46.769379 },
+        skills: [],
+      })
+    })
+  })
+
   it('nu reseteaza la un draft care a esuat la sincronizare', async () => {
     window.localStorage.setItem(
       'mvcr-volunteer-profile-draft:1',

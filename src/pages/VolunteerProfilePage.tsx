@@ -436,6 +436,21 @@ export default function VolunteerProfilePage() {
     }
   }
 
+  function syncVolunteerProfileStore(draft: ProfileDraft) {
+    const locationCoordinates = resolveVolunteerLocationPoint(draft.currentLocation)
+
+    if (!authUser?.id || !draft.currentLocation || !locationCoordinates) {
+      return
+    }
+
+    upsertVolunteerProfile(authUser.id, {
+      hiddenIdentity: draft.hiddenIdentity,
+      location: draft.currentLocation,
+      locationCoordinates,
+      skills: draft.skills,
+    })
+  }
+
   async function saveVolunteerProfile(payload: VolunteerProfilePayloadType) {
     const primaryResponse = hasRemoteVolunteerProfile
       ? await backend.volunteerProfiles.updateMe(payload)
@@ -517,34 +532,14 @@ export default function VolunteerProfilePage() {
       }
 
       if (hasSyncedVolunteerProfile && hasSyncedPrivacy) {
-        const persistedLocationCoordinates = resolveVolunteerLocationPoint(persistedDraft.currentLocation)
-
-        if (authUser?.id && persistedDraft.currentLocation && persistedLocationCoordinates) {
-          upsertVolunteerProfile(authUser.id, {
-            hiddenIdentity: persistedDraft.hiddenIdentity,
-            location: persistedDraft.currentLocation,
-            locationCoordinates: persistedLocationCoordinates,
-            skills: persistedDraft.skills,
-          })
-        }
-
+        syncVolunteerProfileStore(persistedDraft)
         setLastSavedDraft(persistedDraft)
         setSaveMessage('Setarile profilului au fost salvate si sincronizate.')
         return
       }
 
       if (hasSyncedVolunteerProfile) {
-        const persistedLocationCoordinates = resolveVolunteerLocationPoint(persistedDraft.currentLocation)
-
-        if (authUser?.id && persistedDraft.currentLocation && persistedLocationCoordinates) {
-          upsertVolunteerProfile(authUser.id, {
-            hiddenIdentity: persistedDraft.hiddenIdentity,
-            location: persistedDraft.currentLocation,
-            locationCoordinates: persistedLocationCoordinates,
-            skills: persistedDraft.skills,
-          })
-        }
-
+        syncVolunteerProfileStore(persistedDraft)
         setLastSavedDraft(persistedDraft)
         setSaveMessage(
           'Datele profilului de voluntar au fost salvate. Confidentialitatea nu a putut fi sincronizata.',
@@ -556,6 +551,7 @@ export default function VolunteerProfilePage() {
         volunteerProfileResponse?.isNotFound ||
         (volunteerProfileResponse && !volunteerProfileResponse.success && volunteerProfileResponse.status === 404)
       ) {
+        syncVolunteerProfileStore(persistedDraft)
         setLastSavedDraft(persistedDraft)
         setSaveMessage(
           'Datele au fost salvate local. Sincronizarea cu backend-ul pentru profilul de voluntar nu este inca disponibila.',
