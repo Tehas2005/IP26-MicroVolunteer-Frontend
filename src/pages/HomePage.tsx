@@ -25,7 +25,6 @@ import {
 import { readGuestSessionId } from '@/lib/guestSession'
 import {
   createVolunteerNotification,
-  getVolunteerNotificationId,
   type VolunteerNotificationItem,
 } from '@/lib/volunteerNotifications'
 import type { TaskResponseType } from '@/sdk/types'
@@ -255,6 +254,23 @@ export function HomePage() {
     [myRequests, selectedMyRequestId],
   )
 
+  const openVolunteerRequestDetails = useCallback(
+    (requestId: string | null | undefined) => {
+      const normalizedRequestId = typeof requestId === 'string' ? requestId.trim() : ''
+
+      if (!normalizedRequestId) {
+        setPageNotice({
+          kind: 'error',
+          message: 'Nu am putut identifica cererea selectata. Reincarca pagina si incearca din nou.',
+        })
+        return
+      }
+
+      navigate(`/cereri/${normalizedRequestId}`)
+    },
+    [navigate],
+  )
+
   const {
     data: selectedMyRequestOffers = [],
     isLoading: isLoadingSelectedOffers,
@@ -306,9 +322,9 @@ export function HomePage() {
         return
       }
 
-      navigate(`/cereri/${request.id}`)
+      openVolunteerRequestDetails(request.id)
     },
-    [navigate, pendingOfferTaskIds],
+    [openVolunteerRequestDetails, pendingOfferTaskIds],
   )
 
   const handleMyRequestOpen = useCallback(
@@ -408,13 +424,16 @@ export function HomePage() {
         }
 
         if (!isChatReady) {
+          setSelectedMyRequestId(null)
           setPageNotice({
             kind: 'success',
             message:
               'Oferta a fost acceptata. Conversatia se pregateste inca putin; incearca din nou imediat.',
           })
+          return
         }
 
+        setSelectedMyRequestId(null)
         navigate(`/chat/${selectedMyRequest.id}`)
       } finally {
         setOfferActionState(null)
@@ -430,11 +449,17 @@ export function HomePage() {
   }, [])
 
   const handleNotificationOpen = useCallback(
-    (request: LiveRequestCardData) => {
-      handleNotificationDismiss(getVolunteerNotificationId(request.id))
-      handleVolunteerRequestOpen(request)
+    (notification: VolunteerNotificationItem) => {
+      handleNotificationDismiss(notification.id)
+
+      if (notification.request) {
+        handleVolunteerRequestOpen(notification.request)
+        return
+      }
+
+      openVolunteerRequestDetails(notification.relatedRequestId)
     },
-    [handleNotificationDismiss, handleVolunteerRequestOpen],
+    [handleNotificationDismiss, handleVolunteerRequestOpen, openVolunteerRequestDetails],
   )
 
   return (

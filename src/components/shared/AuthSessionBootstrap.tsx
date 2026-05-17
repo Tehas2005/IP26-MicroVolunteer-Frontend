@@ -49,13 +49,10 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
   const rememberVolunteerUser = useAuthStore((state) => state.rememberVolunteerUser)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const setSessionStatus = useAuthStore((state) => state.setSessionStatus)
-  const persistedVolunteerStatus = useAuthStore((state) => state.volunteerStatus)
   const knownVolunteerUserIds = useAuthStore((state) => state.knownVolunteerUserIds)
   const volunteerProfilesByUserId = useVolunteerProfileStore((state) => state.profilesByUserId)
 
   // Refs so the async syncSession can read current values without triggering re-runs
-  const persistedVolunteerStatusRef = useRef(persistedVolunteerStatus)
-  persistedVolunteerStatusRef.current = persistedVolunteerStatus
   const volunteerProfilesByUserIdRef = useRef(volunteerProfilesByUserId)
   volunteerProfilesByUserIdRef.current = volunteerProfilesByUserId
   const knownVolunteerUserIdsRef = useRef(knownVolunteerUserIds)
@@ -91,6 +88,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
               role: sessionUserRole || null,
             },
           })
+          setVolunteerStatus('unknown')
 
           if (profileResponse.isForbidden) {
             setAccountStatus('blocked')
@@ -113,8 +111,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
             !hasVolunteerProfile &&
             !isVolunteerByRole &&
             !hasLocalVolunteerProfile &&
-            !hasKnownVolunteerStatus &&
-            persistedVolunteerStatusRef.current !== 'volunteer'
+            !hasKnownVolunteerStatus
 
           const hasVolunteerAccess = shouldProbeVolunteerAccess
             ? await detectVolunteerAccess()
@@ -133,8 +130,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
               isVolunteerByRole ||
               hasVolunteerAccess ||
               hasLocalVolunteerProfile ||
-              hasKnownVolunteerStatus ||
-              persistedVolunteerStatusRef.current === 'volunteer'
+              hasKnownVolunteerStatus
               ? 'volunteer'
               : 'not-volunteer',
           )

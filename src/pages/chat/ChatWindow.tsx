@@ -349,6 +349,7 @@ export function ChatWindow({ conversation }: Props) {
       isActive = false
     }
   }, [
+    conversation.viewerHasRated,
     conversation.targetUserId,
     isConversationClosed,
     ratingPromptDismissed,
