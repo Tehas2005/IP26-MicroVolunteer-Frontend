@@ -291,7 +291,7 @@ describe("AskForHelpPage guest details", () => {
     await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
 
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledTimes(1)
+      expect(createSpy).toHaveBeenCalledTimes(2)
     })
 
     expect(
@@ -299,8 +299,52 @@ describe("AskForHelpPage guest details", () => {
         "Nu am putut trimite cererea ca vizitator momentan. Te rugam sa te autentifici sau incearca din nou mai tarziu.",
       ),
     ).toBeInTheDocument()
+    expect(backend.guest.createSession).toHaveBeenCalledTimes(2)
     expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument()
     expect(screen.getByText("Cereri ramase: 3")).toBeInTheDocument()
+  })
+
+  it("regenereaza sesiunea guest expirata si retrimite cererea o singura data", async () => {
+    const user = userEvent.setup()
+    const createSpy = vi
+      .spyOn(backend.guest, "createTask")
+      .mockResolvedValueOnce(unauthorizedResponse)
+      .mockResolvedValueOnce(successResponse)
+
+    localStorage.setItem("mvcr-guest-session-id", "11111111-1111-4111-8111-111111111111")
+    setGuestSession()
+    render(<AskForHelpPage />)
+
+    expect(await screen.findByText("Cereri ramase: 3")).toBeInTheDocument()
+
+    await user.type(
+      screen.getByPlaceholderText("Ex: Ridicare medicamente de la farmacie"),
+      "Ajutor online",
+    )
+    await user.click(screen.getByRole("button", { name: "Trimite Cererea" }))
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledTimes(2)
+    })
+
+    expect(createSpy).toHaveBeenNthCalledWith(
+      1,
+      "11111111-1111-4111-8111-111111111111",
+      expect.objectContaining({
+        title: "Ajutor online",
+      }),
+    )
+    expect(createSpy).toHaveBeenNthCalledWith(
+      2,
+      "550e8400-e29b-41d4-a716-446655440000",
+      expect.objectContaining({
+        title: "Ajutor online",
+      }),
+    )
+    expect(backend.guest.createSession).toHaveBeenCalledTimes(1)
+    expect(
+      await screen.findByText("Cererea ta a fost trimisa voluntarilor!"),
+    ).toBeInTheDocument()
   })
 
   it("blocheaza detaliile aditionale partiale pentru utilizator autentificat", async () => {

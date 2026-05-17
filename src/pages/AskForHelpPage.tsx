@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { SkillTagSelector } from '@/components/shared/SkillTagSelector'
 import { backend } from '@/lib/backend'
 import {
+  clearGuestSessionId,
   extractGuestSessionId,
   getStoredGuestSessionId,
   storeGuestSessionId,
@@ -742,28 +743,9 @@ export function AskForHelpPage() {
   const audioChunksRef = useRef<Blob[]>([])
   const activeStreamRef = useRef<MediaStream | null>(null)
 
-  const refreshGuestRequestLimit = useCallback(async (sessionId: string) => {
-    const response = await backend.guest.listTasks(sessionId, {
-      page: 1,
-      pageSize: GUEST_ACTIVE_TASK_LIMIT,
-      status: 'OPEN',
-    })
-
-    if (!response.success) {
-      return
-    }
-
-    const openTasksCount = extractTasksList(response.data).length
-    setRequestLimit(Math.max(0, GUEST_ACTIVE_TASK_LIMIT - openTasksCount))
-  }, [])
-
-  const ensureGuestSession = useCallback(async () => {
-    const storedSessionId = getStoredGuestSessionId()
-
-    if (storedSessionId) {
-      setGuestSessionId(storedSessionId)
-      return storedSessionId
-    }
+  const createFreshGuestSession = useCallback(async () => {
+    clearGuestSessionId()
+    setGuestSessionId('')
 
     const response = await backend.guest.createSession()
     const sessionId = response.success ? extractGuestSessionId(response.data) : null
@@ -776,6 +758,50 @@ export function AskForHelpPage() {
     setGuestSessionId(sessionId)
     return sessionId
   }, [])
+
+  const refreshGuestRequestLimit = useCallback(async (sessionId: string) => {
+    let activeSessionId = sessionId
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await backend.guest.listTasks(activeSessionId, {
+        page: 1,
+        pageSize: GUEST_ACTIVE_TASK_LIMIT,
+        status: 'OPEN',
+      })
+
+      if (response.success) {
+        const openTasksCount = extractTasksList(response.data).length
+        setRequestLimit(Math.max(0, GUEST_ACTIVE_TASK_LIMIT - openTasksCount))
+        return activeSessionId
+      }
+
+      if (!response.isUnauthorized || attempt === 1) {
+        return null
+      }
+
+      const refreshedSessionId = await createFreshGuestSession()
+
+      if (!refreshedSessionId) {
+        setRequestLimit(0)
+        return null
+      }
+
+      activeSessionId = refreshedSessionId
+    }
+
+    return null
+  }, [createFreshGuestSession])
+
+  const ensureGuestSession = useCallback(async (options?: { forceRefresh?: boolean }) => {
+    const storedSessionId = getStoredGuestSessionId()
+
+    if (storedSessionId && !options?.forceRefresh) {
+      setGuestSessionId(storedSessionId)
+      return storedSessionId
+    }
+
+    return createFreshGuestSession()
+  }, [createFreshGuestSession])
 
   useEffect(() => {
     setIsGuest(authIsGuest)
@@ -1037,6 +1063,14 @@ export function AskForHelpPage() {
         }
 
         response = await backend.guest.createTask(sessionId, guestPayload)
+
+        if (!response.success && response.isUnauthorized) {
+          const refreshedSessionId = await ensureGuestSession({ forceRefresh: true })
+
+          if (refreshedSessionId) {
+            response = await backend.guest.createTask(refreshedSessionId, guestPayload)
+          }
+        }
       } else {
         response = await backend.tasks.create(payload)
       }

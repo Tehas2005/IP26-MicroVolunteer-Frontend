@@ -9,7 +9,12 @@ import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
-import { getStoredGuestSessionId } from '@/lib/guestSession'
+import {
+  clearGuestSessionId,
+  extractGuestSessionId,
+  getStoredGuestSessionId,
+  storeGuestSessionId,
+} from '@/lib/guestSession'
 import {
   extractOfferRedirectMeta,
   extractTaskOffers,
@@ -95,8 +100,30 @@ export function HomePage() {
   >('idle')
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
-  const guestSessionId = isGuest ? getStoredGuestSessionId() : null
+  const [guestSessionId, setGuestSessionId] = useState<string | null>(() =>
+    getStoredGuestSessionId(),
+  )
   const requestLookupRef = useRef<Map<string, LiveRequestCardData>>(new Map())
+
+  useEffect(() => {
+    setGuestSessionId(isGuest ? getStoredGuestSessionId() : null)
+  }, [isGuest, sessionStatus])
+
+  const recreateGuestSession = useCallback(async () => {
+    clearGuestSessionId()
+    setGuestSessionId(null)
+
+    const response = await backend.guest.createSession()
+    const nextSessionId = response.success ? extractGuestSessionId(response.data) : null
+
+    if (!nextSessionId) {
+      return null
+    }
+
+    storeGuestSessionId(nextSessionId)
+    setGuestSessionId(nextSessionId)
+    return nextSessionId
+  }, [])
 
   const { data: liveTasksData, isLoading: isLoadingAuthenticatedLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
@@ -128,11 +155,23 @@ export function HomePage() {
         return EMPTY_TASKS
       }
 
-      const response = await backend.guest.listTasks(guestSessionId, {
+      let response = await backend.guest.listTasks(guestSessionId, {
         page: 1,
         pageSize: 50,
         status: 'OPEN',
       })
+
+      if (!response.success && response.isUnauthorized) {
+        const nextSessionId = await recreateGuestSession()
+
+        if (nextSessionId) {
+          response = await backend.guest.listTasks(nextSessionId, {
+            page: 1,
+            pageSize: 50,
+            status: 'OPEN',
+          })
+        }
+      }
 
       if (!response.success) {
         throw new Error(response.message || 'Nu am putut încărca cererile tale.')

@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const navigateMock = vi.fn()
 const listTasksMock = vi.fn()
 const listGuestTasksMock = vi.fn()
+const createGuestSessionMock = vi.fn()
 const listOffersMock = vi.fn()
 const updateOfferStatusMock = vi.fn()
 
@@ -29,6 +30,7 @@ vi.mock('@/lib/backend', () => ({
       listOffers: (...args: unknown[]) => listOffersMock(...args),
     },
     guest: {
+      createSession: (...args: unknown[]) => createGuestSessionMock(...args),
       listTasks: (...args: unknown[]) => listGuestTasksMock(...args),
     },
   },
@@ -72,8 +74,7 @@ describe('HomePage help offers flow', () => {
     navigateMock.mockReset()
     listTasksMock.mockReset()
     listGuestTasksMock.mockReset()
-    listTasksMock.mockReset()
-    listGuestTasksMock.mockReset()
+    createGuestSessionMock.mockReset()
     listOffersMock.mockReset()
     updateOfferStatusMock.mockReset()
     listOffersMock.mockResolvedValue({
@@ -96,6 +97,12 @@ describe('HomePage help offers flow', () => {
         data: {
           data: [],
         },
+      },
+    })
+    createGuestSessionMock.mockResolvedValue({
+      success: true,
+      data: {
+        sessionId: '550e8400-e29b-41d4-a716-446655440000',
       },
     })
     updateOfferStatusMock.mockResolvedValue({
@@ -276,6 +283,68 @@ describe('HomePage help offers flow', () => {
       },
     )
     expect(listTasksMock).not.toHaveBeenCalled()
+  })
+
+  it('regenereaza sesiunea guest expirata cand listarea intoarce 401', async () => {
+    localStorage.setItem('mvcr-guest-session-id', '11111111-1111-4111-8111-111111111111')
+    listGuestTasksMock
+      .mockResolvedValueOnce({
+        success: false,
+        data: null,
+        message: 'Unauthorized',
+        status: 401,
+        isUnauthorized: true,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          data: {
+            data: [
+              {
+                id: 43,
+                requestedByUserId: null,
+                title: 'Cerere guest dupa sesiune noua',
+                description: 'Cerere listata dupa regenerarea sesiunii',
+                urgency: 'LOW',
+                category: 'MESSAGES_ONLY',
+                anonymousMode: true,
+                status: 'OPEN',
+                details: null,
+              },
+            ],
+          },
+        },
+      })
+    useAuthStore.setState({
+      user: null,
+      isGuest: true,
+      sessionStatus: 'ready',
+    })
+
+    renderHomePage()
+
+    await waitFor(() => {
+      expect(createGuestSessionMock).toHaveBeenCalledTimes(1)
+    })
+    expect(listGuestTasksMock).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      {
+        page: 1,
+        pageSize: 50,
+        status: 'OPEN',
+      },
+    )
+    expect(listGuestTasksMock).toHaveBeenCalledWith(
+      '550e8400-e29b-41d4-a716-446655440000',
+      {
+        page: 1,
+        pageSize: 50,
+        status: 'OPEN',
+      },
+    )
+    expect(localStorage.getItem('mvcr-guest-session-id')).toBe(
+      '550e8400-e29b-41d4-a716-446655440000',
+    )
   })
 
   it('încarcă ofertele reale din backend când există cereri ale utilizatorului', async () => {
