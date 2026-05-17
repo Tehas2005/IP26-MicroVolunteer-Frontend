@@ -3,14 +3,31 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthSessionBootstrap } from './AuthSessionBootstrap'
 import { useAuthStore } from '@/store/authStore'
+import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
-const { getSessionMock } = vi.hoisted(() => ({
+const { getSessionMock, getByUserIdMock, getVolunteerProfileMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
+  getByUserIdMock: vi.fn(),
+  getVolunteerProfileMock: vi.fn(),
 }))
 
 vi.mock('@/main', () => ({
   authClient: {
     getSession: getSessionMock,
+  },
+}))
+
+vi.mock('@/lib/backend', () => ({
+  backend: {
+    auth: {
+      clearAuthToken: vi.fn(),
+    },
+    profile: {
+      getByUserId: getByUserIdMock,
+    },
+    volunteerProfiles: {
+      getMe: getVolunteerProfileMock,
+    },
   },
 }))
 
@@ -22,6 +39,26 @@ describe('AuthSessionBootstrap', () => {
       user: null,
       isGuest: true,
       sessionStatus: 'loading',
+    })
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {},
+    })
+
+    getByUserIdMock.mockResolvedValue({
+      success: true,
+      data: { hiddenIdentity: false },
+    })
+    getVolunteerProfileMock.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          volunteer: { id: 1, userId: 'user-1' },
+          profile: {
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            skills: ['transport'],
+          },
+        },
+      },
     })
   })
 
@@ -81,5 +118,85 @@ describe('AuthSessionBootstrap', () => {
 
     expect(useAuthStore.getState().user?.accountStatus).toBe('BLOCKED')
     expect(useAuthStore.getState().isGuest).toBe(false)
+  })
+
+  it('hidrateaza store-ul de voluntar imediat dupa bootstrap-ul sesiunii', async () => {
+    getSessionMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          name: 'Ion',
+          email: 'ion@example.com',
+          accountstatus: 'active',
+        },
+      },
+      error: null,
+    })
+
+    render(
+      <AuthSessionBootstrap>
+        <div>Aplicatie</div>
+      </AuthSessionBootstrap>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
+        hiddenIdentity: false,
+        location: 'Cluj-Napoca',
+        locationCoordinates: { x: 23.5899542, y: 46.769379 },
+        skills: ['transport'],
+      })
+    })
+  })
+
+  it('sterge profilul local de voluntar daca backend-ul nu mai gaseste profilul remote', async () => {
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {
+        'user-1': {
+          userId: 'user-1',
+          location: 'Cluj-Napoca',
+          locationCoordinates: { x: 23.5899542, y: 46.769379 },
+          skills: ['transport'],
+          hiddenIdentity: false,
+          createdAt: '2026-05-17T00:00:00.000Z',
+          updatedAt: '2026-05-17T00:00:00.000Z',
+        },
+      },
+    })
+
+    getSessionMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          name: 'Ion',
+          email: 'ion@example.com',
+          accountstatus: 'active',
+        },
+      },
+      error: null,
+    })
+    getVolunteerProfileMock.mockResolvedValue({
+      success: false,
+      data: null,
+      message: 'not found',
+      status: 404,
+      isClientError: true,
+      isServerError: false,
+      isNotFound: true,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+
+    render(
+      <AuthSessionBootstrap>
+        <div>Aplicatie</div>
+      </AuthSessionBootstrap>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toBeUndefined()
+    })
   })
 })
