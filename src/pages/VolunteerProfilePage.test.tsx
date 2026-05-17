@@ -277,4 +277,78 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
     expect(screen.getByLabelText(/Locatia curenta/i)).toHaveValue('Cluj-Napoca')
     expect(screen.getByLabelText(/Distanta maxima/i)).toHaveValue(18)
   })
+
+  it('rescrie hiddenIdentity in storage daca sincronizarea confidentialitatii esueaza', async () => {
+    window.localStorage.setItem(
+      'mvcr-volunteer-profile-draft:1',
+      JSON.stringify({
+        currentLocation: 'Cluj-Napoca',
+        hiddenIdentity: false,
+        knownLocations: [],
+        maxDistanceKm: '18',
+        selectedCity: '',
+        skillInput: '',
+        skills: [],
+        specificAddress: '',
+      }),
+    )
+
+    mockCreateVolunteerProfile.mockResolvedValueOnce({
+      success: true,
+      data: {
+        data: {
+          volunteer: { id: 1, userId: '1' },
+          profile: {
+            maxDistanceKm: 18,
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            knownLocations: [],
+            skills: [],
+          },
+        },
+      },
+    })
+    mockUpdateMe.mockResolvedValueOnce({
+      success: false,
+      data: null,
+      message: 'privacy failed',
+      status: 500,
+      isClientError: false,
+      isServerError: true,
+      isNotFound: false,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+
+    const user = userEvent.setup()
+    const { unmount } = renderPage()
+
+    expect(await screen.findByLabelText(/Locatia curenta/i)).toHaveValue('Cluj-Napoca')
+
+    await user.click(screen.getByRole('button', { name: /Comuta ascunderea identitatii/i }))
+    await user.click(screen.getByRole('button', { name: /Salveaza profilul/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /Datele profilului de voluntar au fost salvate. Confidentialitatea nu a putut fi sincronizata./i,
+        ),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Comuta ascunderea identitatii/i })).toHaveClass(
+        'bg-gray-300',
+      )
+    })
+
+    const rawDraft = window.localStorage.getItem('mvcr-volunteer-profile-draft:1')
+    expect(rawDraft).not.toBeNull()
+    expect(JSON.parse(rawDraft ?? '{}')).toMatchObject({ hiddenIdentity: false })
+
+    unmount()
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Comuta ascunderea identitatii/i })).toHaveClass(
+        'bg-gray-300',
+      )
+    })
+  })
 })

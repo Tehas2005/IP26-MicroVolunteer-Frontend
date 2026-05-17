@@ -482,9 +482,16 @@ export default function VolunteerProfilePage() {
 
       const hasSyncedVolunteerProfile = Boolean(volunteerProfileResponse?.success)
       const hasSyncedPrivacy = Boolean(privacyResponse?.success)
+      const nextHiddenIdentity = hasSyncedPrivacy
+        ? currentDraft.hiddenIdentity
+        : lastSavedDraft.hiddenIdentity
       const persistedDraft = {
         ...currentDraft,
-        hiddenIdentity: hasSyncedPrivacy ? currentDraft.hiddenIdentity : lastSavedDraft.hiddenIdentity,
+        hiddenIdentity: nextHiddenIdentity,
+      }
+
+      if (!hasSyncedPrivacy && hiddenIdentity !== nextHiddenIdentity) {
+        setHiddenIdentity(nextHiddenIdentity)
       }
 
       if (volunteerProfileResponse?.success) {
