@@ -75,6 +75,7 @@ export function RequestDetailsPage() {
   const [offerMessage, setOfferMessage] = useState('')
   const [offerError, setOfferError] = useState<string | null>(null)
   const [isSubmittingOffer, setIsSubmittingOffer] = useState(false)
+  const [hasMarkedTaskUnavailable, setHasMarkedTaskUnavailable] = useState(false)
 
   const {
     data: task,
@@ -118,7 +119,7 @@ export function RequestDetailsPage() {
   const declaredLocation = useMemo(() => readTaskDeclaredLocation(task), [task])
   const neededSkills = useMemo(() => readTaskNeededSkills(task), [task])
   const title = task?.title?.trim() || 'Cerere fără titlu'
-  const isTaskUnavailable = Boolean(task?.status && task.status !== 'OPEN')
+  const isTaskUnavailable = hasMarkedTaskUnavailable || Boolean(task?.status && task.status !== 'OPEN')
   const isVolunteer = Boolean(volunteerProfile)
   const shouldDisableHelpAction = isTaskUnavailable
 
@@ -152,7 +153,6 @@ export function RequestDetailsPage() {
     if (!nextOpen) {
       setOfferMessage('')
       setOfferError(null)
-      setIsSubmittingOffer(false)
     }
 
     setIsOfferDialogOpen(nextOpen)
@@ -179,7 +179,13 @@ export function RequestDetailsPage() {
       })
 
       if (!response.success) {
-        setOfferError(mapOfferSubmitErrorMessage(response.message))
+        const mappedError = mapOfferSubmitErrorMessage(response.message)
+
+        if (response.message === 'HelpRequest is not OPEN') {
+          setHasMarkedTaskUnavailable(true)
+        }
+
+        setOfferError(mappedError)
         return
       }
 
@@ -446,7 +452,11 @@ export function RequestDetailsPage() {
             >
               Închide
             </Button>
-            <Button disabled={isSubmittingOffer} onClick={handleOfferSubmit} variant="auth">
+            <Button
+              disabled={isSubmittingOffer || shouldDisableHelpAction}
+              onClick={handleOfferSubmit}
+              variant="auth"
+            >
               {isSubmittingOffer ? 'Trimitem oferta...' : 'Trimite oferta de ajutor'}
             </Button>
           </DialogFooter>

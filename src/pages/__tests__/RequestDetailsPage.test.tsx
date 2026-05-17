@@ -345,8 +345,14 @@ describe('RequestDetailsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Trimite oferta de ajutor' }))
 
     expect(
-      await screen.findByText('Această cerere de ajutor a fost deja preluată de alt voluntar.'),
-    ).toBeInTheDocument()
+      await screen.findAllByText('Această cerere de ajutor a fost deja preluată de alt voluntar.'),
+    ).not.toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Trimite oferta de ajutor' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Închide' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Ofertă de ajutor' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Cerere deja preluată' })).toBeDisabled()
   })
 
   it('afișează un fallback clar și resetează loading-ul dacă submit-ul aruncă excepție', async () => {
