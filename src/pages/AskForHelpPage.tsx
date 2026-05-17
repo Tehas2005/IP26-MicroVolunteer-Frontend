@@ -150,25 +150,30 @@ function normalizeLocalAudioDataUrl(dataUrl: string) {
   return dataUrl.replace(/\s+/g, '')
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
+function convertBufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer)
+  const chunkSize = 0x8000
+  let binary = ''
 
-    reader.onload = () => {
-      if (typeof reader.result === 'string' && reader.result.trim()) {
-        resolve(normalizeLocalAudioDataUrl(reader.result))
-        return
-      }
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize)
+    binary += String.fromCharCode(...chunk)
+  }
 
-      reject(new Error('Nu am putut converti mesajul vocal într-un format redabil.'))
-    }
+  return btoa(binary)
+}
 
-    reader.onerror = () => {
-      reject(new Error('Nu am putut converti mesajul vocal într-un format redabil.'))
-    }
+async function readFileAsDataUrl(file: File) {
+  const buffer = await file.arrayBuffer()
 
-    reader.readAsDataURL(file)
-  })
+  if (buffer.byteLength === 0) {
+    throw new Error('Nu am putut converti mesajul vocal într-un format redabil.')
+  }
+
+  const mimeType = file.type || 'audio/webm'
+  const base64Payload = convertBufferToBase64(buffer)
+
+  return normalizeLocalAudioDataUrl(`data:${mimeType};base64,${base64Payload}`)
 }
 
 function getValidationErrors(data: unknown): ValidationErrorItem[] {
