@@ -8,7 +8,9 @@ import ChatPage from '@/pages/ChatPage'
 import HomePage from '@/pages/HomePage'
 import InteractionHistoryPage from '@/pages/InteractionHistoryPage'
 import ProfilePage from '@/pages/ProfilePage'
+import RequestDetailsPage from '@/pages/RequestDetailsPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
+import UserProfilePage from '@/pages/UserProfilePage'
 import RequireAuthenticatedUser from './RequireAuthenticatedUser'
 
 export const router = createBrowserRouter([
@@ -26,7 +28,7 @@ export const router = createBrowserRouter([
         path: 'profil',
         element: (
           <RequireAuthenticatedUser>
-            <ProfilePage />
+            <UserProfilePage />
           </RequireAuthenticatedUser>
         ),
       },
@@ -39,6 +41,7 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'despre-noi', element: <AboutPage /> },
+      { path: 'cereri/:taskId', element: <RequestDetailsPage /> },
       {
         path: 'istoric-interactiuni',
         element: (
