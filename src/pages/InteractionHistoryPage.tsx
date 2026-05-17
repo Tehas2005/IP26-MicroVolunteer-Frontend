@@ -32,8 +32,9 @@ function mapRatingToHistoryEntry(rating: RatingResponseType): InteractionHistory
   return {
     id: `rating:${rating.id ?? rating.taskAssignmentId ?? crypto.randomUUID()}`,
     date: typeof rating.createdAt === 'string' ? rating.createdAt : null,
-    summary: comment || 'Evaluare primita pentru o interactiune finalizata.',
+    summary: 'Evaluare primita pentru o interactiune finalizata.',
     rating: ratingValue,
+    comment: comment || null,
   }
 }
 

@@ -5,6 +5,7 @@ export interface InteractionHistoryEntry {
   date?: string | null
   summary?: string | null
   rating?: number | null
+  comment?: string | null
 }
 
 const FALLBACK_SUMMARY = 'Rezumat indisponibil'
@@ -59,6 +60,20 @@ function readNumericRating(value: unknown) {
   return null
 }
 
+function readRatingComment(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const nestedComment = (value as { comment?: unknown }).comment
+
+  if (typeof nestedComment === 'string' && nestedComment.trim()) {
+    return nestedComment.trim()
+  }
+
+  return null
+}
+
 export function mapInteractionToHistoryEntry(entry: InteractionResponseType): InteractionHistoryEntry {
   const title = normalizeString(entry.taskTitle) || normalizeString(entry.task?.title)
   const summary =
@@ -68,6 +83,7 @@ export function mapInteractionToHistoryEntry(entry: InteractionResponseType): In
     (title ? `Interactiune pentru taskul "${title}".` : '')
 
   const ratingCandidate = readNumericRating(entry.rating) ?? readNumericRating(entry.stars)
+  const comment = readRatingComment(entry.rating)
 
   return {
     id: normalizeString(entry.id) || normalizeString(entry.interactionId) || crypto.randomUUID(),
@@ -78,5 +94,6 @@ export function mapInteractionToHistoryEntry(entry: InteractionResponseType): In
       null,
     summary,
     rating: typeof ratingCandidate === 'number' ? ratingCandidate : null,
+    comment,
   }
 }

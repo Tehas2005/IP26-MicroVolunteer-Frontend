@@ -47,5 +47,6 @@ describe("interactionHistory helpers", () => {
     expect(history.id).toBe("12")
     expect(history.rating).toBe(4)
     expect(history.summary).toContain("History task")
+    expect(history.comment).toBe("Foarte bine")
   })
 })
