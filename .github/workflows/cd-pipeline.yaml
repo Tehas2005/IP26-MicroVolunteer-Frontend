@@ -5,17 +5,20 @@ on:
     workflows: ["CI Pipeline"]
     types:
       - completed
-  # push:
     branches:
       - main
+      - test
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     #Deployment triggers only if CI-Pipeline checks successfully
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     name: Deploy FE to Railway
     runs-on: ubuntu-latest
+
+    #Workflow timeout after 5 minutes
+    timeout-minutes: 5
 
     steps:
       #Moving the workflow on the VM
@@ -36,13 +39,30 @@ jobs:
       #Building
       - name: Build Project
         run: npm run build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
 
       #Railway CLI on VM for deployment
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      #Deployment
-      - name: Deploy to Railway
-        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
+      #1.a) Deployment for main branch
+      - name: Deploy to Railway (Main Branch)
+        if: ${{ github.event.workflow_run.head_branch == 'main' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') }}
+        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      #1.b) Deployment for test branch
+      - name: Deploy to Railway (Test Branch)
+        if: ${{ github.event.workflow_run.head_branch == 'test' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'test') }}
+        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID_TEST_BRANCH }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      
+      #2. Redeploy NGINX service for fresh BE intern URL
+      - name: Redeploy Nginx Proxy
+        run: railway redeploy --service ${{ secrets.RAILWAY_NGINX_SERVICE_ID }} --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
