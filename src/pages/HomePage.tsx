@@ -18,6 +18,7 @@ import {
   type HelpOfferData,
 } from '@/lib/helpOffers'
 import {
+  extractTask,
   extractTasksList,
   isTaskOwnedByCurrentUser,
   mapTaskToLiveRequestCard,
@@ -35,17 +36,54 @@ import {
 } from '@/lib/mockHelpOffers'
 import { cancelMockLiveRequest, getMockLiveRequestSections } from '@/lib/mockLiveRequests'
 import {
+  buildNotificationsWebSocketUrl,
   createVolunteerNotification,
   getVolunteerNotificationId,
+  isBackendNotificationId,
+  mapNotificationRecordsToItems,
+  mapNotificationSocketFrameToItem,
   type VolunteerNotificationItem,
 } from '@/lib/volunteerNotifications'
-import type { TaskResponseType } from '@/sdk/types'
+import type { NotificationListResponseType, TaskResponseType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 
 const EMPTY_TASKS: TaskResponseType[] = []
 const EMPTY_REQUESTS: LiveRequestCardData[] = []
 const EMPTY_OFFERS: HelpOfferData[] = []
 const FALLBACK_OFFERS_SUMMARY = 'Apasă pentru a vedea ofertele primite.'
+const NOTIFICATIONS_WS_BOOT_TIMEOUT_MS = 2500
+
+function mergeNotifications(
+  currentNotifications: VolunteerNotificationItem[],
+  nextNotifications: VolunteerNotificationItem[],
+) {
+  if (nextNotifications.length === 0) {
+    return currentNotifications
+  }
+
+  const notificationsById = new Map<string, VolunteerNotificationItem>()
+
+  currentNotifications.forEach((notification) => {
+    const notificationKey =
+      notification.request?.id ?? notification.relatedRequestId ?? notification.id
+    notificationsById.set(notificationKey, notification)
+  })
+
+  nextNotifications.forEach((notification) => {
+    const notificationKey =
+      notification.request?.id ?? notification.relatedRequestId ?? notification.id
+    notificationsById.set(notificationKey, notification)
+  })
+
+  return Array.from(notificationsById.values())
+    .sort((left, right) => {
+      const leftDate = left.createdAt ? new Date(left.createdAt).getTime() : 0
+      const rightDate = right.createdAt ? new Date(right.createdAt).getTime() : 0
+
+      return leftDate - rightDate
+    })
+    .slice(-4)
+}
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -66,8 +104,12 @@ export function HomePage() {
   const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null)
   const [offersRevision, setOffersRevision] = useState(0)
   const [offerActionErrorMessage, setOfferActionErrorMessage] = useState<string | null>(null)
+  const [notificationTransportStatus, setNotificationTransportStatus] = useState<
+    'idle' | 'active' | 'failed'
+  >('idle')
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
+  const requestLookupRef = useRef<Map<string, LiveRequestCardData>>(new Map())
 
   useEffect(() => {
     let isMounted = true
@@ -187,6 +229,9 @@ export function HomePage() {
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
     !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
+  const shouldAttemptBackendNotifications = sessionStatus === 'ready' && !isGuest
+  const shouldUseBackendNotifications =
+    shouldAttemptBackendNotifications && notificationTransportStatus !== 'failed'
   const shouldUseBackendOffers = sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
   const cancelledRequestIdsSet = useMemo(() => new Set(cancelledRequestIds), [cancelledRequestIds])
 
@@ -196,6 +241,33 @@ export function HomePage() {
   const displayedVolunteerRequests = shouldUseMockLiveRequests
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
+
+  const requestLookup = useMemo(() => {
+    const nextLookup = new Map<string, LiveRequestCardData>()
+
+    displayedMyRequests.forEach((request) => {
+      nextLookup.set(request.id, request)
+    })
+
+    displayedVolunteerRequests.forEach((request) => {
+      nextLookup.set(request.id, request)
+    })
+
+    return nextLookup
+  }, [displayedMyRequests, displayedVolunteerRequests])
+
+  useEffect(() => {
+    if (!shouldAttemptBackendNotifications) {
+      setNotificationTransportStatus('idle')
+      return
+    }
+
+    setNotificationTransportStatus('idle')
+  }, [authUser?.id, shouldAttemptBackendNotifications])
+
+  useEffect(() => {
+    requestLookupRef.current = requestLookup
+  }, [requestLookup])
 
   useEffect(() => {
     if (isGuest || sessionStatus !== 'ready') {
@@ -241,10 +313,22 @@ export function HomePage() {
     })
 
     setActiveNotifications((currentNotifications) => {
-      const currentNotificationIds = new Set(currentNotifications.map((item) => item.id))
+      const existingRequestIds = new Set(
+        currentNotifications
+          .map((item) => item.request?.id ?? item.relatedRequestId)
+          .filter((requestId): requestId is string => Boolean(requestId)),
+      )
       const nextNotifications = unseenRequests
         .map((request) => createVolunteerNotification(request))
-        .filter((notification) => !currentNotificationIds.has(notification.id))
+        .filter((notification) => {
+          const requestId = notification.request?.id ?? notification.relatedRequestId
+
+          if (!requestId) {
+            return true
+          }
+
+          return !existingRequestIds.has(requestId)
+        })
 
       return [...currentNotifications, ...nextNotifications].slice(-4)
     })
@@ -263,6 +347,109 @@ export function HomePage() {
       window.clearTimeout(timeoutId)
     }
   }, [successToastMessage])
+
+  const { data: unreadNotificationsPayload = null, isSuccess: hasLoadedUnreadNotifications } =
+    useQuery({
+      queryKey: ['unread-volunteer-notifications', authUser?.id],
+      enabled: shouldUseBackendNotifications,
+      queryFn: async () => {
+        const response = await backend.notifications.list({
+          page: 1,
+          pageSize: 20,
+          unreadOnly: 'true',
+        })
+
+        if (!response.success) {
+          throw new Error(response.message || 'Nu am putut încărca notificările.')
+        }
+
+        return response.data as NotificationListResponseType | null
+      },
+    })
+
+  const unreadNotificationItems = useMemo(
+    () => mapNotificationRecordsToItems(unreadNotificationsPayload, requestLookup),
+    [requestLookup, unreadNotificationsPayload],
+  )
+
+  useEffect(() => {
+    if (!shouldUseBackendNotifications || !hasLoadedUnreadNotifications) {
+      return
+    }
+
+    setActiveNotifications((currentNotifications) =>
+      mergeNotifications(currentNotifications, unreadNotificationItems),
+    )
+  }, [hasLoadedUnreadNotifications, shouldUseBackendNotifications, unreadNotificationItems])
+
+  useEffect(() => {
+    if (!shouldAttemptBackendNotifications || notificationTransportStatus !== 'idle') {
+      return
+    }
+
+    if (typeof window === 'undefined' || typeof window.WebSocket !== 'function') {
+      setNotificationTransportStatus('failed')
+      return
+    }
+
+    let hasOpened = false
+    let isDisposed = false
+    const socket = new window.WebSocket(buildNotificationsWebSocketUrl())
+    const bootTimeout = window.setTimeout(() => {
+      if (hasOpened || isDisposed) {
+        return
+      }
+
+      setNotificationTransportStatus('failed')
+      socket.close()
+    }, NOTIFICATIONS_WS_BOOT_TIMEOUT_MS)
+
+    socket.onopen = () => {
+      hasOpened = true
+      window.clearTimeout(bootTimeout)
+      setNotificationTransportStatus('active')
+    }
+
+    socket.onmessage = (event) => {
+      if (typeof event.data !== 'string') {
+        return
+      }
+
+      const nextNotification = mapNotificationSocketFrameToItem(
+        event.data,
+        requestLookupRef.current,
+      )
+
+      if (!nextNotification) {
+        return
+      }
+
+      setActiveNotifications((currentNotifications) =>
+        mergeNotifications(currentNotifications, [nextNotification]),
+      )
+    }
+
+    socket.onerror = () => {
+      if (!hasOpened && !isDisposed) {
+        window.clearTimeout(bootTimeout)
+        setNotificationTransportStatus('failed')
+      }
+    }
+
+    socket.onclose = () => {
+      window.clearTimeout(bootTimeout)
+
+      if (!isDisposed) {
+        setNotificationTransportStatus('failed')
+      }
+    }
+
+    return () => {
+      isDisposed = true
+      window.clearTimeout(bootTimeout)
+      socket.close()
+    }
+  }, [notificationTransportStatus, shouldAttemptBackendNotifications])
 
   const { data: offersSummaryEntries = [] } = useQuery({
     queryKey: [
@@ -470,11 +657,51 @@ export function HomePage() {
   }, [])
 
   const handleNotificationOpen = useCallback(
-    (request: LiveRequestCardData) => {
-      handleNotificationDismiss(getVolunteerNotificationId(request.id))
+    async (notification: VolunteerNotificationItem) => {
+      if (shouldUseBackendNotifications && isBackendNotificationId(notification.id)) {
+        const markAsReadResponse = await backend.notifications.markAsRead(notification.id)
+
+        if (!markAsReadResponse.success) {
+          return
+        }
+      }
+
+      if (notification.request) {
+        handleNotificationDismiss(notification.id)
+        handleVolunteerRequestOpen(notification.request)
+        return
+      }
+
+      if (!notification.relatedRequestId) {
+        return
+      }
+
+      const response = await backend.tasks.getById(notification.relatedRequestId)
+
+      if (!response.success) {
+        return
+      }
+
+      const task = extractTask(response.data)
+
+      if (!task) {
+        return
+      }
+
+      const request = mapTaskToLiveRequestCard(task, {
+        currentUserName: authUser?.name,
+        isOwnedByCurrentUser: false,
+      })
+
+      handleNotificationDismiss(notification.id)
       handleVolunteerRequestOpen(request)
     },
-    [handleNotificationDismiss, handleVolunteerRequestOpen],
+    [
+      authUser?.name,
+      handleNotificationDismiss,
+      handleVolunteerRequestOpen,
+      shouldUseBackendNotifications,
+    ],
   )
 
   const canCancelRequest = useCallback(
