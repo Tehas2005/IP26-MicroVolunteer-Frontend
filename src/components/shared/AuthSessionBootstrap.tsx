@@ -146,6 +146,8 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
         if (!isMounted) {
           return
         }
+
+        clearAuthSession()
       } finally {
         if (isMounted) {
           setSessionStatus('ready')

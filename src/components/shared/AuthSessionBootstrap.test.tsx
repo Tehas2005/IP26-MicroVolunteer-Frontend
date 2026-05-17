@@ -14,6 +14,25 @@ vi.mock('@/main', () => ({
   },
 }))
 
+vi.mock('@/lib/backend', () => ({
+  backend: {
+    profile: {
+      getMe: vi.fn(),
+    },
+    volunteers: {
+      getMeProfile: vi.fn(),
+    },
+    offers: {
+      listMine: vi.fn(),
+    },
+    auth: {
+      clearAuthToken: vi.fn(),
+    },
+  },
+}))
+
+import { backend } from '@/lib/backend'
+
 describe('AuthSessionBootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -56,17 +75,63 @@ describe('AuthSessionBootstrap', () => {
     expect(useAuthStore.getState().user).toBeNull()
   })
 
-  it('pastreaza accountStatus-ul din sesiunea returnata de backend', async () => {
+  it('curata sesiunea persistata daca bootstrap-ul arunca o eroare', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 'user-1',
+        name: 'Ion',
+        email: 'ion@example.com',
+        accountStatus: 'ACTIVE',
+      },
+      isGuest: false,
+      sessionStatus: 'ready',
+      accountStatus: 'active',
+      volunteerStatus: 'volunteer',
+      knownVolunteerUserIds: {
+        'user-1': true,
+      },
+    })
+
+    getSessionMock.mockRejectedValue(new Error('network down'))
+
+    render(
+      <AuthSessionBootstrap>
+        <div>Aplicatie</div>
+      </AuthSessionBootstrap>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+    })
+
+    expect(useAuthStore.getState().isGuest).toBe(true)
+    expect(useAuthStore.getState().user).toBeNull()
+    expect(useAuthStore.getState().accountStatus).toBe('unknown')
+    expect(useAuthStore.getState().volunteerStatus).toBe('unknown')
+  })
+
+  it('pastreaza accountStatus-ul din profilul returnat de backend', async () => {
     getSessionMock.mockResolvedValue({
       data: {
         user: {
           id: 'user-1',
           name: 'Ion',
           email: 'ion@example.com',
-          accountstatus: 'blocked',
+          role: 'requester',
         },
       },
       error: null,
+    })
+    vi.mocked(backend.profile.getMe).mockResolvedValue({
+      success: false,
+      isForbidden: true,
+      data: null,
+      message: null,
+      status: 403,
+      isClientError: true,
+      isServerError: false,
+      isNotFound: false,
+      isUnauthorized: false,
     })
 
     render(
@@ -79,7 +144,7 @@ describe('AuthSessionBootstrap', () => {
       expect(screen.getByText('Aplicatie')).toBeInTheDocument()
     })
 
-    expect(useAuthStore.getState().user?.accountStatus).toBe('BLOCKED')
+    expect(useAuthStore.getState().accountStatus).toBe('blocked')
     expect(useAuthStore.getState().isGuest).toBe(false)
   })
 })
