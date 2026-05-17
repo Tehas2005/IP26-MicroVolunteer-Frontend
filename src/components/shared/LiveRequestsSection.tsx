@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Inbox } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -15,6 +15,7 @@ export interface LiveRequestsSectionProps {
   volunteerRequests?: LiveRequestCardData[] | null
   onMyRequestOpen?: (request: LiveRequestCardData) => void
   onVolunteerRequestOpen?: (request: LiveRequestCardData) => void
+  renderMyRequestActions?: (request: LiveRequestCardData) => ReactNode
 }
 
 const TAB_OPTIONS: Array<{ label: string; value: LiveRequestsTab }> = [
@@ -34,6 +35,7 @@ export function LiveRequestsSection({
   volunteerRequests,
   onMyRequestOpen,
   onVolunteerRequestOpen,
+  renderMyRequestActions,
 }: LiveRequestsSectionProps) {
   const [activeTab, setActiveTab] = useState<LiveRequestsTab>('mine')
 
@@ -124,6 +126,11 @@ export function LiveRequestsSection({
             <div className="grid grid-cols-1 gap-4">
               {selectedRequests.map((request) => (
                 <LiveRequestCard
+                  footerActions={
+                    activeTab === 'mine' && renderMyRequestActions
+                      ? renderMyRequestActions(request)
+                      : undefined
+                  }
                   key={request.id}
                   onClick={
                     activeTab === 'mine'

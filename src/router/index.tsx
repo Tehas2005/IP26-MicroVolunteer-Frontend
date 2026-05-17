@@ -4,13 +4,17 @@ import RootLayout from '@/components/layout/RootLayout'
 import AboutPage from '@/pages/AboutPage'
 import AskForHelpPage from '@/pages/AskForHelpPage'
 import AuthPage from '@/pages/AuthPage'
+import BlockedAccountPage from '@/pages/BlockedAccountPage'
 import ChatPage from '@/pages/ChatPage'
 import HomePage from '@/pages/HomePage'
 import VolunteerProfilePage from '@/pages/VolunteerProfilePage'
 import InteractionHistoryPage from '@/pages/InteractionHistoryPage'
-import ProfilePage from '@/pages/ProfilePage'
+import RequestDetailsPage from '@/pages/RequestDetailsPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
+import UserProfilePage from '@/pages/UserProfilePage'
 import RequireAuthenticatedUser from './RequireAuthenticatedUser'
+import RequireAvailableAccount from './RequireAvailableAccount'
+import RequireRestrictedAccount from './RequireRestrictedAccount'
 
 export const router = createBrowserRouter([
   { path: '/auth', element: <AuthPage mode="login" /> },
@@ -18,8 +22,20 @@ export const router = createBrowserRouter([
   { path: '/auth/signup', element: <AuthPage mode="signup" /> },
   { path: '/auth/reset-password', element: <ResetPasswordPage /> },
   {
+    path: '/cont-blocat',
+    element: (
+      <RequireRestrictedAccount>
+        <BlockedAccountPage />
+      </RequireRestrictedAccount>
+    ),
+  },
+  {
     path: '/',
-    element: <RootLayout />,
+    element: (
+      <RequireAvailableAccount>
+        <RootLayout />
+      </RequireAvailableAccount>
+    ),
     children: [
       { index: true, element: <HomePage /> },
       { path: 'cere-ajutor', element: <AskForHelpPage /> },
@@ -27,7 +43,7 @@ export const router = createBrowserRouter([
         path: 'profil',
         element: (
           <RequireAuthenticatedUser>
-            <VolunteerProfilePage />
+            <UserProfilePage />
           </RequireAuthenticatedUser>
         ),
       },
@@ -35,11 +51,12 @@ export const router = createBrowserRouter([
         path: 'devino-voluntar',
         element: (
           <RequireAuthenticatedUser>
-            <ProfilePage />
+            <VolunteerProfilePage />
           </RequireAuthenticatedUser>
         ),
       },
       { path: 'despre-noi', element: <AboutPage /> },
+      { path: 'cereri/:taskId', element: <RequestDetailsPage /> },
       {
         path: 'istoric-interactiuni',
         element: (

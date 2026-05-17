@@ -11,9 +11,11 @@ import {
 import { cn } from '@/lib/utils'
 
 import type { LiveRequestCardData } from './LiveRequestCard'
-import { formatHelpOfferRelativeTime, type HelpOfferData } from '@/lib/mockHelpOffers'
+import { formatHelpOfferRelativeTime, type HelpOfferData } from '@/lib/helpOffers'
 
 interface HelpOffersInboxDialogProps {
+  errorMessage?: string | null
+  isLoading?: boolean
   open: boolean
   request: LiveRequestCardData | null
   offers: HelpOfferData[]
@@ -39,6 +41,8 @@ function getOfferStatusLabel(offer: HelpOfferData, acceptedOfferId: string | nul
 }
 
 export function HelpOffersInboxDialog({
+  errorMessage,
+  isLoading = false,
   open,
   request,
   offers,
@@ -93,7 +97,21 @@ export function HelpOffersInboxDialog({
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
           data-testid="help-offers-scroll-area"
         >
-          {offers.length === 0 ? (
+          {isLoading ? (
+            <div className="rounded-[28px] border border-dashed border-brand-gray bg-brand-cream/50 px-6 py-10 text-center">
+              <p className="text-base font-semibold text-brand-black">Se încarcă ofertele...</p>
+              <p className="mt-2 text-sm text-brand-gray-text">
+                Verificăm răspunsurile primite pentru această cerere.
+              </p>
+            </div>
+          ) : errorMessage ? (
+            <div className="rounded-[28px] border border-brand-red/20 bg-brand-red/5 px-6 py-10 text-center">
+              <p className="text-base font-semibold text-brand-black">
+                Nu am putut încărca ofertele.
+              </p>
+              <p className="mt-2 text-sm text-brand-gray-text">{errorMessage}</p>
+            </div>
+          ) : offers.length === 0 ? (
             <div className="rounded-[28px] border border-dashed border-brand-gray bg-brand-cream/50 px-6 py-10 text-center">
               <p className="text-base font-semibold text-brand-black">Nu ai oferte încă.</p>
               <p className="mt-2 text-sm text-brand-gray-text">

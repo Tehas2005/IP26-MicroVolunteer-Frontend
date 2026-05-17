@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -28,14 +29,20 @@ const urgencyCases: Array<{
 
 function renderCard(request: LiveRequestCardData = baseRequest) {
   const view = render(<LiveRequestCard request={request} onClick={vi.fn()} />)
-  const card = screen.getByRole('button')
+  const interactiveArea = screen.getByRole('button')
+  const card = interactiveArea.closest('article')
+
+  if (!(card instanceof HTMLElement)) {
+    throw new Error('Card container was not rendered.')
+  }
+
   const accentBar = card.querySelector('[aria-hidden="true"]')
 
   if (!(accentBar instanceof HTMLElement)) {
     throw new Error('Accent bar was not rendered.')
   }
 
-  return { ...view, card, accentBar }
+  return { ...view, card, interactiveArea, accentBar }
 }
 
 describe('LiveRequestCard', () => {
@@ -76,5 +83,28 @@ describe('LiveRequestCard', () => {
     expect(title).toHaveClass('group-hover:text-brand-purple-dark')
     expect(urgencyLabel).toHaveClass('group-hover:text-brand-black/75')
     expect(accentBar).toHaveClass('group-hover:opacity-85')
+  })
+
+  it('permite actiuni in footer fara sa declanseze deschiderea cardului', async () => {
+    const user = userEvent.setup()
+    const onCardClick = vi.fn()
+    const onActionClick = vi.fn()
+
+    render(
+      <LiveRequestCard
+        footerActions={
+          <button onClick={onActionClick} type="button">
+            Anulează Cererea
+          </button>
+        }
+        onClick={onCardClick}
+        request={baseRequest}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Anulează Cererea' }))
+
+    expect(onActionClick).toHaveBeenCalledTimes(1)
+    expect(onCardClick).not.toHaveBeenCalled()
   })
 })

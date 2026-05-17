@@ -14,7 +14,7 @@ export type MessageContent = TextContent | AudioContent;
 export type Message = {
   id: string;
   content: MessageContent;
-  from: 'me' | 'them';
+  from: 'me' | 'them' | 'system';
   senderId: number | string;
   timestamp: Date;
 };

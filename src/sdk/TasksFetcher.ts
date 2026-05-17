@@ -1,7 +1,10 @@
 import type { Fetcher } from './Fetcher'
 import type {
   ApiResponse,
+  DeleteTaskResponseType,
   DeleteTaskDetailsResponseType,
+  OfferListFiltersType,
+  PaginatedOfferListType,
   PaginatedTaskListType,
   TaskDetailsPayloadType,
   TaskFiltersType,
@@ -17,8 +20,31 @@ export class TasksFetcher {
     return this.fetcher.post<TaskResponseType>('/api/tasks', payload)
   }
 
+  public createGuest(
+    guestSessionId: string,
+    payload: TaskSubmissionPayloadType,
+  ): Promise<ApiResponse<TaskResponseType>> {
+    return this.fetcher.post<TaskResponseType>('/api/guest/tasks', payload, {
+      headers: {
+        'X-Guest-Session': guestSessionId,
+      },
+    })
+  }
+
   public list(filters?: TaskFiltersType): Promise<ApiResponse<PaginatedTaskListType>> {
     return this.fetcher.get<PaginatedTaskListType>('/api/tasks', { query: filters })
+  }
+
+  public listGuest(
+    guestSessionId: string,
+    filters?: TaskFiltersType,
+  ): Promise<ApiResponse<PaginatedTaskListType>> {
+    return this.fetcher.get<PaginatedTaskListType>('/api/guest/tasks', {
+      headers: {
+        'X-Guest-Session': guestSessionId,
+      },
+      query: filters,
+    })
   }
 
   public getById(id: string): Promise<ApiResponse<TaskResponseType>> {
@@ -39,7 +65,31 @@ export class TasksFetcher {
     return this.fetcher.put<TaskResponseType>(`/api/tasks/${id}/details`, payload)
   }
 
+  public listOffers(
+    id: string,
+    filters?: OfferListFiltersType,
+  ): Promise<ApiResponse<PaginatedOfferListType>> {
+    return this.fetcher.get<PaginatedOfferListType>(`/api/tasks/${id}/offers`, {
+      query: filters,
+    })
+  }
+
   public deleteDetails(id: string): Promise<ApiResponse<DeleteTaskDetailsResponseType>> {
     return this.fetcher.delete<DeleteTaskDetailsResponseType>(`/api/tasks/${id}/details`)
+  }
+
+  public delete(id: string): Promise<ApiResponse<DeleteTaskResponseType>> {
+    return this.fetcher.delete<DeleteTaskResponseType>(`/api/tasks/${id}`)
+  }
+
+  public deleteGuest(
+    id: string,
+    guestSessionId: string,
+  ): Promise<ApiResponse<DeleteTaskResponseType>> {
+    return this.fetcher.delete<DeleteTaskResponseType>(`/api/guest/tasks/${id}`, undefined, {
+      headers: {
+        'X-Guest-Session': guestSessionId,
+      },
+    })
   }
 }
