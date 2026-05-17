@@ -291,7 +291,7 @@ describe('ProfilePage volunteer profile', () => {
     expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toBeUndefined()
   })
 
-  it('dezactiveaza disponibilitatea voluntarului prin endpointul de profil', async () => {
+  it('dezactiveaza si reactiveaza disponibilitatea voluntarului prin endpointul de profil', async () => {
     const user = userEvent.setup()
 
     setAuthenticatedSession('volunteer')
@@ -303,6 +303,7 @@ describe('ProfilePage volunteer profile', () => {
           locationCoordinates: { x: 23.5899542, y: 46.769379 },
           skills: ['Transport local'],
           hiddenIdentity: false,
+          availability: true,
           createdAt: '2026-05-15T00:00:00.000Z',
           updatedAt: '2026-05-15T00:00:00.000Z',
         },
@@ -311,10 +312,12 @@ describe('ProfilePage volunteer profile', () => {
 
     renderProfilePage()
 
-    await user.click(screen.getByRole('button', { name: 'Renunta la statutul de voluntar' }))
+    expect(screen.getByText('Primesti alerte pentru cereri potrivite.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Dezactiveaza disponibilitatea' }))
 
     expect(
-      screen.getByText('Esti sigur ca vrei sa stergi profilul tau de voluntar?'),
+      screen.getByText('Vrei sa dezactivezi disponibilitatea?'),
     ).toBeInTheDocument()
     expect(document.body.style.overflow).toBe('hidden')
 
@@ -323,8 +326,8 @@ describe('ProfilePage volunteer profile', () => {
     expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toBeDefined()
     expect(document.body.style.overflow).toBe('')
 
-    await user.click(screen.getByRole('button', { name: 'Renunta la statutul de voluntar' }))
-    await user.click(screen.getByRole('button', { name: 'Da, renunt' }))
+    await user.click(screen.getByRole('button', { name: 'Dezactiveaza disponibilitatea' }))
+    await user.click(screen.getByRole('button', { name: 'Da, dezactiveaza' }))
 
     await waitFor(() => {
       expect(backend.volunteers.updateMeProfile).toHaveBeenCalledWith({ availability: false })
@@ -334,5 +337,16 @@ describe('ProfilePage volunteer profile', () => {
     })
     expect(document.body.style.overflow).toBe('')
     expect(screen.getByText('Disponibilitatea de voluntar a fost dezactivata.')).toBeInTheDocument()
+    expect(screen.getByText('Nu primesti alerte pentru cereri potrivite.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Reactiveaza disponibilitatea' }))
+
+    await waitFor(() => {
+      expect(backend.volunteers.updateMeProfile).toHaveBeenCalledWith({ availability: true })
+      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
+        availability: true,
+      })
+    })
+    expect(screen.getByText('Disponibilitatea de voluntar a fost reactivata.')).toBeInTheDocument()
   })
 })

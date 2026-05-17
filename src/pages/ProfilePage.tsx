@@ -143,6 +143,7 @@ export function ProfilePage() {
   const [maxDistanceKm, setMaxDistanceKm] = useState(
     volunteerProfile?.maxDistanceKm ? String(volunteerProfile.maxDistanceKm) : '',
   )
+  const [availability, setAvailability] = useState(volunteerProfile?.availability ?? true)
   const [hiddenIdentity, setHiddenIdentity] = useState(volunteerProfile?.hiddenIdentity ?? false)
   const [skills, setSkills] = useState<string[]>(volunteerProfile?.skills ?? [])
   const [hasHydratedProfile, setHasHydratedProfile] = useState(false)
@@ -165,6 +166,7 @@ export function ProfilePage() {
       hasVolunteerRole ||
       isKnownVolunteerUser,
   )
+  const isVolunteerAvailable = availability !== false
   const pageTitle = isExistingVolunteer ? 'Setari profil voluntar' : 'Devino voluntar'
   const selectedLocationCoordinates = resolveVolunteerLocation(location)
 
@@ -186,6 +188,7 @@ export function ProfilePage() {
       setIsFormVisible(true)
       setLocation(volunteerProfile.location)
       setMaxDistanceKm(volunteerProfile.maxDistanceKm ? String(volunteerProfile.maxDistanceKm) : '')
+      setAvailability(volunteerProfile.availability ?? true)
       setSkills(volunteerProfile.skills)
       setHiddenIdentity(volunteerProfile.hiddenIdentity)
       setSaveError('')
@@ -205,6 +208,7 @@ export function ProfilePage() {
     setIsFormVisible(false)
     setLocation('')
     setMaxDistanceKm('')
+    setAvailability(true)
     setIsLocationListOpen(false)
     setIsConfirmModalOpen(false)
   }, [
@@ -280,8 +284,10 @@ export function ProfilePage() {
 
         if (volunteerResponse?.success) {
           const currentVolunteerProfile = readCurrentVolunteerPayload(volunteerResponse.data)
+          const nextAvailability = currentVolunteerProfile?.volunteer?.availability ?? true
 
           setHasBackendVolunteerProfile(Boolean(currentVolunteerProfile?.profile))
+          setAvailability(nextAvailability)
           setVolunteerStatus('volunteer')
           rememberVolunteerUser(authUser.id)
 
@@ -532,6 +538,7 @@ export function ProfilePage() {
       })
 
       setHasBackendVolunteerProfile(true)
+      setAvailability(true)
       setVolunteerStatus('volunteer')
       rememberVolunteerUser(authUser.id)
       upsertVolunteerProfile(authUser.id, {
@@ -572,15 +579,22 @@ export function ProfilePage() {
         return
       }
 
-      if (volunteerProfile) {
+      setAvailability(false)
+
+      const profileLocation = volunteerProfile?.location ?? location.trim()
+      const profileCoordinates = volunteerProfile?.locationCoordinates ?? selectedLocationCoordinates
+
+      if (profileCoordinates) {
         upsertVolunteerProfile(authUser.id, {
-          location: volunteerProfile.location,
-          locationCoordinates: volunteerProfile.locationCoordinates,
+          location: profileLocation,
+          locationCoordinates: profileCoordinates,
           availability: false,
-          maxDistanceKm: volunteerProfile.maxDistanceKm,
-          knownLocations: volunteerProfile.knownLocations,
-          skills: volunteerProfile.skills,
-          hiddenIdentity: volunteerProfile.hiddenIdentity,
+          maxDistanceKm: volunteerProfile?.maxDistanceKm ?? (
+            maxDistanceKm.trim() ? Number(maxDistanceKm.trim()) : null
+          ),
+          knownLocations: volunteerProfile?.knownLocations,
+          skills: volunteerProfile?.skills ?? normalizedSkills,
+          hiddenIdentity: volunteerProfile?.hiddenIdentity ?? hiddenIdentity,
         })
       }
 
@@ -588,6 +602,50 @@ export function ProfilePage() {
       setIsConfirmModalOpen(false)
     } catch {
       setSaveError('Nu am putut dezactiva disponibilitatea de voluntar.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleReactivateAvailability() {
+    if (!authUser?.id) {
+      return
+    }
+
+    setSaveError('')
+    setSaveMessage('')
+    setIsSaving(true)
+
+    try {
+      const response = await backend.volunteers.updateMeProfile({ availability: true })
+
+      if (!response.success) {
+        setSaveError(response.message || 'Nu am putut reactiva disponibilitatea de voluntar.')
+        return
+      }
+
+      setAvailability(true)
+
+      const profileLocation = volunteerProfile?.location ?? location.trim()
+      const profileCoordinates = volunteerProfile?.locationCoordinates ?? selectedLocationCoordinates
+
+      if (profileCoordinates) {
+        upsertVolunteerProfile(authUser.id, {
+          location: profileLocation,
+          locationCoordinates: profileCoordinates,
+          availability: true,
+          maxDistanceKm: volunteerProfile?.maxDistanceKm ?? (
+            maxDistanceKm.trim() ? Number(maxDistanceKm.trim()) : null
+          ),
+          knownLocations: volunteerProfile?.knownLocations,
+          skills: volunteerProfile?.skills ?? normalizedSkills,
+          hiddenIdentity: volunteerProfile?.hiddenIdentity ?? hiddenIdentity,
+        })
+      }
+
+      setSaveMessage('Disponibilitatea de voluntar a fost reactivata.')
+    } catch {
+      setSaveError('Nu am putut reactiva disponibilitatea de voluntar.')
     } finally {
       setIsSaving(false)
     }
@@ -773,17 +831,43 @@ export function ProfilePage() {
 
               {isExistingVolunteer ? (
                 <div className="border-t border-brand-gray pt-6">
-                  <div className="rounded-[24px] border border-red-200 bg-red-50/50 p-5">
-                    <h2 className="text-base font-bold text-red-700">Renuntare voluntariat</h2>
-                    <p className="mt-2 text-sm leading-6 text-red-700/80">
-                      Nu vei mai primi alerte pentru cereri potrivite.
+                  <div className={`rounded-[24px] border p-5 ${
+                    isVolunteerAvailable
+                      ? 'border-red-200 bg-red-50/50'
+                      : 'border-emerald-200 bg-emerald-50/60'
+                  }`}>
+                    <h2 className={`text-base font-bold ${
+                      isVolunteerAvailable ? 'text-red-700' : 'text-emerald-800'
+                    }`}>
+                      Disponibilitate voluntar
+                    </h2>
+                    <p className={`mt-2 text-sm leading-6 ${
+                      isVolunteerAvailable ? 'text-red-700/80' : 'text-emerald-800/80'
+                    }`}>
+                      {isVolunteerAvailable
+                        ? 'Primesti alerte pentru cereri potrivite.'
+                        : 'Nu primesti alerte pentru cereri potrivite.'}
                     </p>
                     <button
                       type="button"
-                      className="mt-4 rounded-[18px] border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                      onClick={() => setIsConfirmModalOpen(true)}
+                      className={`mt-4 rounded-[18px] border bg-white px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                        isVolunteerAvailable
+                          ? 'border-red-300 text-red-700 hover:bg-red-100'
+                          : 'border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                      }`}
+                      onClick={() => {
+                        if (isVolunteerAvailable) {
+                          setIsConfirmModalOpen(true)
+                          return
+                        }
+
+                        void handleReactivateAvailability()
+                      }}
+                      disabled={isSaving}
                     >
-                      Renunta la statutul de voluntar
+                      {isVolunteerAvailable
+                        ? 'Dezactiveaza disponibilitatea'
+                        : 'Reactiveaza disponibilitatea'}
                     </button>
                   </div>
                 </div>
@@ -802,10 +886,10 @@ export function ProfilePage() {
             className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-xl"
           >
             <h2 id="volunteer-opt-out-title" className="text-xl font-bold text-brand-black">
-              Esti sigur ca vrei sa stergi profilul tau de voluntar?
+              Vrei sa dezactivezi disponibilitatea?
             </h2>
             <p className="mt-3 text-sm leading-6 text-brand-gray-text">
-              Nu vei mai primi notificari pentru cererile de ajutor din zona ta.
+              Profilul tau ramane salvat, dar nu vei mai primi notificari pentru cereri potrivite.
             </p>
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
@@ -820,7 +904,7 @@ export function ProfilePage() {
                 className="rounded-[18px] bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
                 onClick={handleConfirmOptOut}
               >
-                Da, renunt
+                Da, dezactiveaza
               </button>
             </div>
           </div>
