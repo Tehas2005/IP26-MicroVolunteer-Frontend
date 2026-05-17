@@ -3,11 +3,14 @@ import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
+import { normalizeAccountStatus } from '@/lib/accountStatus'
 import { useAuthStore } from '@/store/authStore'
 
 export function BlockedAccountPage() {
+  const accountStatus = useAuthStore((state) => normalizeAccountStatus(state.user?.accountStatus))
   const clearAuthSession = useAuthStore((state) => state.clearAuthSession)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const isBlockedAccount = accountStatus === 'BLOCKED'
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -30,11 +33,12 @@ export function BlockedAccountPage() {
         </div>
 
         <h1 className="mt-6 text-2xl font-bold tracking-tight text-brand-black sm:text-3xl">
-          Cont blocat
+          {isBlockedAccount ? 'Cont blocat' : 'Acces restrictionat'}
         </h1>
         <p className="mt-4 text-sm leading-7 text-brand-gray-text sm:text-base">
-          Contul tau a fost suspendat din cauza evaluarilor scazute primite din partea
-          comunitatii.
+          {isBlockedAccount
+            ? 'Contul tau a fost suspendat din cauza evaluarilor scazute primite din partea comunitatii.'
+            : 'Accesul la acest cont este restrictionat momentan. Te poti deconecta pentru a te autentifica folosind un alt cont.'}
         </p>
 
         <div className="mt-8">
