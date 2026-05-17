@@ -6,7 +6,6 @@ import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
 import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
-import SubmitHelpOfferDialog from '@/components/shared/SubmitHelpOfferDialog'
 import VolunteerNotificationStack from '@/components/shared/VolunteerNotificationStack'
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
@@ -80,11 +79,6 @@ export function HomePage() {
   const guestSessionId = isGuest ? readGuestSessionId() : ''
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
-  const [selectedVolunteerRequest, setSelectedVolunteerRequest] = useState<LiveRequestCardData | null>(
-    null,
-  )
-  const [volunteerOfferError, setVolunteerOfferError] = useState<string | null>(null)
-  const [volunteerOfferSubmitting, setVolunteerOfferSubmitting] = useState(false)
   const [offerActionError, setOfferActionError] = useState<string | null>(null)
   const [offerActionState, setOfferActionState] = useState<{
     offerId: string
@@ -302,7 +296,6 @@ export function HomePage() {
   const handleVolunteerRequestOpen = useCallback(
     (request: LiveRequestCardData) => {
       setPageNotice(null)
-      setVolunteerOfferError(null)
 
       if (pendingOfferTaskIds.has(request.id)) {
         setPageNotice({
@@ -313,9 +306,9 @@ export function HomePage() {
         return
       }
 
-      setSelectedVolunteerRequest(request)
+      navigate(`/cereri/${request.id}`)
     },
-    [pendingOfferTaskIds],
+    [navigate, pendingOfferTaskIds],
   )
 
   const handleMyRequestOpen = useCallback(
@@ -350,45 +343,6 @@ export function HomePage() {
       void queryClient.invalidateQueries({ queryKey: ['task-offers', request.id] })
     },
     [isGuest, liveTasks, navigate, queryClient],
-  )
-
-  const handleVolunteerOfferSubmit = useCallback(
-    async (message: string) => {
-      if (!selectedVolunteerRequest) {
-        return
-      }
-
-      setVolunteerOfferSubmitting(true)
-      setVolunteerOfferError(null)
-      setPageNotice(null)
-
-      try {
-        const response = await backend.offers.createForTask(selectedVolunteerRequest.id, {
-          message: message || undefined,
-        })
-
-        if (!response.success) {
-          setVolunteerOfferError(
-            response.message || 'Nu am putut trimite oferta. Incearca din nou.',
-          )
-          return
-        }
-
-        setSelectedVolunteerRequest(null)
-        setPageNotice({
-          kind: 'success',
-          message:
-            'Oferta ta a fost trimisa. Conversatia va deveni disponibila dupa ce requesterul o accepta.',
-        })
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['live-requests'] }),
-          queryClient.invalidateQueries({ queryKey: ['my-pending-offers'] }),
-        ])
-      } finally {
-        setVolunteerOfferSubmitting(false)
-      }
-    },
-    [queryClient, selectedVolunteerRequest],
   )
 
   const handleOfferReject = useCallback(
@@ -590,20 +544,6 @@ export function HomePage() {
         onReject={(offer) => void handleOfferReject(offer)}
         open={selectedMyRequest !== null}
         request={selectedMyRequest}
-      />
-
-      <SubmitHelpOfferDialog
-        errorMessage={volunteerOfferError}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedVolunteerRequest(null)
-            setVolunteerOfferError(null)
-          }
-        }}
-        onSubmit={(message) => void handleVolunteerOfferSubmit(message)}
-        open={selectedVolunteerRequest !== null}
-        request={selectedVolunteerRequest}
-        submitting={volunteerOfferSubmitting}
       />
     </div>
   )

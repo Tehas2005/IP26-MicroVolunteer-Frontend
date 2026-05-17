@@ -4,6 +4,7 @@ import { OfferAcceptedNotificationCenter } from '@/components/shared/OfferAccept
 import { BlockedAccountScreen } from '@/components/shared/BlockedAccountScreen'
 import { useAuthStore } from '@/store/authStore'
 
+import { Toaster } from '@/components/ui/sonner'
 import { Footer } from './Footer'
 import { Navbar } from './Navbar'
 import { ChatFab } from '@/pages/chat/ChatFab'
@@ -36,6 +37,7 @@ export function RootLayout() {
       {!isChatRoute ? <Footer /> : null}
       <OfferAcceptedNotificationCenter />
       <ChatFab />
+      <Toaster position="top-right" richColors />
     </div>
   )
 }

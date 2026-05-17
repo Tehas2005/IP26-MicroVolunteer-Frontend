@@ -30,6 +30,13 @@ export class OffersFetcher {
     return this.fetcher.get<PaginatedOfferListType>('/api/offers', { query: filters })
   }
 
+  // public createForTask(
+  //   taskId: string,
+  //   payload: OfferSubmissionPayloadType,
+  // ): Promise<ApiResponse<OfferResponseType>> {
+  //   return this.fetcher.post<OfferResponseType>(`/api/tasks/${taskId}/offers`, payload)
+  // }
+
   public updateStatus(
     offerId: string,
     payload: OfferStatusPayloadType,
