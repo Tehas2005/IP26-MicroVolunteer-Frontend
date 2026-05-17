@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 
 import { backend } from '@/lib/backend'
+import {
+  ROMANIA_CITY_COORDINATES,
+  ROMANIA_CITY_NAMES,
+  type TaskLocationPayload,
+} from '@/lib/romania-city-coordinates'
+import type {
+  VolunteerLocationPointType,
+  VolunteerOwnProfileType,
+  VolunteerProfilePayloadType,
+} from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 
 import {
@@ -12,49 +22,7 @@ import {
   validateMaxDistanceKm,
 } from './volunteerProfileUtils'
 
-const CITIES = [
-  'Alba Iulia',
-  'Alexandria',
-  'Arad',
-  'Bacau',
-  'Baia Mare',
-  'Bistrita',
-  'Botosani',
-  'Brasov',
-  'Braila',
-  'Bucuresti',
-  'Buzau',
-  'Calarasi',
-  'Cluj-Napoca',
-  'Constanta',
-  'Craiova',
-  'Deva',
-  'Drobeta-Turnu Severin',
-  'Focsani',
-  'Galati',
-  'Giurgiu',
-  'Iasi',
-  'Miercurea-Ciuc',
-  'Oradea',
-  'Piatra-Neamt',
-  'Pitesti',
-  'Ploiesti',
-  'Ramnicu Valcea',
-  'Resita',
-  'Satu Mare',
-  'Sfantu Gheorghe',
-  'Sibiu',
-  'Slatina',
-  'Slobozia',
-  'Suceava',
-  'Targu Jiu',
-  'Targu Mures',
-  'Targoviste',
-  'Timisoara',
-  'Tulcea',
-  'Vaslui',
-  'Zalau',
-]
+const CITIES = ROMANIA_CITY_NAMES
 
 const SKILL_SUGGESTIONS = [
   'traducere',
@@ -88,6 +56,138 @@ const EMPTY_DRAFT: ProfileDraft = {
   specificAddress: '',
 }
 
+const LOCATION_MATCH_EPSILON = 0.000001
+
+function sanitizeKnownLocations(value: unknown): KnownLocationEntry[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter(
+    (entry): entry is KnownLocationEntry =>
+      typeof entry?.city === 'string' && typeof entry?.address === 'string',
+  )
+}
+
+function sanitizeSkills(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string')
+}
+
+function sanitizeDraft(rawDraft: Partial<ProfileDraft> | null): ProfileDraft {
+  return {
+    currentLocation: rawDraft?.currentLocation ?? EMPTY_DRAFT.currentLocation,
+    hiddenIdentity: Boolean(rawDraft?.hiddenIdentity),
+    knownLocations: sanitizeKnownLocations(rawDraft?.knownLocations),
+    maxDistanceKm: rawDraft?.maxDistanceKm ?? EMPTY_DRAFT.maxDistanceKm,
+    selectedCity: rawDraft?.selectedCity ?? EMPTY_DRAFT.selectedCity,
+    skillInput: rawDraft?.skillInput ?? EMPTY_DRAFT.skillInput,
+    skills: sanitizeSkills(rawDraft?.skills),
+    specificAddress: rawDraft?.specificAddress ?? EMPTY_DRAFT.specificAddress,
+  }
+}
+
+function resolveVolunteerLocationPoint(location: string): VolunteerLocationPointType | null {
+  const normalizedLocation = location.trim()
+
+  if (!normalizedLocation) {
+    return null
+  }
+
+  return ROMANIA_CITY_COORDINATES[normalizedLocation] ?? null
+}
+
+function resolveRomanianCityByPoint(
+  point: VolunteerLocationPointType | TaskLocationPayload | null | undefined,
+): string {
+  if (!point) {
+    return ''
+  }
+
+  const matchingCity = Object.entries(ROMANIA_CITY_COORDINATES).find(
+    ([, coordinates]) =>
+      Math.abs(coordinates.x - point.x) < LOCATION_MATCH_EPSILON &&
+      Math.abs(coordinates.y - point.y) < LOCATION_MATCH_EPSILON,
+  )
+
+  return matchingCity?.[0] ?? ''
+}
+
+function extractVolunteerProfile(payload: unknown): VolunteerOwnProfileType['profile'] | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  if ('profile' in payload) {
+    return (payload as VolunteerOwnProfileType).profile ?? null
+  }
+
+  if ('data' in payload && payload.data && typeof payload.data === 'object') {
+    const nestedData = payload.data as VolunteerOwnProfileType
+    return nestedData.profile ?? null
+  }
+
+  return null
+}
+
+function buildDraftFromVolunteerProfile(
+  profile: VolunteerOwnProfileType['profile'],
+  hiddenIdentity: boolean,
+): ProfileDraft {
+  const knownLocations =
+    profile?.knownLocations?.map((entry) => ({
+      city: entry.city?.trim() || resolveRomanianCityByPoint(entry.location ?? null),
+      address: entry.addressText?.trim() || '',
+    }))?.filter((entry) => entry.city && entry.address) ?? []
+
+  return {
+    currentLocation: resolveRomanianCityByPoint(profile?.currentLocation ?? null),
+    hiddenIdentity,
+    knownLocations,
+    maxDistanceKm:
+      typeof profile?.maxDistanceKm === 'number' ? String(profile.maxDistanceKm) : '',
+    selectedCity: '',
+    skillInput: '',
+    skills: sanitizeSkills(profile?.skills),
+    specificAddress: '',
+  }
+}
+
+function buildVolunteerProfilePayload(draft: ProfileDraft): VolunteerProfilePayloadType {
+  const currentLocationPoint = resolveVolunteerLocationPoint(draft.currentLocation)
+
+  const knownLocations = draft.knownLocations
+    .map((location) => {
+      const coordinates = resolveVolunteerLocationPoint(location.city)
+
+      if (!coordinates) {
+        return null
+      }
+
+      return {
+        city: location.city,
+        addressText: location.address,
+        location: coordinates,
+      }
+    })
+    .filter(
+      (
+        location,
+      ): location is { city: string; addressText: string; location: VolunteerLocationPointType } =>
+        location !== null,
+    )
+
+  return {
+    currentLocation: currentLocationPoint,
+    knownLocations,
+    maxDistanceKm: Number(draft.maxDistanceKm),
+    skills: draft.skills,
+  }
+}
+
 export default function VolunteerProfilePage() {
   const authUser = useAuthStore((state) => state.user)
 
@@ -99,6 +199,8 @@ export default function VolunteerProfilePage() {
   const [skills, setSkills] = useState<string[]>(EMPTY_DRAFT.skills)
   const [skillInput, setSkillInput] = useState(EMPTY_DRAFT.skillInput)
   const [hiddenIdentity, setHiddenIdentity] = useState(EMPTY_DRAFT.hiddenIdentity)
+  const [lastSavedDraft, setLastSavedDraft] = useState(EMPTY_DRAFT)
+  const [hasRemoteVolunteerProfile, setHasRemoteVolunteerProfile] = useState(false)
   const [distanceTouched, setDistanceTouched] = useState(false)
   const [hasHydratedDraft, setHasHydratedDraft] = useState(false)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
@@ -116,11 +218,22 @@ export default function VolunteerProfilePage() {
 
   const distanceError = distanceTouched ? validateMaxDistanceKm(maxDistanceKm) : ''
 
+  function applyDraft(draft: ProfileDraft) {
+    setMaxDistanceKm(draft.maxDistanceKm)
+    setCurrentLocation(draft.currentLocation)
+    setSelectedCity(draft.selectedCity)
+    setSpecificAddress(draft.specificAddress)
+    setKnownLocations(draft.knownLocations)
+    setSkills(draft.skills)
+    setSkillInput(draft.skillInput)
+    setHiddenIdentity(draft.hiddenIdentity)
+  }
+
   useEffect(() => {
     let isMounted = true
 
     async function hydrateProfile() {
-      let parsedDraft: Partial<ProfileDraft> | null = null
+      let localDraft: ProfileDraft | null = null
 
       if (isMounted) {
         setHasHydratedDraft(false)
@@ -134,28 +247,10 @@ export default function VolunteerProfilePage() {
           const storedDraft = window.localStorage.getItem(draftKey)
 
           if (storedDraft) {
-            parsedDraft = JSON.parse(storedDraft) as Partial<ProfileDraft>
+            localDraft = sanitizeDraft(JSON.parse(storedDraft) as Partial<ProfileDraft>)
 
             if (isMounted) {
-              setMaxDistanceKm(parsedDraft.maxDistanceKm ?? EMPTY_DRAFT.maxDistanceKm)
-              setCurrentLocation(parsedDraft.currentLocation ?? EMPTY_DRAFT.currentLocation)
-              setSelectedCity(parsedDraft.selectedCity ?? EMPTY_DRAFT.selectedCity)
-              setSpecificAddress(parsedDraft.specificAddress ?? EMPTY_DRAFT.specificAddress)
-              setKnownLocations(
-                Array.isArray(parsedDraft.knownLocations)
-                  ? parsedDraft.knownLocations.filter(
-                      (entry): entry is KnownLocationEntry =>
-                        typeof entry?.city === 'string' && typeof entry?.address === 'string',
-                    )
-                  : EMPTY_DRAFT.knownLocations,
-              )
-              setSkills(
-                Array.isArray(parsedDraft.skills)
-                  ? parsedDraft.skills.filter((entry): entry is string => typeof entry === 'string')
-                  : EMPTY_DRAFT.skills,
-              )
-              setSkillInput(parsedDraft.skillInput ?? EMPTY_DRAFT.skillInput)
-              setHiddenIdentity(Boolean(parsedDraft.hiddenIdentity))
+              applyDraft(localDraft)
             }
           }
         }
@@ -165,22 +260,67 @@ export default function VolunteerProfilePage() {
         }
 
         if (!authUser?.id) {
+          if (isMounted) {
+            setLastSavedDraft(localDraft ?? EMPTY_DRAFT)
+            setHasRemoteVolunteerProfile(false)
+          }
           return
         }
 
-        const profileResponse = await backend.profile.getByUserId(authUser.id)
+        const [privacyResponse, volunteerProfileResponse] = await Promise.all([
+          backend.profile.getByUserId(authUser.id).catch(() => null),
+          backend.volunteerProfiles.getMe().catch(() => null),
+        ])
 
         if (!isMounted) {
           return
         }
 
-        if (profileResponse.success) {
-          // Preserve the local draft choice during refreshes; otherwise the late
-          // profile response can overwrite the user's unsaved toggle selection.
-          if (parsedDraft?.hiddenIdentity === undefined) {
-            setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
-          }
-        } else if (!profileResponse.isNotFound && profileResponse.message) {
+        const remoteHiddenIdentity =
+          privacyResponse?.success && privacyResponse.data
+            ? readHiddenIdentityFromResponse(privacyResponse.data)
+            : null
+
+        const remoteVolunteerProfile =
+          volunteerProfileResponse?.success && volunteerProfileResponse.data
+            ? extractVolunteerProfile(volunteerProfileResponse.data)
+            : null
+
+        const remoteDraft =
+          remoteVolunteerProfile !== null
+            ? buildDraftFromVolunteerProfile(
+                remoteVolunteerProfile,
+                remoteHiddenIdentity ?? EMPTY_DRAFT.hiddenIdentity,
+              )
+            : null
+
+        const nextDraft =
+          localDraft ??
+          (remoteDraft
+            ? {
+                ...remoteDraft,
+                hiddenIdentity: remoteHiddenIdentity ?? remoteDraft.hiddenIdentity,
+              }
+            : {
+                ...EMPTY_DRAFT,
+                hiddenIdentity: remoteHiddenIdentity ?? EMPTY_DRAFT.hiddenIdentity,
+              })
+
+        if (!localDraft) {
+          applyDraft(nextDraft)
+        } else if (remoteHiddenIdentity !== null) {
+          setHiddenIdentity(localDraft.hiddenIdentity)
+        }
+
+        setLastSavedDraft(nextDraft)
+        setHasRemoteVolunteerProfile(Boolean(remoteVolunteerProfile))
+
+        if (
+          privacyResponse &&
+          !privacyResponse.success &&
+          !privacyResponse.isNotFound &&
+          privacyResponse.message
+        ) {
           setSaveError('Nu am reusit sa incarcam setarile profilului.')
         }
       } catch {
@@ -268,21 +408,34 @@ export default function VolunteerProfilePage() {
       return
     }
 
-    setMaxDistanceKm(EMPTY_DRAFT.maxDistanceKm)
-    setCurrentLocation(EMPTY_DRAFT.currentLocation)
-    setSelectedCity(EMPTY_DRAFT.selectedCity)
-    setSpecificAddress(EMPTY_DRAFT.specificAddress)
-    setKnownLocations(EMPTY_DRAFT.knownLocations)
-    setSkills(EMPTY_DRAFT.skills)
-    setSkillInput(EMPTY_DRAFT.skillInput)
-    setHiddenIdentity(EMPTY_DRAFT.hiddenIdentity)
+    applyDraft(lastSavedDraft)
     setDistanceTouched(false)
     setSaveError('')
     setSaveMessage('')
 
     if (draftKey) {
-      window.localStorage.removeItem(draftKey)
+      window.localStorage.setItem(draftKey, JSON.stringify(lastSavedDraft))
     }
+  }
+
+  async function saveVolunteerProfile(payload: VolunteerProfilePayloadType) {
+    const primaryResponse = hasRemoteVolunteerProfile
+      ? await backend.volunteerProfiles.updateMe(payload)
+      : await backend.volunteerProfiles.createMe(payload)
+
+    if (primaryResponse.success) {
+      return primaryResponse
+    }
+
+    if (primaryResponse.isNotFound && hasRemoteVolunteerProfile) {
+      return backend.volunteerProfiles.createMe(payload)
+    }
+
+    if (primaryResponse.isClientError && !hasRemoteVolunteerProfile) {
+      return backend.volunteerProfiles.updateMe(payload)
+    }
+
+    return primaryResponse
   }
 
   async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
@@ -302,22 +455,69 @@ export default function VolunteerProfilePage() {
       return
     }
 
+    if (!resolveVolunteerLocationPoint(currentLocation)) {
+      setSaveError('Alege un oras valid pentru locatia curenta.')
+      return
+    }
+
     setIsSaving(true)
 
-    try {
-      const response = await backend.profile.updateMe({ hiddenIdentity })
+    const currentDraft: ProfileDraft = {
+      currentLocation,
+      hiddenIdentity,
+      knownLocations,
+      maxDistanceKm,
+      selectedCity: '',
+      skillInput,
+      skills,
+      specificAddress: '',
+    }
 
-      if (!response.success) {
-        setSaveError(
-          'Datele locale au fost pastrate, dar setarea de confidentialitate nu a putut fi sincronizata.',
+    try {
+      const volunteerProfilePayload = buildVolunteerProfilePayload(currentDraft)
+      const [privacyResponse, volunteerProfileResponse] = await Promise.all([
+        backend.profile.updateMe({ hiddenIdentity }).catch(() => null),
+        saveVolunteerProfile(volunteerProfilePayload).catch(() => null),
+      ])
+
+      const hasSyncedVolunteerProfile = Boolean(volunteerProfileResponse?.success)
+      const hasSyncedPrivacy = Boolean(privacyResponse?.success)
+
+      setLastSavedDraft(currentDraft)
+
+      if (volunteerProfileResponse?.success) {
+        setHasRemoteVolunteerProfile(true)
+      }
+
+      if (hasSyncedVolunteerProfile && hasSyncedPrivacy) {
+        setSaveMessage('Setarile profilului au fost salvate si sincronizate.')
+        return
+      }
+
+      if (hasSyncedVolunteerProfile) {
+        setSaveMessage(
+          'Datele profilului de voluntar au fost salvate. Confidentialitatea nu a putut fi sincronizata.',
         )
         return
       }
 
-      setSaveMessage('Setarile profilului au fost salvate.')
+      if (
+        volunteerProfileResponse?.isNotFound ||
+        (volunteerProfileResponse && !volunteerProfileResponse.success && volunteerProfileResponse.status === 404)
+      ) {
+        setSaveMessage(
+          'Datele au fost salvate local. Sincronizarea cu backend-ul pentru profilul de voluntar nu este inca disponibila.',
+        )
+        return
+      }
+
+      setSaveError(
+        volunteerProfileResponse?.message ||
+          'Datele locale au fost pastrate, dar profilul de voluntar nu a putut fi sincronizat.',
+      )
     } catch {
       setSaveError(
-        'Datele locale au fost pastrate, dar setarea de confidentialitate nu a putut fi sincronizata.',
+        'Datele locale au fost pastrate, dar profilul de voluntar nu a putut fi sincronizat.',
       )
     } finally {
       setIsSaving(false)
@@ -378,13 +578,22 @@ export default function VolunteerProfilePage() {
                   </label>
                   <input
                     id="current-location"
+                    list="romania-cities"
                     required
                     type="text"
                     value={currentLocation}
                     onChange={(event) => setCurrentLocation(event.target.value)}
                     className="w-full rounded-[18px] border border-brand-gray px-4 py-3 text-sm outline-none transition focus:border-brand-purple"
-                    placeholder="Oras, strada sau punct de reper"
+                    placeholder="Alege orasul din lista"
                   />
+                  <datalist id="romania-cities">
+                    {CITIES.map((city) => (
+                      <option key={city} value={city} />
+                    ))}
+                  </datalist>
+                  <p className="mt-2 text-xs text-brand-gray-text">
+                    Pentru sincronizare cu backend-ul, alege un oras din lista.
+                  </p>
                 </div>
               </div>
 
@@ -465,8 +674,8 @@ export default function VolunteerProfilePage() {
 
               <div className="rounded-[24px] border border-brand-gray bg-brand-cream/40 p-5">
                 <p className="text-sm leading-6 text-brand-gray-text">
-                  Adauga abilitatile tale principale. Lista este pastrata local pe utilizator in
-                  aceasta iteratie.
+                  Adauga abilitatile tale principale. Lista este sincronizata cu profilul de
+                  voluntar atunci cand endpoint-ul backend este disponibil.
                 </p>
 
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row">

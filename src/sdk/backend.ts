@@ -5,6 +5,7 @@ import { OffersFetcher } from './OffersFetcher'
 import { ProfileFetcher } from './ProfileFetcher'
 import { TasksFetcher } from './TasksFetcher'
 import { UploadsFetcher } from './UploadsFetcher'
+import { VolunteerProfilesFetcher } from './VolunteerProfilesFetcher'
 import type { Fetcher } from './Fetcher'
 
 export class Backend {
@@ -15,6 +16,7 @@ export class Backend {
   public readonly profile: ProfileFetcher
   public readonly tasks: TasksFetcher
   public readonly uploads: UploadsFetcher
+  public readonly volunteerProfiles: VolunteerProfilesFetcher
 
   constructor(readonly fetcher: Fetcher) {
     this.auth = new AuthFetcher(this.fetcher)
@@ -24,5 +26,6 @@ export class Backend {
     this.profile = new ProfileFetcher(this.fetcher)
     this.tasks = new TasksFetcher(this.fetcher)
     this.uploads = new UploadsFetcher(this.fetcher)
+    this.volunteerProfiles = new VolunteerProfilesFetcher(this.fetcher)
   }
 }

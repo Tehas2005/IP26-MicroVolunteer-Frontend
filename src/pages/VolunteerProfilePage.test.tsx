@@ -2,14 +2,22 @@
 import '@testing-library/jest-dom/vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import VolunteerProfilePage from './VolunteerProfilePage'
 
-const { mockGetByUserId, mockUpdateMe } = vi.hoisted(() => ({
+const {
+  mockCreateVolunteerProfile,
+  mockGetByUserId,
+  mockGetVolunteerProfile,
+  mockUpdateMe,
+  mockUpdateVolunteerProfile,
+} = vi.hoisted(() => ({
+  mockCreateVolunteerProfile: vi.fn(),
   mockGetByUserId: vi.fn(),
+  mockGetVolunteerProfile: vi.fn(),
   mockUpdateMe: vi.fn(),
+  mockUpdateVolunteerProfile: vi.fn(),
 }))
 
 vi.mock('@/store/authStore', () => ({
@@ -24,6 +32,11 @@ vi.mock('@/lib/backend', () => ({
     profile: {
       getByUserId: mockGetByUserId,
       updateMe: mockUpdateMe,
+    },
+    volunteerProfiles: {
+      createMe: mockCreateVolunteerProfile,
+      getMe: mockGetVolunteerProfile,
+      updateMe: mockUpdateVolunteerProfile,
     },
   },
 }))
@@ -41,26 +54,63 @@ function deferred<T>() {
 }
 
 function renderPage() {
-  return render(
-    <BrowserRouter>
-      <VolunteerProfilePage />
-    </BrowserRouter>,
-  )
+  return render(<VolunteerProfilePage />)
 }
 
 describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    window.confirm = vi.fn(() => true)
+    mockCreateVolunteerProfile.mockReset()
     mockGetByUserId.mockReset()
+    mockGetVolunteerProfile.mockReset()
     mockUpdateMe.mockReset()
+    mockUpdateVolunteerProfile.mockReset()
 
     mockGetByUserId.mockResolvedValue({
       success: true,
       data: { hiddenIdentity: false },
     })
+    mockGetVolunteerProfile.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          volunteer: { id: 1, userId: '1' },
+          profile: null,
+        },
+      },
+    })
+    mockCreateVolunteerProfile.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          volunteer: { id: 1, userId: '1' },
+          profile: {
+            maxDistanceKm: 12.5,
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            knownLocations: [],
+            skills: [],
+          },
+        },
+      },
+    })
     mockUpdateMe.mockResolvedValue({
       success: true,
       data: { hiddenIdentity: false },
+    })
+    mockUpdateVolunteerProfile.mockResolvedValue({
+      success: true,
+      data: {
+        data: {
+          volunteer: { id: 1, userId: '1' },
+          profile: {
+            maxDistanceKm: 12.5,
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            knownLocations: [],
+            skills: [],
+          },
+        },
+      },
     })
   })
 
@@ -117,5 +167,53 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
     expect(screen.getByLabelText(/Locatia curenta/i)).toHaveValue('Cluj-Napoca')
 
     profileRequest.reject(new Error('cancelled'))
+  })
+
+  it('reseteaza formularul la ultima stare hidratata, nu la un draft gol', async () => {
+    window.localStorage.setItem(
+      'mvcr-volunteer-profile-draft:1',
+      JSON.stringify({
+        currentLocation: 'Cluj-Napoca',
+        hiddenIdentity: true,
+        knownLocations: [{ city: 'Iasi', address: 'Copou' }],
+        maxDistanceKm: '18',
+        selectedCity: '',
+        skillInput: '',
+        skills: ['transport'],
+        specificAddress: '',
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByLabelText(/Locatia curenta/i)).toHaveValue('Cluj-Napoca')
+
+    await user.clear(screen.getByLabelText(/Locatia curenta/i))
+    await user.type(screen.getByLabelText(/Locatia curenta/i), 'Iasi')
+    await user.click(screen.getByRole('button', { name: /Reseteaza modificarile/i }))
+
+    expect(screen.getByLabelText(/Locatia curenta/i)).toHaveValue('Cluj-Napoca')
+    expect(screen.getByText('Iasi | Copou')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sterge abilitatea transport/i })).toBeInTheDocument()
+  })
+
+  it('salveaza profilul de voluntar prin endpoint-ul dedicat cand backend-ul este disponibil', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.type(screen.getByLabelText(/Distanta maxima/i), '12.5')
+    await user.type(screen.getByLabelText(/Locatia curenta/i), 'Cluj-Napoca')
+    await user.click(screen.getByRole('button', { name: /Salveaza profilul/i }))
+
+    await waitFor(() => {
+      expect(mockCreateVolunteerProfile).toHaveBeenCalledWith({
+        currentLocation: { x: 23.5899542, y: 46.769379 },
+        knownLocations: [],
+        maxDistanceKm: 12.5,
+        skills: [],
+      })
+      expect(mockUpdateMe).toHaveBeenCalledWith({ hiddenIdentity: false })
+    })
   })
 })
