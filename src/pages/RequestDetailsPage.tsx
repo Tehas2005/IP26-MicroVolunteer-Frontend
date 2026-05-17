@@ -145,6 +145,10 @@ export function RequestDetailsPage() {
   }
 
   function handleOfferDialogChange(nextOpen: boolean) {
+    if (!nextOpen && isSubmittingOffer) {
+      return
+    }
+
     if (!nextOpen) {
       setOfferMessage('')
       setOfferError(null)
@@ -169,18 +173,25 @@ export function RequestDetailsPage() {
     setIsSubmittingOffer(true)
     setOfferError(null)
 
-    const response = await backend.offers.createForTask(taskId, {
-      message: normalizedMessage,
-    })
+    try {
+      const response = await backend.offers.createForTask(taskId, {
+        message: normalizedMessage,
+      })
 
-    if (!response.success) {
-      setOfferError(mapOfferSubmitErrorMessage(response.message))
+      if (!response.success) {
+        setOfferError(mapOfferSubmitErrorMessage(response.message))
+        return
+      }
+
+      setOfferMessage('')
+      setOfferError(null)
+      setIsOfferDialogOpen(false)
+      toast.success('Oferta ta a fost trimisă. Așteaptă răspunsul utilizatorului!')
+    } catch {
+      setOfferError('Nu am putut trimite oferta de ajutor. Încearcă din nou.')
+    } finally {
       setIsSubmittingOffer(false)
-      return
     }
-
-    handleOfferDialogChange(false)
-    toast.success('Oferta ta a fost trimisă. Așteaptă răspunsul utilizatorului!')
   }
 
   return (
