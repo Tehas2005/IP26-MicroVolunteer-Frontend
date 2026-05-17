@@ -81,7 +81,7 @@ function buildTaskDescription(
     requestDetails.languageNeeded ? `Limba necesara: ${requestDetails.languageNeeded}` : null,
     requestDetails.safetyNotes ? `Siguranta: ${requestDetails.safetyNotes}` : null,
     location.trim() ? `Locatie declarata: ${location.trim()}` : null,
-    skills.length > 0 ? `Skills needed: ${skills.join(', ')}` : null,
+    skills.length > 0 ? `Abilități necesare: ${skills.join(', ')}` : null,
     audioMessageUrl ? `Mesaj vocal: ${audioMessageUrl}` : null,
   ]
 
@@ -95,6 +95,80 @@ function getUploadedAssetUrl(payload: unknown): string | null {
 
   const data = payload.data
   return typeof data === 'string' && data.trim() ? data : null
+}
+
+function getSupportedAudioMimeType() {
+  if (typeof window === 'undefined' || !('MediaRecorder' in window)) {
+    return null
+  }
+
+  const preferredMimeTypes = [
+    'audio/mp4',
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+  ]
+
+  for (const mimeType of preferredMimeTypes) {
+    if (window.MediaRecorder.isTypeSupported?.(mimeType)) {
+      return mimeType
+    }
+  }
+
+  return null
+}
+
+function getAudioFileExtension(mimeType: string | null) {
+  if (!mimeType) {
+    return 'webm'
+  }
+
+  if (mimeType.includes('mp4')) {
+    return 'mp4'
+  }
+
+  if (mimeType.includes('ogg')) {
+    return 'ogg'
+  }
+
+  if (mimeType.includes('mpeg')) {
+    return 'mp3'
+  }
+
+  return 'webm'
+}
+
+function getAudioUploadErrorMessage(message?: string | null) {
+  if (!message || message === 'Internal server error') {
+    return 'Nu am putut încărca mesajul vocal. Încearcă din nou.'
+  }
+
+  return message
+}
+
+function normalizeLocalAudioDataUrl(dataUrl: string) {
+  return dataUrl.replace(/\s+/g, '')
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      if (typeof reader.result === 'string' && reader.result.trim()) {
+        resolve(normalizeLocalAudioDataUrl(reader.result))
+        return
+      }
+
+      reject(new Error('Nu am putut converti mesajul vocal într-un format redabil.'))
+    }
+
+    reader.onerror = () => {
+      reject(new Error('Nu am putut converti mesajul vocal într-un format redabil.'))
+    }
+
+    reader.readAsDataURL(file)
+  })
 }
 
 function getValidationErrors(data: unknown): ValidationErrorItem[] {
@@ -813,7 +887,8 @@ export function AskForHelpPage() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       activeStreamRef.current = stream
 
-      const recorder = new MediaRecorder(stream)
+      const mimeType = getSupportedAudioMimeType()
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
       mediaRecorderRef.current = recorder
       audioChunksRef.current = []
 
@@ -824,15 +899,20 @@ export function AskForHelpPage() {
       }
 
       recorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        const resolvedMimeType =
+          recorder.mimeType || audioChunksRef.current[0]?.type || mimeType || 'audio/webm'
+        const blob = new Blob(audioChunksRef.current, { type: resolvedMimeType })
 
         if (blob.size > 0) {
-          const recordedFile = new File([blob], `mesaj-vocal-${Date.now()}.webm`, {
-            type: blob.type || 'audio/webm',
+          const fileExtension = getAudioFileExtension(resolvedMimeType)
+          const recordedFile = new File([blob], `mesaj-vocal-${Date.now()}.${fileExtension}`, {
+            type: resolvedMimeType,
           })
           const nextAudioUrl = URL.createObjectURL(blob)
           setAudioFile(recordedFile)
           setAudioUrl(nextAudioUrl)
+        } else {
+          setRecordingError('Nu am putut salva înregistrarea audio. Încearcă din nou.')
         }
 
         if (activeStreamRef.current) {
@@ -898,17 +978,21 @@ export function AskForHelpPage() {
         const uploadResponse = await backend.uploads.uploadAudio(audioFile)
 
         if (!uploadResponse.success) {
-          setError(
-            uploadResponse.message || 'Nu am putut incarca mesajul vocal. Incearca din nou.',
-          )
-          return
+          try {
+            uploadedAudioUrl = await readFileAsDataUrl(audioFile)
+          } catch {
+            setError(getAudioUploadErrorMessage(uploadResponse.message))
+            return
+          }
         }
 
-        uploadedAudioUrl = getUploadedAssetUrl(uploadResponse.data)
+        if (uploadResponse.success) {
+          uploadedAudioUrl = getUploadedAssetUrl(uploadResponse.data)
 
-        if (!uploadedAudioUrl) {
-          setError('Backendul nu a returnat URL-ul mesajului vocal incarcat.')
-          return
+          if (!uploadedAudioUrl) {
+            setError('Backendul nu a returnat URL-ul mesajului vocal incarcat.')
+            return
+          }
         }
       }
 
@@ -1122,11 +1206,11 @@ export function AskForHelpPage() {
             </div>
 
             <div className="ask-help-field-group">
-              <label className="ask-help-field-label">Skills needed</label>
+              <label className="ask-help-field-label">Abilități necesare</label>
               <div className="ask-help-section-card">
                 <div className="ask-help-section-title-row">
                   <div>
-                    <h2 className="ask-help-section-title">Abilitati necesare de la voluntar</h2>
+                    <h2 className="ask-help-section-title">Abilități necesare de la voluntar</h2>
                     <p className="ask-help-section-copy">
                       Selecteaza una sau mai multe abilitati, ca sa fie mai usor sa gasim omul
                       potrivit pentru cererea ta.

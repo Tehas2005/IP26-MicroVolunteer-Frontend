@@ -2,7 +2,20 @@ import type { TaskCategoryType, TaskResponseType, TaskUrgencyType } from '@/sdk/
 
 export const UNSPECIFIED_REQUEST_DETAIL = 'Nespecificat'
 
-const AUDIO_DESCRIPTION_PATTERN = /AUDIOCONTENT[:\s-]*(https?:\/\/\S+)/i
+const HTTP_AUDIO_CAPTURE_PATTERN = '(https?:\\/\\/\\S+)'
+const DATA_AUDIO_CAPTURE_PATTERN = '(data:audio\\/[^\\n]+)'
+const AUDIO_DESCRIPTION_PATTERN = new RegExp(
+  `AUDIOCONTENT[:\\s-]*(?:${HTTP_AUDIO_CAPTURE_PATTERN}|${DATA_AUDIO_CAPTURE_PATTERN})`,
+  'i',
+)
+const VOICE_MESSAGE_DESCRIPTION_PATTERN = new RegExp(
+  `Mesaj vocal[:\\s-]*(?:${HTTP_AUDIO_CAPTURE_PATTERN}|${DATA_AUDIO_CAPTURE_PATTERN})`,
+  'i',
+)
+const AUDIO_MESSAGE_DESCRIPTION_PATTERN = new RegExp(
+  `Mesaj audio[:\\s-]*(?:${HTTP_AUDIO_CAPTURE_PATTERN}|${DATA_AUDIO_CAPTURE_PATTERN})`,
+  'i',
+)
 const LOCATION_DESCRIPTION_PATTERN = /Locatie declarata:\s*(.+)/i
 const LOCATION_DESCRIPTION_PATTERN_WITH_DIACRITICS = /Locație declarată:\s*(.+)/i
 const LANGUAGE_DESCRIPTION_PATTERN = /Limba necesara:\s*(.+)/i
@@ -39,6 +52,29 @@ function readTrimmedString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function normalizeAudioSource(value: string | null) {
+  if (!value) {
+    return null
+  }
+
+  if (!value.startsWith('data:audio/')) {
+    return value
+  }
+
+  return value.replace(/\s+/g, '')
+}
+
+function readMatchedAudioValue(description: string, pattern: RegExp) {
+  const match = description.match(pattern)
+
+  if (!match) {
+    return null
+  }
+
+  const matchedValue = match[1] ?? match[2] ?? null
+  return normalizeAudioSource(readTrimmedString(matchedValue))
+}
+
 function readMetadataValue(description: string | null, ...patterns: RegExp[]): string | null {
   if (!description) {
     return null
@@ -59,11 +95,19 @@ function readMetadataValue(description: string | null, ...patterns: RegExp[]): s
 function removeMetadataLines(description: string) {
   return description
     .split(/\n+/)
-    .map((line) => line.replace(AUDIO_DESCRIPTION_PATTERN, '').trim())
+    .map((line) =>
+      line
+        .replace(AUDIO_DESCRIPTION_PATTERN, '')
+        .replace(VOICE_MESSAGE_DESCRIPTION_PATTERN, '')
+        .replace(AUDIO_MESSAGE_DESCRIPTION_PATTERN, '')
+        .trim(),
+    )
     .filter(Boolean)
     .filter(
       (line) =>
         !AUDIO_DESCRIPTION_PATTERN.test(line) &&
+        !VOICE_MESSAGE_DESCRIPTION_PATTERN.test(line) &&
+        !AUDIO_MESSAGE_DESCRIPTION_PATTERN.test(line) &&
         !LANGUAGE_DESCRIPTION_PATTERN.test(line) &&
         !LANGUAGE_DESCRIPTION_PATTERN_WITH_DIACRITICS.test(line) &&
         !SAFETY_DESCRIPTION_PATTERN.test(line) &&
@@ -137,7 +181,7 @@ export function readRequestDetails(task: TaskResponseType | null | undefined) {
 }
 
 export function readTaskAudioUrl(task: TaskResponseType | null | undefined): string | null {
-  const directAudioUrl = readTrimmedString(task?.audioUrl)
+  const directAudioUrl = normalizeAudioSource(readTrimmedString(task?.audioUrl))
 
   if (directAudioUrl) {
     return directAudioUrl
@@ -149,7 +193,10 @@ export function readTaskAudioUrl(task: TaskResponseType | null | undefined): str
     return null
   }
 
-  const matchedUrl = description.match(AUDIO_DESCRIPTION_PATTERN)?.[1]
+  const matchedUrl =
+    readMatchedAudioValue(description, AUDIO_DESCRIPTION_PATTERN) ??
+    readMatchedAudioValue(description, VOICE_MESSAGE_DESCRIPTION_PATTERN) ??
+    readMatchedAudioValue(description, AUDIO_MESSAGE_DESCRIPTION_PATTERN)
 
   return matchedUrl ? matchedUrl.replace(/[),.;]+$/, '') : null
 }

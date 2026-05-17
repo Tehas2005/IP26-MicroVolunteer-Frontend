@@ -56,6 +56,36 @@ describe('requestDetails helpers', () => {
     expect(readTaskAudioUrl(task)).toBe('https://cdn.example.com/audio/request.mp3')
   })
 
+  it('extracts audio urls from "Mesaj vocal" descriptions and removes them from visible text', () => {
+    const task = {
+      description:
+        'Am nevoie urgentă de ajutor.\n\nMesaj vocal: https://cdn.example.com/audio/request.mp3',
+    } as TaskResponseType
+
+    expect(readTaskAudioUrl(task)).toBe('https://cdn.example.com/audio/request.mp3')
+    expect(readTaskTextDescription(task)).toBe('Am nevoie urgentă de ajutor.')
+  })
+
+  it('extracts audio data urls from "Mesaj vocal" descriptions', () => {
+    const task = {
+      description:
+        'Am nevoie urgentă de ajutor.\n\nMesaj vocal: data:audio/mp4;base64,AAAAIGZ0eXBpc29t',
+    } as TaskResponseType
+
+    expect(readTaskAudioUrl(task)).toBe('data:audio/mp4;base64,AAAAIGZ0eXBpc29t')
+    expect(readTaskTextDescription(task)).toBe('Am nevoie urgentă de ajutor.')
+  })
+
+  it('normalizes audio data urls that contain whitespace in mime metadata', () => {
+    const task = {
+      description:
+        'Am nevoie urgentă de ajutor.\n\nMesaj vocal: data:audio/mp4; codecs=mp4a.40.2;base64,AAAAIGZ0eXBpc29t',
+    } as TaskResponseType
+
+    expect(readTaskAudioUrl(task)).toBe('data:audio/mp4;codecs=mp4a.40.2;base64,AAAAIGZ0eXBpc29t')
+    expect(readTaskTextDescription(task)).toBe('Am nevoie urgentă de ajutor.')
+  })
+
   it('separates free text from metadata saved in the task description', () => {
     const task = {
       description:

@@ -10,6 +10,7 @@ import InteractionHistoryPage from '@/pages/InteractionHistoryPage'
 import ProfilePage from '@/pages/ProfilePage'
 import RequestDetailsPage from '@/pages/RequestDetailsPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
+import UserProfilePage from '@/pages/UserProfilePage'
 import RequireAuthenticatedUser from './RequireAuthenticatedUser'
 
 export const router = createBrowserRouter([
@@ -27,7 +28,7 @@ export const router = createBrowserRouter([
         path: 'profil',
         element: (
           <RequireAuthenticatedUser>
-            <ProfilePage />
+            <UserProfilePage />
           </RequireAuthenticatedUser>
         ),
       },

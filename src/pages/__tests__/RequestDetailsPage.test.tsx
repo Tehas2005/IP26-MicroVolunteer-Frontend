@@ -125,6 +125,31 @@ describe('RequestDetailsPage', () => {
     expect(screen.getByText('Abilități necesare')).toBeInTheDocument()
   })
 
+  it('afișează playerul audio când descrierea conține un mesaj vocal', async () => {
+    vi.mocked(backend.tasks.getById).mockResolvedValueOnce({
+      ...taskResponse,
+      data: {
+        data: {
+          ...taskResponse.data.data,
+          description:
+            'Ajutor urgent.\n\nMesaj vocal: https://cdn.example.com/audio/request.mp3',
+        },
+      },
+    } as never)
+
+    const { container } = renderRequestDetailsPage()
+
+    await screen.findByRole('heading', { name: 'Ridicare pastile' })
+
+    const audioPlayer = container.querySelector('audio')
+    expect(audioPlayer).not.toBeNull()
+    expect(audioPlayer as HTMLAudioElement).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/audio/request.mp3',
+    )
+    expect(screen.queryByText(/Mesaj vocal:\s*https:\/\/cdn\.example\.com/)).not.toBeInTheDocument()
+  })
+
   it('permite voluntarului validat de backend să intre în pasul următor al fluxului', async () => {
     const user = userEvent.setup()
     vi.mocked(backend.offers.getMine).mockResolvedValueOnce({
