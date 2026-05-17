@@ -64,11 +64,10 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'mvcr-auth-session',
-      partialize: ({ user, isGuest, accountStatus, volunteerStatus, knownVolunteerUserIds }) => ({
+      partialize: ({ user, isGuest, accountStatus, knownVolunteerUserIds }) => ({
         user,
         isGuest,
         accountStatus,
-        volunteerStatus,
         knownVolunteerUserIds,
       }),
     },
