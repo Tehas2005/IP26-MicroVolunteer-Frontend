@@ -1,14 +1,15 @@
-import type { AuthUser } from '@/store/authStore'
+import type { InteractionResponseType } from '@/sdk/types'
 
 export interface InteractionHistoryEntry {
   id: string
   date?: string | null
   summary?: string | null
   rating?: number | null
+  comment?: string | null
 }
 
 const FALLBACK_SUMMARY = 'Rezumat indisponibil'
-const FALLBACK_DATE = 'Data indisponibilă'
+const FALLBACK_DATE = 'Data indisponibila'
 
 export function getInteractionSummary(summary?: string | null) {
   return summary?.trim() || FALLBACK_SUMMARY
@@ -31,29 +32,68 @@ export function formatInteractionDate(date?: string | null) {
   }).format(parsedDate)
 }
 
-export function getMockInteractionHistory(user?: AuthUser | null): InteractionHistoryEntry[] {
-  if (!user) {
-    return []
+function normalizeString(value: unknown) {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim()
   }
 
-  return [
-    {
-      id: `${user.id}-history-1`,
-      date: '2026-05-04T14:30:00.000Z',
-      summary: 'Ai oferit sprijin pentru completarea unui formular local.',
-      rating: 5,
-    },
-    {
-      id: `${user.id}-history-2`,
-      date: '2026-05-02T09:15:00.000Z',
-      summary: 'Ai primit ajutor prin mesaje pentru clarificarea unei programări medicale.',
-      rating: 4,
-    },
-    {
-      id: `${user.id}-history-3`,
-      date: '2026-04-29T18:45:00.000Z',
-      summary: '',
-      rating: 3,
-    },
-  ]
+  if (typeof value === 'number') {
+    return String(value)
+  }
+
+  return ''
+}
+
+function readNumericRating(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (value && typeof value === 'object') {
+    const nestedStars = (value as { stars?: unknown }).stars
+
+    if (typeof nestedStars === 'number' && Number.isFinite(nestedStars)) {
+      return nestedStars
+    }
+  }
+
+  return null
+}
+
+function readRatingComment(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const nestedComment = (value as { comment?: unknown }).comment
+
+  if (typeof nestedComment === 'string' && nestedComment.trim()) {
+    return nestedComment.trim()
+  }
+
+  return null
+}
+
+export function mapInteractionToHistoryEntry(entry: InteractionResponseType): InteractionHistoryEntry {
+  const title = normalizeString(entry.taskTitle) || normalizeString(entry.task?.title)
+  const summary =
+    normalizeString(entry.summary) ||
+    normalizeString(entry.message) ||
+    normalizeString(entry.description) ||
+    (title ? `Interactiune pentru taskul "${title}".` : '')
+
+  const ratingCandidate = readNumericRating(entry.rating) ?? readNumericRating(entry.stars)
+  const comment = readRatingComment(entry.rating)
+
+  return {
+    id: normalizeString(entry.id) || normalizeString(entry.interactionId) || crypto.randomUUID(),
+    date:
+      normalizeString(entry.createdAt) ||
+      normalizeString(entry.updatedAt) ||
+      normalizeString(entry.date) ||
+      null,
+    summary,
+    rating: typeof ratingCandidate === 'number' ? ratingCandidate : null,
+    comment,
+  }
 }

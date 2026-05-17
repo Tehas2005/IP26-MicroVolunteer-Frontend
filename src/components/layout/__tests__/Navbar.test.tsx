@@ -44,6 +44,7 @@ describe("Navbar", () => {
       user: null,
       isGuest: true,
       sessionStatus: "ready",
+      knownVolunteerUserIds: {},
     })
     useVolunteerProfileStore.setState({
       profilesByUserId: {},
@@ -57,6 +58,7 @@ describe("Navbar", () => {
       user: null,
       isGuest: true,
       sessionStatus: "ready",
+      knownVolunteerUserIds: {},
     })
 
     render(<Navbar />)
@@ -90,6 +92,7 @@ describe("Navbar", () => {
       },
       isGuest: false,
       sessionStatus: "ready",
+      knownVolunteerUserIds: {},
     })
 
     render(<Navbar />)
@@ -125,6 +128,7 @@ describe("Navbar", () => {
       },
       isGuest: false,
       sessionStatus: "ready",
+      knownVolunteerUserIds: {},
     })
     useVolunteerProfileStore.setState({
       profilesByUserId: {
@@ -143,6 +147,33 @@ describe("Navbar", () => {
     render(<Navbar />)
 
     const desktopNav = screen.getByRole("navigation", { name: "Navigare principală" })
+
+    expect(
+      within(desktopNav).getByRole("button", { name: "Setari profil voluntar" }),
+    ).toBeInTheDocument()
+    expect(
+      within(desktopNav).queryByRole("button", { name: "Vreau sa devin voluntar!" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("pastreaza actiunea de voluntar dupa relogare daca userul este cunoscut local ca voluntar", () => {
+    useAuthStore.setState({
+      user: {
+        id: "user-1",
+        name: "Ion Socol",
+        email: "ion@example.com",
+      },
+      isGuest: false,
+      sessionStatus: "ready",
+      volunteerStatus: "unknown",
+      knownVolunteerUserIds: {
+        "user-1": true,
+      },
+    })
+
+    render(<Navbar />)
+
+    const [desktopNav] = screen.getAllByRole("navigation")
 
     expect(
       within(desktopNav).getByRole("button", { name: "Setari profil voluntar" }),
@@ -189,6 +220,7 @@ describe("Navbar", () => {
       },
       isGuest: false,
       sessionStatus: "ready",
+      knownVolunteerUserIds: {},
     })
 
     render(<Navbar />)

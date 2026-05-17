@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import AnimatedCharacters from '@/components/shared/AnimatedCharacters'
-import CancelRequestDialog from '@/components/shared/CancelRequestDialog'
 import HelpOffersInboxDialog from '@/components/shared/HelpOffersInboxDialog'
 import LiveRequestsSection from '@/components/shared/LiveRequestsSection'
 import type { LiveRequestCardData } from '@/components/shared/LiveRequestCard'
@@ -11,212 +10,150 @@ import VolunteerNotificationStack from '@/components/shared/VolunteerNotificatio
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
-  clearGuestSessionId,
-  extractGuestSessionId,
-  getStoredGuestSessionId,
-  storeGuestSessionId,
-} from '@/lib/guestSession'
-import {
-  extractOfferRedirectMeta,
-  extractTaskOffers,
-  getReceivedOffersSummaryFromOffers,
+  extractOfferList,
+  mapOfferToHelpOffer,
+  readOfferTaskId,
   type HelpOfferData,
 } from '@/lib/helpOffers'
 import {
-  extractTask,
+  extractTaskPayload,
   extractTasksList,
   isTaskOwnedByCurrentUser,
   mapTaskToLiveRequestCard,
   readCreatedTaskIds,
 } from '@/lib/liveRequests'
+import { readGuestSessionId } from '@/lib/guestSession'
 import {
-  cancelMockRequestConversations,
-  ensureMockConversationForAcceptedOffer,
-  resolveChatViewerIdentity,
-} from '@/lib/mockChat'
-import {
-  listMockHelpOffers,
-  updateMockHelpOfferStatus,
-} from '@/lib/mockHelpOffers'
-import { cancelMockLiveRequest, getMockLiveRequestSections } from '@/lib/mockLiveRequests'
-import {
-  buildNotificationsWebSocketUrl,
   createVolunteerNotification,
-  getVolunteerNotificationId,
-  isBackendNotificationId,
-  mapNotificationRecordsToItems,
-  mapNotificationSocketFrameToItem,
   type VolunteerNotificationItem,
 } from '@/lib/volunteerNotifications'
-import type { NotificationListResponseType, TaskResponseType } from '@/sdk/types'
+import type { TaskResponseType } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 
 const EMPTY_TASKS: TaskResponseType[] = []
 const EMPTY_REQUESTS: LiveRequestCardData[] = []
-const EMPTY_OFFERS: HelpOfferData[] = []
-const FALLBACK_OFFERS_SUMMARY = 'Apasă pentru a vedea ofertele primite.'
-const NOTIFICATIONS_WS_BOOT_TIMEOUT_MS = 2500
+const CONVERSATION_READY_STATUSES = new Set(['ASSIGNED', 'MATCHED', 'IN_PROGRESS', 'COMPLETED'])
+const CHAT_READY_POLL_DELAY_MS = 600
+const CHAT_READY_MAX_ATTEMPTS = 8
+const MAX_OFFERS_PAGE_SIZE = 50
 
-function mergeNotifications(
-  currentNotifications: VolunteerNotificationItem[],
-  nextNotifications: VolunteerNotificationItem[],
-) {
-  if (nextNotifications.length === 0) {
-    return currentNotifications
+function normalizeTaskStatus(status: string | null | undefined) {
+  return typeof status === 'string' ? status.trim().toUpperCase() : ''
+}
+
+function buildMyRequestSupportingText(task: TaskResponseType) {
+  const normalizedStatus = normalizeTaskStatus(task.status)
+
+  if (normalizedStatus === 'COMPLETED') {
+    return 'Task finalizat. Conversatia ramane disponibila in chat.'
   }
 
-  const notificationsById = new Map<string, VolunteerNotificationItem>()
+  if (CONVERSATION_READY_STATUSES.has(normalizedStatus)) {
+    return 'Voluntar selectat. Conversatia este disponibila in chat.'
+  }
 
-  currentNotifications.forEach((notification) => {
-    const notificationKey =
-      notification.request?.id ?? notification.relatedRequestId ?? notification.id
-    notificationsById.set(notificationKey, notification)
+  return 'Apasa pe cerere pentru a vedea ofertele primite si a alege un voluntar.'
+}
+
+function buildGuestRequestSupportingText() {
+  return 'Cererea ta de vizitator este sincronizata cu backendul si ramane vizibila in sesiunea curenta.'
+}
+
+function canOpenConversationForTask(status: string | null | undefined) {
+  return CONVERSATION_READY_STATUSES.has(normalizeTaskStatus(status))
+}
+
+function wait(delayMs: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs)
   })
-
-  nextNotifications.forEach((notification) => {
-    const notificationKey =
-      notification.request?.id ?? notification.relatedRequestId ?? notification.id
-    notificationsById.set(notificationKey, notification)
-  })
-
-  return Array.from(notificationsById.values())
-    .sort((left, right) => {
-      const leftDate = left.createdAt ? new Date(left.createdAt).getTime() : 0
-      const rightDate = right.createdAt ? new Date(right.createdAt).getTime() : 0
-
-      return leftDate - rightDate
-    })
-    .slice(-4)
 }
 
 export function HomePage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const isGuest = useAuthStore((state) => state.isGuest)
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const authUser = useAuthStore((state) => state.user)
-  const viewerIdentity = useMemo(() => resolveChatViewerIdentity(authUser), [authUser])
-  const [guestSessionId, setGuestSessionId] = useState<string | null>(() =>
-    getStoredGuestSessionId(),
-  )
+  const guestSessionId = isGuest ? readGuestSessionId() : ''
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
-  const [cancelErrorMessage, setCancelErrorMessage] = useState<string | null>(null)
-  const [cancelledRequestIds, setCancelledRequestIds] = useState<string[]>([])
-  const [isCancellingRequest, setIsCancellingRequest] = useState(false)
-  const [requestPendingCancellation, setRequestPendingCancellation] =
-    useState<LiveRequestCardData | null>(null)
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
-  const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null)
-  const [offersRevision, setOffersRevision] = useState(0)
-  const [offerActionErrorMessage, setOfferActionErrorMessage] = useState<string | null>(null)
-  const [notificationTransportStatus, setNotificationTransportStatus] = useState<
-    'idle' | 'active' | 'failed'
-  >('idle')
+  const [offerActionError, setOfferActionError] = useState<string | null>(null)
+  const [offerActionState, setOfferActionState] = useState<{
+    offerId: string
+    action: 'accept' | 'reject'
+  } | null>(null)
+  const [pageNotice, setPageNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(
+    null,
+  )
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
-  const requestLookupRef = useRef<Map<string, LiveRequestCardData>>(new Map())
 
-  useEffect(() => {
-    setGuestSessionId(isGuest ? getStoredGuestSessionId() : null)
-  }, [isGuest, sessionStatus])
-
-  const recreateGuestSession = useCallback(async () => {
-    clearGuestSessionId()
-    setGuestSessionId(null)
-
-    const response = await backend.guest.createSession()
-    const nextSessionId = response.success ? extractGuestSessionId(response.data) : null
-
-    if (!nextSessionId) {
-      return null
-    }
-
-    storeGuestSessionId(nextSessionId)
-    setGuestSessionId(nextSessionId)
-    return nextSessionId
-  }, [])
-
-  const {
-    data: liveTasksData,
-    isLoading: isLoadingAuthenticatedLiveRequests,
-    refetch: refetchAuthenticatedLiveRequests,
-  } = useQuery({
-    queryKey: ['live-requests', authUser?.id],
-    enabled: sessionStatus === 'ready' && !isGuest,
+  const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
+    queryKey: ['live-requests', authUser?.id, guestSessionId],
+    enabled: sessionStatus === 'ready' && (!isGuest || Boolean(guestSessionId)),
     refetchInterval: 15000,
     refetchIntervalInBackground: true,
     queryFn: async () => {
-      const response = await backend.tasks.list({
-        page: 1,
-        pageSize: 50,
-        order: 'DESC',
-      })
-
-      if (!response.success) {
-        throw new Error(response.message || 'Nu am putut încărca cererile live.')
-      }
-
-      return extractTasksList(response.data)
-    },
-  })
-
-  const {
-    data: guestLiveTasksData,
-    isLoading: isLoadingGuestLiveRequests,
-    refetch: refetchGuestLiveRequests,
-  } = useQuery({
-    queryKey: ['guest-live-requests', guestSessionId],
-    enabled: sessionStatus === 'ready' && isGuest && Boolean(guestSessionId),
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
-    queryFn: async () => {
-      if (!guestSessionId) {
-        return EMPTY_TASKS
-      }
-
-      let response = await backend.guest.listTasks(guestSessionId, {
-        page: 1,
-        pageSize: 50,
-        status: 'OPEN',
-      })
-
-      if (!response.success && response.isUnauthorized) {
-        const nextSessionId = await recreateGuestSession()
-
-        if (nextSessionId) {
-          response = await backend.guest.listTasks(nextSessionId, {
+      const response = isGuest
+        ? await backend.guest.listTasks(guestSessionId, {
             page: 1,
             pageSize: 50,
-            status: 'OPEN',
           })
-        }
-      }
+        : await backend.tasks.list({
+            page: 1,
+            pageSize: 50,
+            order: 'DESC',
+          })
 
       if (!response.success) {
-        throw new Error(response.message || 'Nu am putut încărca cererile tale.')
+        throw new Error(response.message || 'Nu am putut incarca cererile live.')
       }
 
       return extractTasksList(response.data)
     },
   })
-
   const liveTasks = liveTasksData ?? EMPTY_TASKS
-  const guestLiveTasks = guestLiveTasksData ?? EMPTY_TASKS
-  const isLoadingLiveRequests = isLoadingAuthenticatedLiveRequests || isLoadingGuestLiveRequests
+
+  const { data: myPendingOffers = [] } = useQuery({
+    queryKey: ['my-pending-offers', authUser?.id],
+    enabled: sessionStatus === 'ready' && !isGuest && Boolean(authUser?.id),
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
+    queryFn: async () => {
+      const response = await backend.offers.listMine({
+        page: 1,
+        pageSize: MAX_OFFERS_PAGE_SIZE,
+        status: 'PENDING',
+      })
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut incarca ofertele trimise.')
+      }
+
+      return extractOfferList(response.data)
+    },
+  })
+
+  const pendingOfferTaskIds = useMemo(
+    () => new Set(myPendingOffers.map((offer) => readOfferTaskId(offer)).filter(Boolean)),
+    [myPendingOffers],
+  )
 
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
     if (isGuest) {
       return {
-        myRequests: guestLiveTasks.map((task) => {
-          const request = mapTaskToLiveRequestCard(task, {
-            currentUserName: 'Vizitator',
-            isOwnedByCurrentUser: true,
-          })
+        myRequests: liveTasks.map((task) => {
+          const hasConversation = canOpenConversationForTask(task.status)
 
           return {
-            ...request,
-            requesterKey: viewerIdentity.key,
-            requesterKind: 'guest' as const,
-            requesterLabel: viewerIdentity.displayName,
+            ...mapTaskToLiveRequestCard(task, {
+              currentUserName: 'Solicitant',
+              isOwnedByCurrentUser: true,
+            }),
+            supportingText: hasConversation
+              ? 'Voluntar selectat. Apasa pe cerere pentru a intra in chat.'
+              : buildGuestRequestSupportingText(),
           }
         }),
         volunteerFeedRequests: EMPTY_REQUESTS,
@@ -234,93 +171,42 @@ export function HomePage() {
     const ownedTaskIds = new Set<string>()
 
     const ownedTasks = liveTasks.filter((task) => {
-      const isOwnedByCurrentUser = isTaskOwnedByCurrentUser(
-        task,
-        authUser.id,
-        locallyTrackedTaskIds,
-      )
+      const isOwned = isTaskOwnedByCurrentUser(task, authUser.id, locallyTrackedTaskIds)
 
-      if (isOwnedByCurrentUser) {
+      if (isOwned) {
         ownedTaskIds.add(String(task.id))
       }
 
-      return isOwnedByCurrentUser
+      return isOwned
     })
 
-    const publicTasks = liveTasks.filter((task) => !ownedTaskIds.has(String(task.id)))
+    const publicOpenTasks = liveTasks.filter((task) => {
+      if (ownedTaskIds.has(String(task.id))) {
+        return false
+      }
+
+      return normalizeTaskStatus(task.status) === 'OPEN'
+    })
 
     return {
-      myRequests: ownedTasks.map((task) =>
-        mapTaskToLiveRequestCard(task, {
-          currentUserId: authUser.id,
+      myRequests: ownedTasks.map((task) => ({
+        ...mapTaskToLiveRequestCard(task, {
           currentUserName: authUser.name,
           isOwnedByCurrentUser: true,
         }),
-      ),
-      volunteerFeedRequests: publicTasks.map((task) =>
+        supportingText: buildMyRequestSupportingText(task),
+      })),
+      volunteerFeedRequests: publicOpenTasks.map((task) =>
         mapTaskToLiveRequestCard(task, {
-          currentUserId: authUser.id,
           currentUserName: authUser.name,
           isOwnedByCurrentUser: false,
         }),
       ),
     }
-  }, [authUser, guestLiveTasks, isGuest, liveTasks, viewerIdentity])
-
-  const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
-  const shouldUseMockLiveRequests =
-    !isGuest && !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
-  const shouldAttemptBackendNotifications = sessionStatus === 'ready' && !isGuest
-  const shouldUseBackendNotifications =
-    shouldAttemptBackendNotifications && notificationTransportStatus !== 'failed'
-  const shouldUseBackendOffers = sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
-  const cancelledRequestIdsSet = useMemo(() => new Set(cancelledRequestIds), [cancelledRequestIds])
-
-  const displayedMyRequests = (
-    shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
-  ).filter((request) => !cancelledRequestIdsSet.has(request.id))
-  const displayedVolunteerRequests = shouldUseMockLiveRequests
-    ? mockLiveRequests.volunteerRequests
-    : volunteerFeedRequests
-
-  const requestLookup = useMemo(() => {
-    const nextLookup = new Map<string, LiveRequestCardData>()
-
-    displayedMyRequests.forEach((request) => {
-      nextLookup.set(request.id, request)
-    })
-
-    displayedVolunteerRequests.forEach((request) => {
-      nextLookup.set(request.id, request)
-    })
-
-    return nextLookup
-  }, [displayedMyRequests, displayedVolunteerRequests])
-
-  useEffect(() => {
-    if (!shouldAttemptBackendNotifications) {
-      setNotificationTransportStatus('idle')
-      return
-    }
-
-    setNotificationTransportStatus('idle')
-  }, [authUser?.id, shouldAttemptBackendNotifications])
-
-  useEffect(() => {
-    requestLookupRef.current = requestLookup
-  }, [requestLookup])
+  }, [authUser, isGuest, liveTasks])
 
   useEffect(() => {
     if (isGuest || sessionStatus !== 'ready') {
-      seenVolunteerRequestIdsRef.current.clear()
-      hasInitializedVolunteerFeedRef.current = false
-      setActiveNotifications((currentNotifications) =>
-        currentNotifications.length === 0 ? currentNotifications : [],
-      )
-      return
-    }
-
-    if (shouldUseMockLiveRequests) {
       seenVolunteerRequestIdsRef.current.clear()
       hasInitializedVolunteerFeedRef.current = false
       setActiveNotifications((currentNotifications) =>
@@ -354,284 +240,147 @@ export function HomePage() {
     })
 
     setActiveNotifications((currentNotifications) => {
-      const existingRequestIds = new Set(
-        currentNotifications
-          .map((item) => item.request?.id ?? item.relatedRequestId)
-          .filter((requestId): requestId is string => Boolean(requestId)),
-      )
+      const currentNotificationIds = new Set(currentNotifications.map((item) => item.id))
       const nextNotifications = unseenRequests
         .map((request) => createVolunteerNotification(request))
-        .filter((notification) => {
-          const requestId = notification.request?.id ?? notification.relatedRequestId
-
-          if (!requestId) {
-            return true
-          }
-
-          return !existingRequestIds.has(requestId)
-        })
+        .filter((notification) => !currentNotificationIds.has(notification.id))
 
       return [...currentNotifications, ...nextNotifications].slice(-4)
     })
-  }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
-
-  useEffect(() => {
-    if (!successToastMessage) {
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setSuccessToastMessage(null)
-    }, 3500)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [successToastMessage])
-
-  const { data: unreadNotificationsPayload = null, isSuccess: hasLoadedUnreadNotifications } =
-    useQuery({
-      queryKey: ['unread-volunteer-notifications', authUser?.id],
-      enabled: shouldUseBackendNotifications,
-      queryFn: async () => {
-        const response = await backend.notifications.list({
-          page: 1,
-          pageSize: 20,
-          unreadOnly: 'true',
-        })
-
-        if (!response.success) {
-          throw new Error(response.message || 'Nu am putut încărca notificările.')
-        }
-
-        return response.data as NotificationListResponseType | null
-      },
-    })
-
-  const unreadNotificationItems = useMemo(
-    () => mapNotificationRecordsToItems(unreadNotificationsPayload, requestLookup),
-    [requestLookup, unreadNotificationsPayload],
-  )
-
-  useEffect(() => {
-    if (!shouldUseBackendNotifications || !hasLoadedUnreadNotifications) {
-      return
-    }
-
-    setActiveNotifications((currentNotifications) =>
-      mergeNotifications(currentNotifications, unreadNotificationItems),
-    )
-  }, [hasLoadedUnreadNotifications, shouldUseBackendNotifications, unreadNotificationItems])
-
-  useEffect(() => {
-    if (!shouldAttemptBackendNotifications || notificationTransportStatus !== 'idle') {
-      return
-    }
-
-    if (typeof window === 'undefined' || typeof window.WebSocket !== 'function') {
-      setNotificationTransportStatus('failed')
-      return
-    }
-
-    let hasOpened = false
-    let isDisposed = false
-    const socket = new window.WebSocket(buildNotificationsWebSocketUrl())
-    const bootTimeout = window.setTimeout(() => {
-      if (hasOpened || isDisposed) {
-        return
-      }
-
-      setNotificationTransportStatus('failed')
-      socket.close()
-    }, NOTIFICATIONS_WS_BOOT_TIMEOUT_MS)
-
-    socket.onopen = () => {
-      hasOpened = true
-      window.clearTimeout(bootTimeout)
-      setNotificationTransportStatus('active')
-    }
-
-    socket.onmessage = (event) => {
-      if (typeof event.data !== 'string') {
-        return
-      }
-
-      const nextNotification = mapNotificationSocketFrameToItem(
-        event.data,
-        requestLookupRef.current,
-      )
-
-      if (!nextNotification) {
-        return
-      }
-
-      setActiveNotifications((currentNotifications) =>
-        mergeNotifications(currentNotifications, [nextNotification]),
-      )
-    }
-
-    socket.onerror = () => {
-      if (!hasOpened && !isDisposed) {
-        window.clearTimeout(bootTimeout)
-        setNotificationTransportStatus('failed')
-      }
-    }
-
-    socket.onclose = () => {
-      window.clearTimeout(bootTimeout)
-
-      if (!isDisposed) {
-        setNotificationTransportStatus('failed')
-      }
-    }
-
-    return () => {
-      isDisposed = true
-      window.clearTimeout(bootTimeout)
-      socket.close()
-    }
-  }, [notificationTransportStatus, shouldAttemptBackendNotifications])
-
-  const { data: offersSummaryEntries = [] } = useQuery({
-    queryKey: [
-      'task-offer-summaries',
-      displayedMyRequests.map((request) => request.id).join('|'),
-      offersRevision,
-    ],
-    enabled: shouldUseBackendOffers && displayedMyRequests.length > 0,
-    queryFn: async () => {
-      const results = await Promise.all(
-        displayedMyRequests.map(async (request) => {
-          const response = await backend.tasks.listOffers(request.id, {
-            page: 1,
-            pageSize: 20,
-          })
-
-          return [
-            request.id,
-            response.success ? extractTaskOffers(response.data, request.id) : [],
-          ] as const
-        }),
-      )
-
-      return results
-    },
-  })
-
-  const offersSummaryMap = useMemo(
-    () => new Map<string, HelpOfferData[]>(offersSummaryEntries),
-    [offersSummaryEntries],
-  )
-
-  const displayedMyRequestsWithOfferSummary = useMemo(() => {
-    if (shouldUseMockLiveRequests) {
-      void offersRevision
-
-      return displayedMyRequests.map((request) => ({
-        ...request,
-        supportingText: getReceivedOffersSummaryFromOffers(listMockHelpOffers(request)),
-      }))
-    }
-
-    return displayedMyRequests.map((request) => ({
-      ...request,
-      supportingText: offersSummaryMap.has(request.id)
-        ? getReceivedOffersSummaryFromOffers(offersSummaryMap.get(request.id) ?? EMPTY_OFFERS)
-        : request.supportingText?.trim() || FALLBACK_OFFERS_SUMMARY,
-    }))
-  }, [displayedMyRequests, offersRevision, offersSummaryMap, shouldUseMockLiveRequests])
+  }, [isGuest, sessionStatus, volunteerFeedRequests])
 
   const selectedMyRequest = useMemo(
-    () =>
-      displayedMyRequestsWithOfferSummary.find((request) => request.id === selectedMyRequestId) ??
-      null,
-    [displayedMyRequestsWithOfferSummary, selectedMyRequestId],
+    () => myRequests.find((request) => request.id === selectedMyRequestId) ?? null,
+    [myRequests, selectedMyRequestId],
   )
 
-  useEffect(() => {
-    setOfferActionErrorMessage(null)
-  }, [selectedMyRequestId])
+  const openVolunteerRequestDetails = useCallback(
+    (requestId: string | null | undefined) => {
+      const normalizedRequestId = typeof requestId === 'string' ? requestId.trim() : ''
 
-  const {
-    data: selectedBackendOffers = EMPTY_OFFERS,
-    error: selectedOffersError,
-    isLoading: isLoadingSelectedOffers,
-    refetch: refetchSelectedOffers,
-  } = useQuery({
-    queryKey: ['task-offers', selectedMyRequest?.id, offersRevision],
-    enabled: shouldUseBackendOffers && selectedMyRequest !== null,
-    queryFn: async () => {
-      if (!selectedMyRequest) {
-        return EMPTY_OFFERS
+      if (!normalizedRequestId) {
+        setPageNotice({
+          kind: 'error',
+          message: 'Nu am putut identifica cererea selectata. Reincarca pagina si incearca din nou.',
+        })
+        return
       }
 
-      const response = await backend.tasks.listOffers(selectedMyRequest.id, {
-        page: 1,
-        pageSize: 20,
-      })
-
-      if (!response.success) {
-        throw new Error(response.message || 'Nu am putut încărca ofertele pentru această cerere.')
-      }
-
-      return extractTaskOffers(response.data, selectedMyRequest.id)
-    },
-  })
-
-  const selectedMyRequestOffers = useMemo(() => {
-    if (!selectedMyRequest) {
-      return EMPTY_OFFERS
-    }
-
-    if (shouldUseMockLiveRequests) {
-      void offersRevision
-
-      return listMockHelpOffers(selectedMyRequest)
-    }
-
-    return selectedBackendOffers
-  }, [offersRevision, selectedBackendOffers, selectedMyRequest, shouldUseMockLiveRequests])
-
-  const selectedOffersErrorMessage =
-    offerActionErrorMessage ||
-    (selectedOffersError instanceof Error ? selectedOffersError.message : null)
-
-  const handleVolunteerRequestOpen = useCallback(
-    (request: LiveRequestCardData) => {
-      navigate(`/cereri/${request.id}`)
+      navigate(`/cereri/${normalizedRequestId}`)
     },
     [navigate],
   )
 
-  const handleMyRequestOpen = useCallback((request: LiveRequestCardData) => {
-    setOfferActionErrorMessage(null)
-    setSelectedMyRequestId(request.id)
-  }, [])
+  const {
+    data: selectedMyRequestOffers = [],
+    isLoading: isLoadingSelectedOffers,
+    error: selectedOffersError,
+    refetch: refetchSelectedOffers,
+  } = useQuery({
+    queryKey: ['task-offers', selectedMyRequest?.id],
+    enabled: sessionStatus === 'ready' && !isGuest && Boolean(selectedMyRequest?.id),
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchInterval: selectedMyRequest?.id ? 5000 : false,
+    queryFn: async () => {
+      const requestId = selectedMyRequest?.id
+
+      if (!requestId) {
+        return []
+      }
+
+      const response = await backend.offers.listForTask(requestId, {
+        page: 1,
+        pageSize: 50,
+      })
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut incarca ofertele pentru aceasta cerere.')
+      }
+
+      const offers = extractOfferList(response.data)
+
+      return offers.map((offer) =>
+        mapOfferToHelpOffer({
+          offer,
+          requestId,
+        }),
+      )
+    },
+  })
+
+  const handleVolunteerRequestOpen = useCallback(
+    (request: LiveRequestCardData) => {
+      setPageNotice(null)
+
+      if (pendingOfferTaskIds.has(request.id)) {
+        setPageNotice({
+          kind: 'error',
+          message:
+            'Ai deja o oferta in asteptare pentru aceasta cerere. Asteapta raspunsul requesterului.',
+        })
+        return
+      }
+
+      openVolunteerRequestDetails(request.id)
+    },
+    [openVolunteerRequestDetails, pendingOfferTaskIds],
+  )
+
+  const handleMyRequestOpen = useCallback(
+    (request: LiveRequestCardData) => {
+      if (isGuest) {
+        const matchingTask = liveTasks.find((task) => String(task.id) === request.id)
+
+        if (!matchingTask) {
+          setPageNotice({
+            kind: 'error',
+            message: 'Nu am mai gasit cererea selectata. Reincarca pagina si incearca din nou.',
+          })
+          return
+        }
+
+        if (canOpenConversationForTask(matchingTask.status)) {
+          navigate(`/chat/${request.id}`)
+          return
+        }
+
+        setPageNotice({
+          kind: 'error',
+          message:
+            'Chatul devine disponibil dupa ce un voluntar este acceptat pentru aceasta cerere.',
+        })
+        return
+      }
+
+      setOfferActionError(null)
+      setPageNotice(null)
+      setSelectedMyRequestId(request.id)
+      void queryClient.invalidateQueries({ queryKey: ['task-offers', request.id] })
+    },
+    [isGuest, liveTasks, navigate, queryClient],
+  )
 
   const handleOfferReject = useCallback(
     async (offer: HelpOfferData) => {
-      if (!selectedMyRequest) {
-        return
+      setOfferActionState({ offerId: offer.id, action: 'reject' })
+      setOfferActionError(null)
+      setPageNotice(null)
+
+      try {
+        const response = await backend.offers.updateStatus(offer.id, { status: 'REJECTED' })
+
+        if (!response.success) {
+          setOfferActionError(response.message || 'Nu am putut refuza oferta.')
+          return
+        }
+
+        await refetchSelectedOffers()
+      } finally {
+        setOfferActionState(null)
       }
-
-      if (shouldUseMockLiveRequests) {
-        updateMockHelpOfferStatus(offer.requestId, offer.id, 'rejected')
-        setOffersRevision((currentValue) => currentValue + 1)
-        return
-      }
-
-      const response = await backend.offers.updateStatus(offer.id, { status: 'REJECTED' })
-
-      if (!response.success) {
-        setOfferActionErrorMessage(response.message || 'Nu am putut refuza oferta selectată.')
-        return
-      }
-
-      setOfferActionErrorMessage(null)
-      setOffersRevision((currentValue) => currentValue + 1)
-      void refetchSelectedOffers()
     },
-    [refetchSelectedOffers, selectedMyRequest, shouldUseMockLiveRequests],
+    [refetchSelectedOffers],
   )
 
   const handleOfferAccept = useCallback(
@@ -640,53 +389,57 @@ export function HomePage() {
         return
       }
 
-      if (shouldUseMockLiveRequests) {
-        updateMockHelpOfferStatus(selectedMyRequest.id, offer.id, 'accepted')
-        setOffersRevision((currentValue) => currentValue + 1)
+      setOfferActionState({ offerId: offer.id, action: 'accept' })
+      setOfferActionError(null)
+      setPageNotice(null)
 
-        const conversation = ensureMockConversationForAcceptedOffer(
-          selectedMyRequest,
-          resolveChatViewerIdentity(authUser),
-          {
-            volunteerKey: offer.volunteerKey,
-            volunteerName: offer.volunteerName,
-          },
-        )
+      try {
+        const response = await backend.offers.updateStatus(offer.id, { status: 'ACCEPTED' })
 
-        navigate(`/chat/${conversation.id}`)
-        return
+        if (!response.success) {
+          setOfferActionError(response.message || 'Nu am putut accepta oferta.')
+          return
+        }
+
+        await Promise.all([
+          refetchSelectedOffers(),
+          queryClient.invalidateQueries({ queryKey: ['live-requests'] }),
+          queryClient.invalidateQueries({ queryKey: ['backend-conversations'] }),
+        ])
+
+        let isChatReady = false
+
+        for (let attempt = 0; attempt < CHAT_READY_MAX_ATTEMPTS; attempt += 1) {
+          const taskResponse = await backend.tasks.getById(selectedMyRequest.id)
+          const task = taskResponse.success && taskResponse.data
+            ? extractTaskPayload(taskResponse.data)
+            : null
+
+          if (task && canOpenConversationForTask(task.status)) {
+            isChatReady = true
+            break
+          }
+
+          await wait(CHAT_READY_POLL_DELAY_MS)
+        }
+
+        if (!isChatReady) {
+          setSelectedMyRequestId(null)
+          setPageNotice({
+            kind: 'success',
+            message:
+              'Oferta a fost acceptata. Conversatia se pregateste inca putin; incearca din nou imediat.',
+          })
+          return
+        }
+
+        setSelectedMyRequestId(null)
+        navigate(`/chat/${selectedMyRequest.id}`)
+      } finally {
+        setOfferActionState(null)
       }
-
-      const response = await backend.offers.updateStatus(offer.id, { status: 'ACCEPTED' })
-
-      if (!response.success) {
-        setOfferActionErrorMessage(response.message || 'Nu am putut accepta oferta selectată.')
-        return
-      }
-
-      setOfferActionErrorMessage(null)
-      setOffersRevision((currentValue) => currentValue + 1)
-
-      const redirectMeta = extractOfferRedirectMeta(response.data)
-
-      const conversation = ensureMockConversationForAcceptedOffer(
-        selectedMyRequest,
-        resolveChatViewerIdentity(authUser),
-        {
-          volunteerKey: offer.volunteerKey,
-          volunteerName: offer.volunteerName,
-        },
-        {
-          preferredConversationId:
-            redirectMeta.conversationId ??
-            redirectMeta.helpRequestId ??
-            redirectMeta.taskAssignmentId,
-        },
-      )
-
-      navigate(`/chat/${conversation.id}`)
     },
-    [authUser, navigate, selectedMyRequest, shouldUseMockLiveRequests],
+    [navigate, queryClient, refetchSelectedOffers, selectedMyRequest],
   )
 
   const handleNotificationDismiss = useCallback((notificationId: string) => {
@@ -696,130 +449,18 @@ export function HomePage() {
   }, [])
 
   const handleNotificationOpen = useCallback(
-    async (notification: VolunteerNotificationItem) => {
-      if (shouldUseBackendNotifications && isBackendNotificationId(notification.id)) {
-        const markAsReadResponse = await backend.notifications.markAsRead(notification.id)
-
-        if (!markAsReadResponse.success) {
-          return
-        }
-      }
+    (notification: VolunteerNotificationItem) => {
+      handleNotificationDismiss(notification.id)
 
       if (notification.request) {
-        handleNotificationDismiss(notification.id)
         handleVolunteerRequestOpen(notification.request)
         return
       }
 
-      if (!notification.relatedRequestId) {
-        return
-      }
-
-      const response = await backend.tasks.getById(notification.relatedRequestId)
-
-      if (!response.success) {
-        return
-      }
-
-      const task = extractTask(response.data)
-
-      if (!task) {
-        return
-      }
-
-      const request = mapTaskToLiveRequestCard(task, {
-        currentUserName: authUser?.name,
-        isOwnedByCurrentUser: false,
-      })
-
-      handleNotificationDismiss(notification.id)
-      handleVolunteerRequestOpen(request)
+      openVolunteerRequestDetails(notification.relatedRequestId)
     },
-    [
-      authUser?.name,
-      handleNotificationDismiss,
-      handleVolunteerRequestOpen,
-      shouldUseBackendNotifications,
-    ],
+    [handleNotificationDismiss, handleVolunteerRequestOpen, openVolunteerRequestDetails],
   )
-
-  const canCancelRequest = useCallback(
-    (request: LiveRequestCardData) =>
-      Boolean(request.requesterKey && request.requesterKey === viewerIdentity.key),
-    [viewerIdentity.key],
-  )
-
-  const handleCancelRequestStart = useCallback((request: LiveRequestCardData) => {
-    setCancelErrorMessage(null)
-    setRequestPendingCancellation(request)
-  }, [])
-
-  const handleCancelRequestConfirm = useCallback(async () => {
-    if (!requestPendingCancellation) {
-      return
-    }
-
-    setIsCancellingRequest(true)
-
-    try {
-      if (shouldUseMockLiveRequests) {
-        cancelMockLiveRequest(requestPendingCancellation.id)
-      } else {
-        if (isGuest && !guestSessionId) {
-          setCancelErrorMessage('Nu am putut inițializa sesiunea de vizitator. Încearcă din nou.')
-          return
-        }
-
-        const response =
-          isGuest && guestSessionId
-            ? await backend.guest.deleteTask(guestSessionId, requestPendingCancellation.id)
-            : await backend.tasks.delete(requestPendingCancellation.id)
-
-        if (!response.success) {
-          setCancelErrorMessage(response.message || 'Nu am putut anula cererea selectată.')
-          return
-        }
-      }
-
-      cancelMockRequestConversations(requestPendingCancellation.id, viewerIdentity)
-      setCancelledRequestIds((currentIds) =>
-        currentIds.includes(requestPendingCancellation.id)
-          ? currentIds
-          : [...currentIds, requestPendingCancellation.id],
-      )
-      setActiveNotifications((currentNotifications) =>
-        currentNotifications.filter(
-          (notification) =>
-            notification.request?.id !== requestPendingCancellation.id &&
-            notification.id !== getVolunteerNotificationId(requestPendingCancellation.id),
-        ),
-      )
-      setCancelErrorMessage(null)
-      setSelectedMyRequestId((currentRequestId) =>
-        currentRequestId === requestPendingCancellation.id ? null : currentRequestId,
-      )
-      setRequestPendingCancellation(null)
-      setSuccessToastMessage('Cererea ta a fost anulată.')
-
-      if (!shouldUseMockLiveRequests) {
-        if (isGuest) {
-          void refetchGuestLiveRequests()
-        } else {
-          void refetchAuthenticatedLiveRequests()
-        }
-      }
-    } finally {
-      setIsCancellingRequest(false)
-    }
-  }, [
-    guestSessionId,
-    isGuest,
-    refetchAuthenticatedLiveRequests,
-    refetchGuestLiveRequests,
-    requestPendingCancellation,
-    shouldUseMockLiveRequests,
-    viewerIdentity,
-  ])
 
   return (
     <div className="bg-brand-cream">
@@ -837,8 +478,8 @@ export function HomePage() {
                 Bine ai venit la Micro-Volunteer Crisis Router
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-brand-gray-text sm:text-xl">
-                Conectăm oamenii cu voluntari locali în momente de criză, într-un spațiu clar,
-                calm și ușor de folosit.
+                Conectam oamenii cu voluntari locali in momente de criza, intr-un spatiu clar,
+                calm si usor de folosit.
               </p>
 
               <div className="mt-8 flex justify-center lg:justify-start">
@@ -887,66 +528,48 @@ export function HomePage() {
             </Button>
           </div>
 
+          {pageNotice ? (
+            <div
+              className={[
+                'mt-5 rounded-2xl px-4 py-3 text-sm',
+                pageNotice.kind === 'success'
+                  ? 'border border-green-200 bg-green-50 text-green-700'
+                  : 'border border-red-200 bg-red-50 text-red-700',
+              ].join(' ')}
+            >
+              {pageNotice.message}
+            </div>
+          ) : null}
+
           <LiveRequestsSection
             isLoading={isLoadingLiveRequests}
-            myRequests={displayedMyRequestsWithOfferSummary}
+            myRequests={myRequests}
             onMyRequestOpen={handleMyRequestOpen}
-            onVolunteerRequestOpen={handleVolunteerRequestOpen}
-            renderMyRequestActions={(request) =>
-              canCancelRequest(request) ? (
-                <Button
-                  className="w-full text-brand-red hover:text-brand-red sm:w-auto"
-                  onClick={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    handleCancelRequestStart(request)
-                  }}
-                  variant="ghost"
-                >
-                  Anulează Cererea
-                </Button>
-              ) : null
-            }
-            volunteerRequests={displayedVolunteerRequests}
+            onVolunteerRequestOpen={isGuest ? undefined : handleVolunteerRequestOpen}
+            volunteerRequests={volunteerFeedRequests}
           />
         </div>
       </section>
 
       <HelpOffersInboxDialog
-        errorMessage={selectedOffersErrorMessage}
-        isLoading={isLoadingSelectedOffers}
-        offers={selectedMyRequestOffers}
-        onAccept={handleOfferAccept}
+        busyAction={offerActionState?.action ?? null}
+        busyOfferId={offerActionState?.offerId ?? null}
+        errorMessage={
+          offerActionError ||
+          (selectedOffersError instanceof Error ? selectedOffersError.message : null)
+        }
+        offers={isLoadingSelectedOffers ? [] : selectedMyRequestOffers}
+        onAccept={(offer) => void handleOfferAccept(offer)}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedMyRequestId(null)
+            setOfferActionError(null)
           }
         }}
-        onReject={handleOfferReject}
+        onReject={(offer) => void handleOfferReject(offer)}
         open={selectedMyRequest !== null}
         request={selectedMyRequest}
       />
-
-      <CancelRequestDialog
-        errorMessage={cancelErrorMessage}
-        isSubmitting={isCancellingRequest}
-        onConfirm={() => void handleCancelRequestConfirm()}
-        onOpenChange={(open) => {
-          if (!open && !isCancellingRequest) {
-            setCancelErrorMessage(null)
-            setRequestPendingCancellation(null)
-          }
-        }}
-        open={requestPendingCancellation !== null}
-      />
-
-      {successToastMessage ? (
-        <div className="pointer-events-none fixed inset-x-4 top-20 z-[65] flex justify-center sm:top-24">
-          <div className="rounded-full border border-brand-green/25 bg-white px-4 py-2 text-sm font-medium text-brand-black shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
-            {successToastMessage}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

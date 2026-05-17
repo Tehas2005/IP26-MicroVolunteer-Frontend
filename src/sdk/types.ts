@@ -30,9 +30,9 @@ export type BetterAuthUserType = {
   email: string
   image?: string | null
   emailVerified?: boolean
+  role?: string | null
   accountStatus?: string | null
   accountstatus?: string | null
-  [key: string]: unknown
 }
 
 export type BetterAuthSessionType = {
@@ -74,6 +74,8 @@ export type VerifyEmailPayloadType = {
 export type ProfileType = {
   id?: string
   userId?: string
+  status?: string | null
+  accountStatus?: string | null
   firstName?: string | null
   lastName?: string | null
   displayName?: string | null
@@ -102,8 +104,8 @@ export type UpdateProfilePayloadType = Partial<CreateProfilePayloadType>
 export type TaskUrgencyType = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | string
 export type TaskStatusType =
   | 'OPEN'
-  | 'MATCHED'
   | 'ASSIGNED'
+  | 'MATCHED'
   | 'IN_PROGRESS'
   | 'COMPLETED'
   | 'CANCELLED'
@@ -121,11 +123,6 @@ export type TaskResponseType = {
   userId?: string | null
   requestedByUserId?: string | null
   helperUserId?: string | null
-  city?: string | null
-  addressText?: string | null
-  skillsNeeded?: string[] | null
-  displayName?: string | null
-  isMine?: boolean | null
   createdAt?: string
   updatedAt?: string
   details?: Record<string, unknown> | null
@@ -141,33 +138,10 @@ export type TaskSubmissionPayloadType = {
   [key: string]: unknown
 }
 
-export type GuestSessionResponseType = {
-  sessionId?: string
-  [key: string]: unknown
-}
-
-export type GuestTaskSubmissionPayloadType = {
-  title: string
-  description?: string
-  audioUrl?: string
-  urgency?: 'LOW' | 'MEDIUM' | 'HIGH'
-  location?: {
-    x: number
-    y: number
-  }
-  city?: string
-  addressText?: string
-  skillsNeeded?: string[]
+export type TaskDetailsPayloadType = {
   notes?: string
   languageNeeded?: string
   safetyNotes?: string
-  [key: string]: unknown
-}
-
-export type TaskDetailsPayloadType = {
-  notes: string
-  languageNeeded: string
-  safetyNotes: string
   [key: string]: unknown
 }
 
@@ -196,30 +170,29 @@ export type PaginatedTaskListType = {
   meta?: TaskListMetaType | null
 }
 
-export type OfferStatusType = 'PENDING' | 'ACCEPTED' | 'REJECTED' | string
-
-export type OfferVolunteerType = {
-  username?: string | null
-  trustScore?: number | null
-  averageRating?: number | null
-  name?: string | null
-  hiddenIdentity?: boolean | null
+export type GuestSessionResponseType = {
+  sessionId?: string | null
   [key: string]: unknown
 }
 
+export type OfferStatusType = 'PENDING' | 'ACCEPTED' | 'REJECTED' | string
+
 export type OfferResponseType = {
-  id: string | number
+  id?: string | number
   volunteerId?: string | number | null
+  volunteerUserId?: string | number | null
+  userId?: string | number | null
   helpRequestId?: string | number | null
   taskId?: string | number | null
   message?: string | null
   status?: OfferStatusType | null
   createdAt?: string | null
-  volunteer?: OfferVolunteerType | null
-  taskAssignmentId?: string | number | null
-  conversationId?: string | number | null
+  updatedAt?: string | null
+  task?: TaskResponseType | null
+  volunteer?: ProfileType | null
   [key: string]: unknown
 }
+
 
 export type OfferSubmissionPayloadType = {
   message: string
@@ -227,27 +200,40 @@ export type OfferSubmissionPayloadType = {
 }
 
 export type OfferStatusPayloadType = {
-  status: OfferStatusType
-  [key: string]: unknown
+  status: 'ACCEPTED' | 'REJECTED'
 }
 
-export type OfferListFiltersType = {
+export type OfferFiltersType = {
   page?: number
   pageSize?: number
   status?: OfferStatusType
-  [key: string]: string | number | boolean | null | undefined
 }
 
 export type PaginatedOfferListType = {
   data: OfferResponseType[]
-  meta?: TaskListMetaType | null
+  meta?: {
+    currentPage?: number
+    pageSize?: number
+    totalItems?: number
+    totalPages?: number
+    hasNextPage?: boolean
+    hasPreviousPage?: boolean
+    [key: string]: unknown
+  } | null
 }
 
-export type NotificationRecordType = {
-  id: string | number
+export type NotificationType =
+  | 'NEW_REQUEST'
+  | 'OFFER_RECEIVED'
+  | 'OFFER_ACCEPTED'
+  | 'TASK_UPDATED'
+  | string
+
+export type NotificationResponseType = {
+  id?: string | number
   userId?: string | null
   guestSessionId?: string | null
-  type?: string | null
+  type?: NotificationType | null
   text?: string | null
   relatedRequestId?: string | number | null
   relatedAssignmentId?: string | number | null
@@ -256,27 +242,29 @@ export type NotificationRecordType = {
   [key: string]: unknown
 }
 
-export type NotificationListMetaType = {
-  page: number
-  pageSize: number
-  total: number
-  totalPages: number
-  unreadCount: number
-}
+export type NotificationRecordType = NotificationResponseType
 
-export type NotificationListResponseType = {
-  data: NotificationRecordType[]
-  meta?: NotificationListMetaType | null
-}
-
-export type NotificationsListFiltersType = {
+export type NotificationFiltersType = {
   page?: number
   pageSize?: number
-  unreadOnly?: 'true' | 'false'
+  unreadOnly?: boolean
 }
 
-export type ReadAllNotificationsResponseType = {
-  updatedCount: number
+export type PaginatedNotificationListType = {
+  data: NotificationResponseType[]
+  meta?: {
+    page?: number
+    pageSize?: number
+    total?: number
+    totalPages?: number
+    unreadCount?: number
+    [key: string]: unknown
+  } | null
+}
+
+export type NotificationMarkAllReadResponseType = {
+  updatedCount?: number
+  [key: string]: unknown
 }
 
 export type DeleteTaskDetailsResponseType = {
@@ -284,8 +272,46 @@ export type DeleteTaskDetailsResponseType = {
   [key: string]: unknown
 }
 
-export type DeleteTaskResponseType = {
-  success: boolean
+export type TaskMessageContentType = 'TEXTCONTENT' | 'AUDIOCONTENT' | string
+
+export type TaskMessageResponseType = {
+  id?: string | number
+  type?: TaskMessageContentType | null
+  content?: string | null
+  audioUrl?: string | null
+  senderId?: string | number | null
+  userId?: string | number | null
+  authorUserId?: string | number | null
+  createdByUserId?: string | number | null
+  createdAt?: string | null
+  sentAt?: string | null
+  updatedAt?: string | null
+  [key: string]: unknown
+}
+
+export type RatingSubmissionPayloadType = {
+  taskAssignmentId: number
+  writtenByUserId: string
+  receivedByUserId: string
+  stars: number
+  comment?: string
+}
+
+export type RatingResponseType = {
+  id?: string | number
+  taskAssignmentId?: string | number | null
+  writtenByUserId?: string | null
+  receivedByUserId?: string | null
+  stars?: number | null
+  comment?: string | null
+  createdAt?: string
+  updatedAt?: string
+  [key: string]: unknown
+}
+
+export type RatingSummaryType = {
+  averageRating?: string | number | null
+  ratingsCount?: number | null
   [key: string]: unknown
 }
 
@@ -293,5 +319,37 @@ export type UploadResponseEnvelopeType = {
   data?: string | null
   message?: string | null
   statusCode?: number
+  [key: string]: unknown
+}
+
+export type InteractionResponseType = {
+  id?: string | number
+  interactionId?: string | number
+  taskAssignmentId?: string | number | null
+  createdAt?: string | null
+  updatedAt?: string | null
+  date?: string | null
+  summary?: string | null
+  message?: string | null
+  description?: string | null
+  rating?:
+    | number
+    | {
+        id?: string | number
+        createdAt?: string | null
+        taskAssignmentId?: string | number | null
+        writtenByUserId?: string | null
+        receivedByUserId?: string | null
+        stars?: number | null
+        comment?: string | null
+        [key: string]: unknown
+      }
+    | null
+  stars?: number | null
+  taskTitle?: string | null
+  task?: {
+    title?: string | null
+    [key: string]: unknown
+  } | null
   [key: string]: unknown
 }

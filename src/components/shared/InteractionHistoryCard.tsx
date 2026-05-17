@@ -21,6 +21,15 @@ export function InteractionHistoryCard({ item }: InteractionHistoryCardProps) {
           <p className="mt-3 text-base leading-7 text-slate-800">
             {getInteractionSummary(item.summary)}
           </p>
+
+          {item.comment?.trim() ? (
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Mesaj din review
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{item.comment}</p>
+            </div>
+          ) : null}
         </div>
 
         <div className="inline-flex shrink-0 self-start rounded-full border border-slate-200 bg-slate-50 px-3 py-2 sm:self-auto">

@@ -67,6 +67,8 @@ export function RequestDetailsPage() {
   const { taskId } = useParams()
   const isGuest = useAuthStore((state) => state.isGuest)
   const authUser = useAuthStore((state) => state.user)
+  const volunteerStatus = useAuthStore((state) => state.volunteerStatus)
+  const knownVolunteerUserIds = useAuthStore((state) => state.knownVolunteerUserIds)
   const volunteerProfile = useVolunteerProfileStore((state) =>
     authUser?.id ? state.profilesByUserId[authUser.id] : undefined,
   )
@@ -120,7 +122,14 @@ export function RequestDetailsPage() {
   const neededSkills = useMemo(() => readTaskNeededSkills(task), [task])
   const title = task?.title?.trim() || 'Cerere fără titlu'
   const isTaskUnavailable = hasMarkedTaskUnavailable || Boolean(task?.status && task.status !== 'OPEN')
-  const isVolunteer = Boolean(volunteerProfile)
+  const hasVolunteerRole = authUser?.role?.trim().toLowerCase() === 'volunteer'
+  const isKnownVolunteerUser = Boolean(authUser?.id && knownVolunteerUserIds[authUser.id])
+  const isVolunteer = Boolean(
+    volunteerProfile ||
+      volunteerStatus === 'volunteer' ||
+      hasVolunteerRole ||
+      isKnownVolunteerUser,
+  )
   const shouldDisableHelpAction = isTaskUnavailable
 
   function handleBack() {

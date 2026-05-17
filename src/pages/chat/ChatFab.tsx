@@ -5,22 +5,22 @@ import { ArrowUpRight, MessageCircle, MessageCircleOff, X } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useAuthStore } from '@/store/authStore'
 
-import { useMockConversations } from './hooks/useMockConversations'
+import { useBackendConversations } from './hooks/useBackendConversations'
 import type { Conversation } from './types'
 
 export function ChatFab() {
   const isMobile = useIsMobile()
   const location = useLocation()
   const navigate = useNavigate()
-  const user = useAuthStore((state) => state.user)
+  const isGuest = useAuthStore((state) => state.isGuest)
   const [isOpen, setIsOpen] = useState(false)
-  const { conversations } = useMockConversations(user)
+  const { conversations } = useBackendConversations()
 
   useEffect(() => {
     setIsOpen(false)
   }, [location.pathname])
 
-  if (location.pathname.startsWith('/chat')) {
+  if (location.pathname.startsWith('/chat') || isGuest) {
     return null
   }
 

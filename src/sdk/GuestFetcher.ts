@@ -2,8 +2,7 @@ import type { Fetcher } from './Fetcher'
 import type {
   ApiResponse,
   GuestSessionResponseType,
-  GuestTaskSubmissionPayloadType,
-  TaskFiltersType,
+  TaskSubmissionPayloadType,
   TaskResponseType,
 } from './types'
 
@@ -16,7 +15,7 @@ export class GuestFetcher {
 
   public createTask(
     sessionId: string,
-    payload: GuestTaskSubmissionPayloadType,
+    payload: TaskSubmissionPayloadType,
   ): Promise<ApiResponse<TaskResponseType>> {
     return this.fetcher.post<TaskResponseType>('/api/guest/tasks', payload, {
       headers: {
@@ -27,18 +26,18 @@ export class GuestFetcher {
 
   public listTasks(
     sessionId: string,
-    filters?: TaskFiltersType,
+    query?: Record<string, string | number | boolean | null | undefined>,
   ): Promise<ApiResponse<unknown>> {
     return this.fetcher.get<unknown>('/api/guest/tasks', {
       headers: {
         'X-Guest-Session': sessionId,
       },
-      query: filters,
+      query,
     })
   }
 
-  public deleteTask(sessionId: string, id: string): Promise<ApiResponse<null>> {
-    return this.fetcher.delete<null>(`/api/guest/tasks/${id}`, undefined, {
+  public deleteTask(sessionId: string, taskId: string): Promise<ApiResponse<unknown>> {
+    return this.fetcher.delete<unknown>(`/api/guest/tasks/${taskId}`, undefined, {
       headers: {
         'X-Guest-Session': sessionId,
       },

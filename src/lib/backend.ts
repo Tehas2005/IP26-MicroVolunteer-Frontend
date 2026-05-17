@@ -4,7 +4,7 @@ import type { FetcherConfigType } from '@/sdk/types'
 import { backendOrigin } from './apiConfig'
 
 const fetcher = new Fetcher({
-  baseURL: import.meta.env.DEV ? window.location.origin : backendOrigin,
+  baseURL: backendOrigin,
   headers: { 'Content-Type': 'application/json' },
   beforeSend: (config: FetcherConfigType) => ({
     ...config,

@@ -56,6 +56,8 @@ function resetStores() {
     user: null,
     isGuest: true,
     sessionStatus: 'ready',
+    volunteerStatus: 'unknown',
+    knownVolunteerUserIds: {},
   })
   useVolunteerProfileStore.setState({
     profilesByUserId: {},
@@ -71,6 +73,8 @@ function setAuthenticatedSession() {
     },
     isGuest: false,
     sessionStatus: 'ready',
+    volunteerStatus: 'not-volunteer',
+    knownVolunteerUserIds: {},
   })
 }
 
