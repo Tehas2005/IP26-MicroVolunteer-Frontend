@@ -21,6 +21,7 @@ export type FetcherRequestOptionsType = {
   headers?: Record<string, string>
   signal?: AbortSignal
   query?: Record<string, string | number | boolean | null | undefined>
+  suppressUnauthorizedEvent?: boolean
 }
 
 export type BetterAuthUserType = {

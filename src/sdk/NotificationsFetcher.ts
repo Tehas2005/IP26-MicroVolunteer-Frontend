@@ -15,14 +15,23 @@ export class NotificationsFetcher {
   ): Promise<ApiResponse<NotificationListResponseType>> {
     return this.fetcher.get<NotificationListResponseType>('/api/notifications', {
       query: filters,
+      suppressUnauthorizedEvent: true,
     })
   }
 
   public markAsRead(id: string): Promise<ApiResponse<NotificationRecordType>> {
-    return this.fetcher.patch<NotificationRecordType>(`/api/notifications/${id}/read`)
+    return this.fetcher.patch<NotificationRecordType>(`/api/notifications/${id}/read`, undefined, {
+      suppressUnauthorizedEvent: true,
+    })
   }
 
   public markAllAsRead(): Promise<ApiResponse<ReadAllNotificationsResponseType>> {
-    return this.fetcher.patch<ReadAllNotificationsResponseType>('/api/notifications/read-all')
+    return this.fetcher.patch<ReadAllNotificationsResponseType>(
+      '/api/notifications/read-all',
+      undefined,
+      {
+        suppressUnauthorizedEvent: true,
+      },
+    )
   }
 }

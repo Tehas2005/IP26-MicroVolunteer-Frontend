@@ -1,4 +1,5 @@
 const DEFAULT_BACKEND_ORIGIN = 'https://micro-volunteer-crisis-router.up.railway.app'
+const DEFAULT_LOCAL_BACKEND_ORIGIN = 'http://localhost:3000'
 
 function normalizeOrigin(url: string) {
   return url.replace(/\/+$/, '').replace(/\/api(?:\/auth)?$/, '')
@@ -17,5 +18,10 @@ export const backendOrigin = backendOriginEnv
   ? normalizeOrigin(backendOriginEnv)
   : DEFAULT_BACKEND_ORIGIN
 
-export const backendRealtimeOrigin =
-  import.meta.env.DEV && typeof window !== 'undefined' ? window.location.origin : backendOrigin
+export const backendRealtimeOrigin = import.meta.env.DEV
+  ? typeof window !== 'undefined'
+    ? window.location.origin
+    : backendOriginEnv
+      ? normalizeOrigin(backendOriginEnv)
+      : DEFAULT_LOCAL_BACKEND_ORIGIN
+  : backendOrigin

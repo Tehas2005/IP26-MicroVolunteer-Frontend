@@ -106,7 +106,7 @@ export class Fetcher {
     try {
       const response = await fetch(fullURL, requestOptions)
 
-      if (response.status === 401) {
+      if (response.status === 401 && !options?.suppressUnauthorizedEvent) {
         window.dispatchEvent(new CustomEvent('auth:unauthorized'))
       }
 

@@ -40,6 +40,7 @@ import { useAuthStore } from '@/store/authStore'
 
 const EMPTY_TASKS: TaskResponseType[] = []
 const EMPTY_REQUESTS: LiveRequestCardData[] = []
+const NOTIFICATIONS_WS_BOOT_TIMEOUT_MS = 2500
 
 function mergeNotifications(
   currentNotifications: VolunteerNotificationItem[],
@@ -52,11 +53,15 @@ function mergeNotifications(
   const notificationsById = new Map<string, VolunteerNotificationItem>()
 
   currentNotifications.forEach((notification) => {
-    notificationsById.set(notification.id, notification)
+    const notificationKey =
+      notification.request?.id ?? notification.relatedRequestId ?? notification.id
+    notificationsById.set(notificationKey, notification)
   })
 
   nextNotifications.forEach((notification) => {
-    notificationsById.set(notification.id, notification)
+    const notificationKey =
+      notification.request?.id ?? notification.relatedRequestId ?? notification.id
+    notificationsById.set(notificationKey, notification)
   })
 
   return Array.from(notificationsById.values())
@@ -77,9 +82,11 @@ export function HomePage() {
   const [activeNotifications, setActiveNotifications] = useState<VolunteerNotificationItem[]>([])
   const [selectedMyRequestId, setSelectedMyRequestId] = useState<string | null>(null)
   const [offersRevision, setOffersRevision] = useState(0)
+  const [notificationTransportStatus, setNotificationTransportStatus] = useState<
+    'idle' | 'active' | 'failed'
+  >('idle')
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
-  const hasHydratedBackendNotificationsRef = useRef(false)
   const requestLookupRef = useRef<Map<string, LiveRequestCardData>>(new Map())
 
   const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
@@ -145,13 +152,15 @@ export function HomePage() {
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
     !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
+  const shouldAttemptBackendNotifications =
+    sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
+  const shouldUseBackendNotifications =
+    shouldAttemptBackendNotifications && notificationTransportStatus !== 'failed'
 
   const displayedMyRequests = shouldUseMockLiveRequests ? mockLiveRequests.myRequests : myRequests
   const displayedVolunteerRequests = shouldUseMockLiveRequests
     ? mockLiveRequests.volunteerRequests
     : volunteerFeedRequests
-  const shouldUseBackendNotifications =
-    sessionStatus === 'ready' && !isGuest && !shouldUseMockLiveRequests
 
   const requestLookup = useMemo(() => {
     const nextLookup = new Map<string, LiveRequestCardData>()
@@ -168,6 +177,15 @@ export function HomePage() {
   }, [displayedMyRequests, displayedVolunteerRequests])
 
   useEffect(() => {
+    if (!shouldAttemptBackendNotifications) {
+      setNotificationTransportStatus('idle')
+      return
+    }
+
+    setNotificationTransportStatus('idle')
+  }, [authUser?.id, shouldAttemptBackendNotifications])
+
+  useEffect(() => {
     requestLookupRef.current = requestLookup
   }, [requestLookup])
 
@@ -175,7 +193,6 @@ export function HomePage() {
     if (isGuest || sessionStatus !== 'ready') {
       seenVolunteerRequestIdsRef.current.clear()
       hasInitializedVolunteerFeedRef.current = false
-      hasHydratedBackendNotificationsRef.current = false
       setActiveNotifications((currentNotifications) =>
         currentNotifications.length === 0 ? currentNotifications : [],
       )
@@ -188,10 +205,6 @@ export function HomePage() {
       setActiveNotifications((currentNotifications) =>
         currentNotifications.length === 0 ? currentNotifications : [],
       )
-      return
-    }
-
-    if (shouldUseBackendNotifications) {
       return
     }
 
@@ -220,20 +233,26 @@ export function HomePage() {
     })
 
     setActiveNotifications((currentNotifications) => {
-      const currentNotificationIds = new Set(currentNotifications.map((item) => item.id))
+      const existingRequestIds = new Set(
+        currentNotifications
+          .map((item) => item.request?.id ?? item.relatedRequestId)
+          .filter((requestId): requestId is string => Boolean(requestId)),
+      )
       const nextNotifications = unseenRequests
         .map((request) => createVolunteerNotification(request))
-        .filter((notification) => !currentNotificationIds.has(notification.id))
+        .filter((notification) => {
+          const requestId = notification.request?.id ?? notification.relatedRequestId
+
+          if (!requestId) {
+            return true
+          }
+
+          return !existingRequestIds.has(requestId)
+        })
 
       return [...currentNotifications, ...nextNotifications].slice(-4)
     })
-  }, [
-    isGuest,
-    sessionStatus,
-    shouldUseBackendNotifications,
-    shouldUseMockLiveRequests,
-    volunteerFeedRequests,
-  ])
+  }, [isGuest, sessionStatus, shouldUseMockLiveRequests, volunteerFeedRequests])
 
   const { data: unreadNotificationsPayload = null, isSuccess: hasLoadedUnreadNotifications } =
     useQuery({
@@ -260,31 +279,42 @@ export function HomePage() {
   )
 
   useEffect(() => {
-    if (!shouldUseBackendNotifications) {
-      hasHydratedBackendNotificationsRef.current = false
+    if (!shouldUseBackendNotifications || !hasLoadedUnreadNotifications) {
       return
     }
 
-    if (!hasLoadedUnreadNotifications || hasHydratedBackendNotificationsRef.current) {
-      return
-    }
-
-    hasHydratedBackendNotificationsRef.current = true
     setActiveNotifications((currentNotifications) =>
       mergeNotifications(currentNotifications, unreadNotificationItems),
     )
-  }, [
-    hasLoadedUnreadNotifications,
-    shouldUseBackendNotifications,
-    unreadNotificationItems,
-  ])
+  }, [hasLoadedUnreadNotifications, shouldUseBackendNotifications, unreadNotificationItems])
 
   useEffect(() => {
-    if (!shouldUseBackendNotifications) {
+    if (!shouldAttemptBackendNotifications || notificationTransportStatus !== 'idle') {
       return
     }
 
-    const socket = new WebSocket(buildNotificationsWebSocketUrl())
+    if (typeof window === 'undefined' || typeof window.WebSocket !== 'function') {
+      setNotificationTransportStatus('failed')
+      return
+    }
+
+    let hasOpened = false
+    let isDisposed = false
+    const socket = new window.WebSocket(buildNotificationsWebSocketUrl())
+    const bootTimeout = window.setTimeout(() => {
+      if (hasOpened || isDisposed) {
+        return
+      }
+
+      setNotificationTransportStatus('failed')
+      socket.close()
+    }, NOTIFICATIONS_WS_BOOT_TIMEOUT_MS)
+
+    socket.onopen = () => {
+      hasOpened = true
+      window.clearTimeout(bootTimeout)
+      setNotificationTransportStatus('active')
+    }
 
     socket.onmessage = (event) => {
       if (typeof event.data !== 'string') {
@@ -305,10 +335,27 @@ export function HomePage() {
       )
     }
 
+    socket.onerror = () => {
+      if (!hasOpened && !isDisposed) {
+        window.clearTimeout(bootTimeout)
+        setNotificationTransportStatus('failed')
+      }
+    }
+
+    socket.onclose = () => {
+      window.clearTimeout(bootTimeout)
+
+      if (!isDisposed) {
+        setNotificationTransportStatus('failed')
+      }
+    }
+
     return () => {
+      isDisposed = true
+      window.clearTimeout(bootTimeout)
       socket.close()
     }
-  }, [shouldUseBackendNotifications])
+  }, [notificationTransportStatus, shouldAttemptBackendNotifications])
 
   const displayedMyRequestsWithOfferSummary = useMemo(() => {
     void offersRevision
