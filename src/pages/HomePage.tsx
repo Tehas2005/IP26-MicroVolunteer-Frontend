@@ -26,7 +26,6 @@ import {
 } from '@/lib/liveRequests'
 import {
   cancelMockRequestConversations,
-  ensureMockConversation,
   ensureMockConversationForAcceptedOffer,
   resolveChatViewerIdentity,
 } from '@/lib/mockChat'
@@ -557,11 +556,9 @@ export function HomePage() {
 
   const handleVolunteerRequestOpen = useCallback(
     (request: LiveRequestCardData) => {
-      const identity = resolveChatViewerIdentity(authUser)
-      const conversation = ensureMockConversation(request, identity)
-      navigate(`/chat/${conversation.id}`)
+      navigate(`/cereri/${request.id}`)
     },
-    [authUser, navigate],
+    [navigate],
   )
 
   const handleMyRequestOpen = useCallback((request: LiveRequestCardData) => {
