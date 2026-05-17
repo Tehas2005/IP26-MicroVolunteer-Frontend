@@ -198,6 +198,11 @@ export type OfferResponseType = {
   [key: string]: unknown
 }
 
+export type OfferSubmissionPayloadType = {
+  message: string
+  [key: string]: unknown
+}
+
 export type OfferStatusPayloadType = {
   status: OfferStatusType
   [key: string]: unknown
