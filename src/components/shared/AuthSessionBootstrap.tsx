@@ -77,6 +77,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
 
         if (response.error) {
           console.log(response.error.message || 'get-session failed')
+          clearAuthSession()
           return
         }
 
@@ -129,6 +130,8 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
         clearAuthSession()
       } catch {
         if (!isMounted) return
+
+        clearAuthSession()
       } finally {
         if (isMounted) {
           setSessionStatus('ready')

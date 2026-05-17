@@ -93,6 +93,65 @@ describe('AuthSessionBootstrap', () => {
     expect(useAuthStore.getState().user).toBeNull()
   })
 
+  it('curata sesiunea locala daca getSession intoarce response.error', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 'user-1',
+        name: 'Ion',
+        email: 'ion@example.com',
+        accountStatus: 'ACTIVE',
+      },
+      isGuest: false,
+      sessionStatus: 'ready',
+    })
+
+    getSessionMock.mockResolvedValue({
+      data: null,
+      error: { message: 'unauthorized' },
+    })
+
+    render(
+      <AuthSessionBootstrap>
+        <div>Aplicatie</div>
+      </AuthSessionBootstrap>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+    })
+
+    expect(useAuthStore.getState().isGuest).toBe(true)
+    expect(useAuthStore.getState().user).toBeNull()
+  })
+
+  it('curata sesiunea locala daca getSession arunca exceptie', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 'user-1',
+        name: 'Ion',
+        email: 'ion@example.com',
+        accountStatus: 'ACTIVE',
+      },
+      isGuest: false,
+      sessionStatus: 'ready',
+    })
+
+    getSessionMock.mockRejectedValue(new Error('network failed'))
+
+    render(
+      <AuthSessionBootstrap>
+        <div>Aplicatie</div>
+      </AuthSessionBootstrap>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Aplicatie')).toBeInTheDocument()
+    })
+
+    expect(useAuthStore.getState().isGuest).toBe(true)
+    expect(useAuthStore.getState().user).toBeNull()
+  })
+
   it('pastreaza accountStatus-ul din sesiunea returnata de backend', async () => {
     getSessionMock.mockResolvedValue({
       data: {
