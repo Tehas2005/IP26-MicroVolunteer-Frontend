@@ -10,6 +10,12 @@ import VolunteerNotificationStack from '@/components/shared/VolunteerNotificatio
 import { Button } from '@/components/ui/button'
 import { backend } from '@/lib/backend'
 import {
+  clearGuestSessionId,
+  extractGuestSessionId,
+  getStoredGuestSessionId,
+  storeGuestSessionId,
+} from '@/lib/guestSession'
+import {
   extractOfferRedirectMeta,
   extractTaskOffers,
   getReceivedOffersSummaryFromOffers,
@@ -94,9 +100,32 @@ export function HomePage() {
   >('idle')
   const seenVolunteerRequestIdsRef = useRef<Set<string>>(new Set())
   const hasInitializedVolunteerFeedRef = useRef(false)
+  const [guestSessionId, setGuestSessionId] = useState<string | null>(() =>
+    getStoredGuestSessionId(),
+  )
   const requestLookupRef = useRef<Map<string, LiveRequestCardData>>(new Map())
 
-  const { data: liveTasksData, isLoading: isLoadingLiveRequests } = useQuery({
+  useEffect(() => {
+    setGuestSessionId(isGuest ? getStoredGuestSessionId() : null)
+  }, [isGuest, sessionStatus])
+
+  const recreateGuestSession = useCallback(async () => {
+    clearGuestSessionId()
+    setGuestSessionId(null)
+
+    const response = await backend.guest.createSession()
+    const nextSessionId = response.success ? extractGuestSessionId(response.data) : null
+
+    if (!nextSessionId) {
+      return null
+    }
+
+    storeGuestSessionId(nextSessionId)
+    setGuestSessionId(nextSessionId)
+    return nextSessionId
+  }, [])
+
+  const { data: liveTasksData, isLoading: isLoadingAuthenticatedLiveRequests } = useQuery({
     queryKey: ['live-requests', authUser?.id],
     enabled: sessionStatus === 'ready' && !isGuest,
     refetchInterval: 15000,
@@ -115,10 +144,61 @@ export function HomePage() {
       return extractTasksList(response.data)
     },
   })
+
+  const { data: guestLiveTasksData, isLoading: isLoadingGuestLiveRequests } = useQuery({
+    queryKey: ['guest-live-requests', guestSessionId],
+    enabled: sessionStatus === 'ready' && isGuest && Boolean(guestSessionId),
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
+    queryFn: async () => {
+      if (!guestSessionId) {
+        return EMPTY_TASKS
+      }
+
+      let response = await backend.guest.listTasks(guestSessionId, {
+        page: 1,
+        pageSize: 50,
+        status: 'OPEN',
+      })
+
+      if (!response.success && response.isUnauthorized) {
+        const nextSessionId = await recreateGuestSession()
+
+        if (nextSessionId) {
+          response = await backend.guest.listTasks(nextSessionId, {
+            page: 1,
+            pageSize: 50,
+            status: 'OPEN',
+          })
+        }
+      }
+
+      if (!response.success) {
+        throw new Error(response.message || 'Nu am putut încărca cererile tale.')
+      }
+
+      return extractTasksList(response.data)
+    },
+  })
+
   const liveTasks = liveTasksData ?? EMPTY_TASKS
+  const guestLiveTasks = guestLiveTasksData ?? EMPTY_TASKS
+  const isLoadingLiveRequests = isLoadingAuthenticatedLiveRequests || isLoadingGuestLiveRequests
 
   const { myRequests, volunteerFeedRequests } = useMemo(() => {
-    if (isGuest || !authUser) {
+    if (isGuest) {
+      return {
+        myRequests: guestLiveTasks.map((task) =>
+          mapTaskToLiveRequestCard(task, {
+            currentUserName: 'Vizitator',
+            isOwnedByCurrentUser: true,
+          }),
+        ),
+        volunteerFeedRequests: EMPTY_REQUESTS,
+      }
+    }
+
+    if (!authUser) {
       return {
         myRequests: EMPTY_REQUESTS,
         volunteerFeedRequests: EMPTY_REQUESTS,
@@ -154,11 +234,11 @@ export function HomePage() {
         }),
       ),
     }
-  }, [authUser, isGuest, liveTasks])
+  }, [authUser, guestLiveTasks, isGuest, liveTasks])
 
   const mockLiveRequests = useMemo(() => getMockLiveRequestSections(authUser), [authUser])
   const shouldUseMockLiveRequests =
-    !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
+    !isGuest && !isLoadingLiveRequests && myRequests.length === 0 && volunteerFeedRequests.length === 0
   const shouldAttemptBackendNotifications = sessionStatus === 'ready' && !isGuest
   const shouldUseBackendNotifications =
     shouldAttemptBackendNotifications && notificationTransportStatus !== 'failed'

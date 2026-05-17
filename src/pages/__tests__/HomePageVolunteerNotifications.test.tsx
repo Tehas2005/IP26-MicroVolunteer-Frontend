@@ -187,7 +187,7 @@ describe('HomePage volunteer notifications', () => {
       await user.click(screen.getByRole('button', { name: 'Vezi detalii' }))
 
       expect(markNotificationAsReadMock).not.toHaveBeenCalled()
-      expect(navigateMock).toHaveBeenCalledWith(expect.stringMatching(/^\/chat\//))
+      expect(navigateMock).toHaveBeenCalledWith('/cereri/777')
     },
     20000,
   )

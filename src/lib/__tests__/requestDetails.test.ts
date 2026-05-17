@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import type { TaskResponseType } from '@/sdk/types'
 
 import {
+  buildRequestDetailsPayload,
   extractTaskResponseData,
+  hasCompleteRequestDetailsInput,
+  hasPartialRequestDetailsInput,
+  hasRequestDetailsInput,
   mapOfferSubmitErrorMessage,
   readRequestDetails,
   readTaskAudioUrl,
@@ -37,6 +41,30 @@ describe('requestDetails helpers', () => {
       languageNeeded: UNSPECIFIED_REQUEST_DETAIL,
       safetyNotes: UNSPECIFIED_REQUEST_DETAIL,
     })
+  })
+
+  it('marcheaza payload-ul partial cand lipseste cel putin un camp', () => {
+    const payload = buildRequestDetailsPayload('context', '', 'acces seara')
+
+    expect(hasRequestDetailsInput(payload)).toBe(true)
+    expect(hasCompleteRequestDetailsInput(payload)).toBe(false)
+    expect(hasPartialRequestDetailsInput(payload)).toBe(true)
+  })
+
+  it('marcheaza payload-ul complet cand toate detaliile sunt completate', () => {
+    const payload = buildRequestDetailsPayload('context', 'romana', 'acces seara')
+
+    expect(hasRequestDetailsInput(payload)).toBe(true)
+    expect(hasCompleteRequestDetailsInput(payload)).toBe(true)
+    expect(hasPartialRequestDetailsInput(payload)).toBe(false)
+  })
+
+  it('nu marcheaza payload-ul gol ca detalii de salvat', () => {
+    const payload = buildRequestDetailsPayload('', ' ', '   ')
+
+    expect(hasRequestDetailsInput(payload)).toBe(false)
+    expect(hasCompleteRequestDetailsInput(payload)).toBe(false)
+    expect(hasPartialRequestDetailsInput(payload)).toBe(false)
   })
 
   it('prefers the backend audioUrl when present', () => {
