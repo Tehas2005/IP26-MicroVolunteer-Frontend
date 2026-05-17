@@ -4,6 +4,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
+
 import VolunteerProfilePage from './VolunteerProfilePage'
 
 const {
@@ -61,6 +63,9 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
   beforeEach(() => {
     window.localStorage.clear()
     window.confirm = vi.fn(() => true)
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {},
+    })
     mockCreateVolunteerProfile.mockReset()
     mockGetByUserId.mockReset()
     mockGetVolunteerProfile.mockReset()
@@ -116,6 +121,9 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {},
+    })
   })
 
   it('randează corect câmpurile pentru distanță și locație', () => {
@@ -214,6 +222,12 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
         skills: [],
       })
       expect(mockUpdateMe).toHaveBeenCalledWith({ hiddenIdentity: false })
+      expect(useVolunteerProfileStore.getState().profilesByUserId['1']).toMatchObject({
+        hiddenIdentity: false,
+        location: 'Cluj-Napoca',
+        locationCoordinates: { x: 23.5899542, y: 46.769379 },
+        skills: [],
+      })
     })
   })
 

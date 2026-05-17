@@ -12,6 +12,7 @@ import type {
   VolunteerProfilePayloadType,
 } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
+import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
 import {
   addKnownLocation,
@@ -190,6 +191,7 @@ function buildVolunteerProfilePayload(draft: ProfileDraft): VolunteerProfilePayl
 
 export default function VolunteerProfilePage() {
   const authUser = useAuthStore((state) => state.user)
+  const upsertVolunteerProfile = useVolunteerProfileStore((state) => state.upsertVolunteerProfile)
 
   const [maxDistanceKm, setMaxDistanceKm] = useState(EMPTY_DRAFT.maxDistanceKm)
   const [currentLocation, setCurrentLocation] = useState(EMPTY_DRAFT.currentLocation)
@@ -312,6 +314,18 @@ export default function VolunteerProfilePage() {
           setHiddenIdentity(localDraft.hiddenIdentity)
         }
 
+        const remoteCurrentLocation = remoteDraft?.currentLocation.trim() ?? ''
+        const remoteLocationCoordinates = resolveVolunteerLocationPoint(remoteCurrentLocation)
+
+        if (authUser?.id && remoteDraft && remoteCurrentLocation && remoteLocationCoordinates) {
+          upsertVolunteerProfile(authUser.id, {
+            hiddenIdentity: remoteDraft.hiddenIdentity,
+            location: remoteCurrentLocation,
+            locationCoordinates: remoteLocationCoordinates,
+            skills: remoteDraft.skills,
+          })
+        }
+
         setLastSavedDraft(nextDraft)
         setHasRemoteVolunteerProfile(Boolean(remoteVolunteerProfile))
 
@@ -339,7 +353,7 @@ export default function VolunteerProfilePage() {
     return () => {
       isMounted = false
     }
-  }, [authUser?.id, draftKey])
+  }, [authUser?.id, draftKey, upsertVolunteerProfile])
 
   useEffect(() => {
     if (!draftKey || !hasHydratedDraft) {
@@ -499,12 +513,34 @@ export default function VolunteerProfilePage() {
       }
 
       if (hasSyncedVolunteerProfile && hasSyncedPrivacy) {
+        const persistedLocationCoordinates = resolveVolunteerLocationPoint(persistedDraft.currentLocation)
+
+        if (authUser?.id && persistedDraft.currentLocation && persistedLocationCoordinates) {
+          upsertVolunteerProfile(authUser.id, {
+            hiddenIdentity: persistedDraft.hiddenIdentity,
+            location: persistedDraft.currentLocation,
+            locationCoordinates: persistedLocationCoordinates,
+            skills: persistedDraft.skills,
+          })
+        }
+
         setLastSavedDraft(persistedDraft)
         setSaveMessage('Setarile profilului au fost salvate si sincronizate.')
         return
       }
 
       if (hasSyncedVolunteerProfile) {
+        const persistedLocationCoordinates = resolveVolunteerLocationPoint(persistedDraft.currentLocation)
+
+        if (authUser?.id && persistedDraft.currentLocation && persistedLocationCoordinates) {
+          upsertVolunteerProfile(authUser.id, {
+            hiddenIdentity: persistedDraft.hiddenIdentity,
+            location: persistedDraft.currentLocation,
+            locationCoordinates: persistedLocationCoordinates,
+            skills: persistedDraft.skills,
+          })
+        }
+
         setLastSavedDraft(persistedDraft)
         setSaveMessage(
           'Datele profilului de voluntar au fost salvate. Confidentialitatea nu a putut fi sincronizata.',
