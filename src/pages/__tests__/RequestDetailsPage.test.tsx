@@ -30,33 +30,15 @@ const taskResponse = {
   isForbidden: false,
 }
 
-const successOfferResponse = {
-  success: true,
+const assignedTaskResponse = {
+  ...taskResponse,
   data: {
-    id: 'offer-1',
-    helpRequestId: 'task-1',
-    message: 'Pot ajunge imediat.',
-    status: 'PENDING',
+    data: {
+      ...taskResponse.data.data,
+      status: 'ASSIGNED',
+      helperUserId: 'volunteer-1',
+    },
   },
-  message: '',
-  status: 201,
-  isClientError: false,
-  isServerError: false,
-  isNotFound: false,
-  isUnauthorized: false,
-  isForbidden: false,
-}
-
-const forbiddenVolunteerResponse = {
-  success: false,
-  data: null,
-  message: 'Only volunteers can create offers',
-  status: 403,
-  isClientError: true,
-  isServerError: false,
-  isNotFound: false,
-  isUnauthorized: false,
-  isForbidden: true,
 }
 
 function resetStores() {
@@ -112,7 +94,6 @@ describe('RequestDetailsPage', () => {
   beforeEach(() => {
     resetStores()
     vi.spyOn(backend.tasks, 'getById').mockResolvedValue(taskResponse as never)
-    vi.spyOn(backend.tasks, 'createOffer').mockResolvedValue(successOfferResponse)
     vi.spyOn(backend.offers, 'getMine').mockResolvedValue({
       success: false,
       data: null,
@@ -139,12 +120,12 @@ describe('RequestDetailsPage', () => {
     expect(screen.getByText('Față în față')).toBeInTheDocument()
     expect(screen.getAllByText('MERGEȚI REPEDE')).not.toHaveLength(0)
     expect(screen.getByText('Locație: Iasi')).toBeInTheDocument()
-    expect(screen.getByText('Ridicare medicamente')).toBeInTheDocument()
-    expect(screen.getByText('Traducere')).toBeInTheDocument()
+    expect(screen.getAllByText('Ridicare medicamente')).not.toHaveLength(0)
+    expect(screen.getAllByText('Traducere')).not.toHaveLength(0)
     expect(screen.getByText('Abilități necesare')).toBeInTheDocument()
   })
 
-  it('permite voluntarului validat de backend să deschidă și să trimită oferta', async () => {
+  it('permite voluntarului validat de backend să intre în pasul următor al fluxului', async () => {
     const user = userEvent.setup()
     vi.mocked(backend.offers.getMine).mockResolvedValueOnce({
       success: true,
@@ -167,20 +148,19 @@ describe('RequestDetailsPage', () => {
     })
 
     await user.click(screen.getByRole('button', { name: 'Vreau să ajut' }))
-    await user.type(
-      screen.getByLabelText('Mesaj de introducere'),
-      'Pot ajunge imediat și pot interveni rapid.',
-    )
-    await user.click(screen.getByRole('button', { name: 'Trimite oferta de ajutor' }))
 
-    await waitFor(() => {
-      expect(backend.tasks.createOffer).toHaveBeenCalledWith('task-1', {
-        message: 'Pot ajunge imediat și pot interveni rapid.',
-      })
-    })
+    expect(await screen.findByRole('heading', { name: 'Vreau să ajut' })).toBeInTheDocument()
     expect(
-      await screen.findByText('Oferta ta a fost trimisă. Așteaptă răspunsul utilizatorului!'),
+      screen.getByText(
+        /Din această pagină se deschide fluxul de trimitere a ofertei de ajutor pentru cererea selectată\./,
+      ),
     ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Formularul complet pentru trimiterea ofertei de ajutor continuă în taskul dedicat acestui pas\./,
+      ),
+    )
+    expect(screen.getByRole('button', { name: 'Continuă' })).toBeInTheDocument()
   })
 
   it('afișează acces restricționat pentru un user care nu este voluntar', async () => {
@@ -202,10 +182,8 @@ describe('RequestDetailsPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('traduce răspunsul backend când userul nu este voluntar', async () => {
+  it('permite și utilizatorului cu profil local de voluntar să intre în pasul următor', async () => {
     const user = userEvent.setup()
-    vi.mocked(backend.tasks.createOffer).mockResolvedValueOnce(forbiddenVolunteerResponse)
-
     setAuthenticatedSession()
     useVolunteerProfileStore.setState({
       profilesByUserId: {
@@ -225,9 +203,25 @@ describe('RequestDetailsPage', () => {
 
     await screen.findByRole('heading', { name: 'Ridicare pastile' })
     await user.click(screen.getByRole('button', { name: 'Vreau să ajut' }))
-    await user.type(screen.getByLabelText('Mesaj de introducere'), 'Pot ajuta.')
-    await user.click(screen.getByRole('button', { name: 'Trimite oferta de ajutor' }))
 
-    expect(await screen.findByText('Doar voluntarii pot trimite oferte pentru cereri.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Vreau să ajut' })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Formularul complet pentru trimiterea ofertei de ajutor continuă în taskul dedicat acestui pas\./,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('dezactivează preluarea când cererea este deja atribuită altui voluntar', async () => {
+    vi.mocked(backend.tasks.getById).mockResolvedValueOnce(assignedTaskResponse as never)
+    setAuthenticatedSession()
+
+    renderRequestDetailsPage()
+
+    expect(await screen.findByRole('heading', { name: 'Ridicare pastile' })).toBeInTheDocument()
+    expect(
+      screen.getByText('Această cerere de ajutor a fost deja preluată de alt voluntar.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cerere deja preluată' })).toBeDisabled()
   })
 })

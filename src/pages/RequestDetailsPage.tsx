@@ -5,13 +5,13 @@ import {
   CircleAlert,
   Headphones,
   Languages,
-  ListChecks,
   MapPin,
   ShieldAlert,
   StickyNote,
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -20,18 +20,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { backend } from '@/lib/backend'
 import {
   extractTaskResponseData,
-  mapOfferSubmitErrorMessage,
   readRequestDetails,
   readTaskAudioUrl,
   readTaskCategoryLabel,
+  readTaskDeclaredLocation,
+  readTaskNeededSkills,
   readTaskTextDescription,
   readTaskUrgencyMeta,
-  readRequestSummary,
   UNSPECIFIED_REQUEST_DETAIL,
 } from '@/lib/requestDetails'
 import { useAuthStore } from '@/store/authStore'
@@ -44,17 +42,17 @@ function DetailCard({
 }: {
   icon: React.ReactNode
   label: string
-  value: string
+  value: React.ReactNode
 }) {
   return (
-    <article className="rounded-[28px] border border-brand-gray/80 bg-white p-5 shadow-sm">
-      <div className="flex items-start gap-3">
+    <article className="rounded-[28px] border border-brand-gray/80 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="flex h-full flex-col items-center text-center">
         <div className="rounded-2xl bg-brand-purple-light p-3 text-brand-purple-dark">{icon}</div>
-        <div className="min-w-0">
+        <div className="mt-4 min-w-0">
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-brand-gray-text">
             {label}
           </p>
-          <p className="mt-2 text-sm leading-7 text-brand-black/85">{value}</p>
+          <div className="mt-3 text-sm leading-7 text-brand-black/85">{value}</div>
         </div>
       </div>
     </article>
@@ -71,10 +69,6 @@ export function RequestDetailsPage() {
   )
   const [isAccessDialogOpen, setIsAccessDialogOpen] = useState(false)
   const [isOfferDialogOpen, setIsOfferDialogOpen] = useState(false)
-  const [offerMessage, setOfferMessage] = useState('')
-  const [offerError, setOfferError] = useState<string | null>(null)
-  const [offerSuccessMessage, setOfferSuccessMessage] = useState<string | null>(null)
-  const [isSubmittingOffer, setIsSubmittingOffer] = useState(false)
 
   const {
     data: task,
@@ -87,7 +81,7 @@ export function RequestDetailsPage() {
     retry: false,
     queryFn: async () => {
       if (!taskId) {
-        throw new Error('Cererea nu a putut fi identificata.')
+        throw new Error('Cererea nu a putut fi identificată.')
       }
 
       const response = await backend.tasks.getById(taskId)
@@ -95,23 +89,27 @@ export function RequestDetailsPage() {
       if (!response.success || !response.data) {
         throw new Error(
           response.isUnauthorized
-            ? 'Trebuie sa fii autentificat pentru a vedea detaliile acestei cereri.'
-            : response.message || 'Nu am putut incarca detaliile cererii.',
+            ? 'Trebuie să fii autentificat pentru a vedea detaliile acestei cereri.'
+            : response.message || 'Nu am putut încărca detaliile cererii.',
         )
       }
 
       const taskData = extractTaskResponseData(response.data)
 
       if (!taskData) {
-        throw new Error('Detaliile cererii au venit intr-un format neasteptat.')
+        throw new Error('Detaliile cererii au venit într-un format neașteptat.')
       }
 
       return taskData
     },
   })
-  const { data: hasVolunteerAccess = false, isLoading: isCheckingVolunteerAccess } = useQuery({
+
+  const {
+    data: hasVolunteerAccess = false,
+    isLoading: isCheckingVolunteerAccess,
+  } = useQuery({
     queryKey: ['request-details-volunteer-access', authUser?.id],
-    enabled: Boolean(authUser) && !isGuest && !volunteerProfile,
+    enabled: Boolean(authUser) && !isGuest && authUser?.role !== 'volunteer' && !volunteerProfile,
     retry: false,
     queryFn: async () => {
       const response = await backend.offers.getMine(1, 1)
@@ -120,14 +118,22 @@ export function RequestDetailsPage() {
   })
 
   const requestDetails = useMemo(() => readRequestDetails(task), [task])
-  const requestSummary = useMemo(() => readRequestSummary(task), [task])
   const audioUrl = useMemo(() => readTaskAudioUrl(task), [task])
   const visibleDescription = useMemo(() => readTaskTextDescription(task), [task])
   const urgency = useMemo(() => readTaskUrgencyMeta(task?.urgency), [task])
   const categoryLabel = useMemo(() => readTaskCategoryLabel(task?.category), [task])
+  const declaredLocation = useMemo(() => readTaskDeclaredLocation(task), [task])
+  const neededSkills = useMemo(() => readTaskNeededSkills(task), [task])
   const title = task?.title?.trim() || 'Cerere fără titlu'
-  const isVolunteer = Boolean(volunteerProfile) || hasVolunteerAccess
-  const shouldDisableHelpAction = isSubmittingOffer || (Boolean(authUser) && !volunteerProfile && isCheckingVolunteerAccess)
+  const isTaskUnavailable = Boolean(task?.status && task.status !== 'OPEN')
+  const isVolunteer =
+    authUser?.role === 'volunteer' || Boolean(volunteerProfile) || hasVolunteerAccess
+  const shouldDisableHelpAction =
+    isTaskUnavailable ||
+    (Boolean(authUser) &&
+      authUser?.role !== 'volunteer' &&
+      !volunteerProfile &&
+      isCheckingVolunteerAccess)
 
   function handleBack() {
     if (window.history.length > 1) {
@@ -139,7 +145,7 @@ export function RequestDetailsPage() {
   }
 
   function handleHelpAction() {
-    if (isCheckingVolunteerAccess && !volunteerProfile) {
+    if (shouldDisableHelpAction) {
       return
     }
 
@@ -148,47 +154,11 @@ export function RequestDetailsPage() {
       return
     }
 
-    setOfferError(null)
-    setOfferSuccessMessage(null)
     setIsOfferDialogOpen(true)
   }
 
   function handleOfferDialogChange(nextOpen: boolean) {
     setIsOfferDialogOpen(nextOpen)
-
-    if (!nextOpen && !isSubmittingOffer) {
-      setOfferError(null)
-    }
-  }
-
-  async function handleOfferSubmit() {
-    if (!taskId) {
-      setOfferError('Nu am putut identifica cererea pentru care vrei să trimiți oferta.')
-      return
-    }
-
-    const normalizedMessage = offerMessage.trim()
-
-    if (!normalizedMessage) {
-      setOfferError('Te rugăm să introduci un mesaj de prezentare.')
-      return
-    }
-
-    setIsSubmittingOffer(true)
-    setOfferError(null)
-
-    const response = await backend.tasks.createOffer(taskId, { message: normalizedMessage })
-
-    if (!response.success) {
-      setOfferError(mapOfferSubmitErrorMessage(response.message))
-      setIsSubmittingOffer(false)
-      return
-    }
-
-    setOfferSuccessMessage('Oferta ta a fost trimisă. Așteaptă răspunsul utilizatorului!')
-    setOfferMessage('')
-    setIsSubmittingOffer(false)
-    setIsOfferDialogOpen(false)
   }
 
   return (
@@ -240,7 +210,8 @@ export function RequestDetailsPage() {
           ) : (
             <>
               <div className="border-b border-brand-gray/80 bg-brand-purple-light/30 px-6 py-8 sm:px-8 lg:px-10">
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
+                  <div className="flex flex-wrap items-center justify-center gap-3">
                   <span
                     className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${urgency.badgeClassName}`}
                   >
@@ -252,60 +223,79 @@ export function RequestDetailsPage() {
                   </span>
                 </div>
 
-                <h1 className="mt-5 text-3xl font-bold tracking-tight text-brand-black sm:text-4xl">
-                  {title}
-                </h1>
+                  <h1 className="mt-5 text-3xl font-bold tracking-tight text-brand-black sm:text-4xl md:text-5xl">
+                    {title}
+                  </h1>
 
-                <p className="mt-4 max-w-3xl text-base leading-8 text-brand-gray-text sm:text-lg">
-                  {visibleDescription ||
-                    (audioUrl
-                      ? 'Cererea include un mesaj vocal. Îl poți asculta în secțiunea audio de mai jos.'
-                      : UNSPECIFIED_REQUEST_DETAIL)}
-                </p>
+                  <p className="mt-4 max-w-3xl text-base leading-8 text-brand-gray-text sm:text-lg">
+                    {visibleDescription ||
+                      (audioUrl
+                        ? 'Cererea include un mesaj vocal. Îl poți asculta în secțiunea audio de mai jos.'
+                        : UNSPECIFIED_REQUEST_DETAIL)}
+                  </p>
 
-                <div className="mt-5 flex flex-wrap gap-3">
-                  {requestSummary.location !== UNSPECIFIED_REQUEST_DETAIL ? (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-brand-purple-light px-4 py-2 text-sm font-semibold text-brand-purple-dark">
-                      <MapPin className="h-4 w-4" />
-                      Locație: {requestSummary.location}
-                    </span>
+                  {isTaskUnavailable ? (
+                    <div className="mt-6 w-full max-w-2xl rounded-[24px] border border-brand-red/20 bg-brand-red/5 px-5 py-4 text-center">
+                      <p className="text-sm font-semibold text-brand-red">
+                        Această cerere de ajutor a fost deja preluată de alt voluntar.
+                      </p>
+                    </div>
                   ) : null}
+                </div>
+              </div>
 
-                  {requestSummary.skills.map((skill) => (
+              <div className="px-6 py-8 sm:px-8 lg:px-10">
+                <div className="mb-8 flex flex-wrap justify-center gap-3">
+                  <span className="rounded-full bg-brand-purple-light px-4 py-2 text-sm font-medium text-brand-purple-dark">
+                    <span className="inline-flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Locație: {declaredLocation}
+                    </span>
+                  </span>
+                  {neededSkills.map((skill) => (
                     <span
                       key={skill}
-                      className="inline-flex items-center gap-2 rounded-full border border-brand-purple/20 bg-white px-4 py-2 text-sm font-semibold text-brand-purple-dark"
+                      className="rounded-full border border-brand-purple/25 bg-white px-4 py-2 text-sm font-medium text-brand-purple-dark"
                     >
                       {skill}
                     </span>
                   ))}
                 </div>
-              </div>
 
-              <div className="px-6 py-8 sm:px-8 lg:px-10">
                 <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-4">
                   <DetailCard
                     icon={<StickyNote className="h-5 w-5" />}
                     label="Notițe"
-                    value={requestDetails.notes}
+                    value={<p className="whitespace-pre-line">{requestDetails.notes}</p>}
                   />
                   <DetailCard
                     icon={<Languages className="h-5 w-5" />}
-                    label="Limba necesară"
-                    value={requestDetails.languageNeeded}
+                    label="Limbă necesară"
+                    value={<p className="whitespace-pre-line">{requestDetails.languageNeeded}</p>}
                   />
                   <DetailCard
                     icon={<ShieldAlert className="h-5 w-5" />}
                     label="Notițe de siguranță"
-                    value={requestDetails.safetyNotes}
+                    value={<p className="whitespace-pre-line">{requestDetails.safetyNotes}</p>}
                   />
                   <DetailCard
-                    icon={<ListChecks className="h-5 w-5" />}
+                    icon={<StickyNote className="h-5 w-5" />}
                     label="Abilități necesare"
                     value={
-                      requestSummary.skills.length > 0
-                        ? requestSummary.skills.join(', ')
-                        : UNSPECIFIED_REQUEST_DETAIL
+                      neededSkills.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {neededSkills.map((skill) => (
+                            <span
+                              key={skill}
+                              className="rounded-full bg-brand-purple-light px-3 py-1.5 text-sm font-medium text-brand-purple-dark"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>{UNSPECIFIED_REQUEST_DETAIL}</p>
+                      )
                     }
                   />
                 </div>
@@ -337,19 +327,13 @@ export function RequestDetailsPage() {
 
       {!isLoading && !error && task ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-brand-gray/80 bg-white/95 px-4 py-4 shadow-[0_-10px_30px_rgba(26,26,26,0.08)] backdrop-blur-sm sm:px-6">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
             <div className="hidden sm:block">
               <p className="text-sm font-semibold text-brand-black">Ai parcurs toate detaliile?</p>
               <p className="text-sm text-brand-gray-text">
                 Dacă poți interveni, continuă cu pasul de ajutor.
               </p>
             </div>
-
-            {offerSuccessMessage ? (
-              <div className="w-full rounded-2xl border border-brand-green/20 bg-brand-green/10 px-4 py-3 text-sm font-medium text-brand-green sm:order-last sm:w-auto sm:max-w-md">
-                {offerSuccessMessage}
-              </div>
-            ) : null}
 
             <Button
               className="w-full sm:w-auto sm:min-w-[260px]"
@@ -358,7 +342,11 @@ export function RequestDetailsPage() {
               size="lg"
               variant="auth"
             >
-              {isCheckingVolunteerAccess && !volunteerProfile ? 'Verificăm accesul...' : 'Vreau să ajut'}
+              {isTaskUnavailable
+                ? 'Cerere deja preluată'
+                : isCheckingVolunteerAccess && !volunteerProfile && authUser?.role !== 'volunteer'
+                  ? 'Verificăm accesul...'
+                  : 'Vreau să ajut'}
             </Button>
           </div>
         </div>
@@ -386,39 +374,31 @@ export function RequestDetailsPage() {
         <DialogContent className="rounded-[28px] p-0 sm:max-w-lg" showCloseButton={false}>
           <DialogHeader className="px-6 pt-6">
             <DialogTitle className="text-xl font-bold text-brand-black">
-              Oferta de ajutor
+              Vreau să ajut
             </DialogTitle>
             <DialogDescription className="pt-2 text-sm leading-7 text-brand-gray-text">
-              Lasă un mesaj scurt prin care te prezinți și explici cum poți interveni pentru această
-              cerere.
+              Din această pagină se deschide fluxul de trimitere a ofertei de ajutor pentru
+              cererea selectată.
             </DialogDescription>
           </DialogHeader>
-          <div className="px-6 pb-1">
-            <label className="text-lg font-semibold text-brand-black" htmlFor="request-offer-message">
-              Mesaj de introducere
-            </label>
-            <Textarea
-              className="mt-4 min-h-[220px] rounded-[28px] border-brand-gray px-5 py-4 text-base leading-7"
-              id="request-offer-message"
-              onChange={(event) => {
-                setOfferMessage(event.target.value)
-                if (offerError) {
-                  setOfferError(null)
-                }
-              }}
-              placeholder="Ex: Sunt disponibil în următoarea oră și pot ajunge rapid."
-              value={offerMessage}
-            />
-            {offerError ? (
-              <p className="mt-4 text-base font-medium text-brand-red">{offerError}</p>
-            ) : null}
+
+          <div className="px-6 pb-6 pt-2">
+            <div className="rounded-[24px] border border-brand-gray/80 bg-brand-cream/60 px-5 py-5">
+              <p className="text-base font-semibold text-brand-black">Pasul următor al fluxului</p>
+              <p className="mt-3 text-sm leading-7 text-brand-gray-text">
+                Formularul complet pentru trimiterea ofertei de ajutor continuă în taskul dedicat
+                acestui pas. Pentru `FE-020`, aici validăm doar faptul că utilizatorul ajunge corect
+                din detaliile cererii în etapa următoare.
+              </p>
+            </div>
           </div>
+
           <DialogFooter className="rounded-b-[28px] px-6">
-            <Button onClick={() => setIsOfferDialogOpen(false)} variant="ghost">
-              Inchide
+            <Button onClick={() => handleOfferDialogChange(false)} variant="ghost">
+              Închide
             </Button>
-            <Button disabled={isSubmittingOffer} onClick={handleOfferSubmit} variant="auth">
-              {isSubmittingOffer ? 'Se trimite...' : 'Trimite oferta de ajutor'}
+            <Button onClick={() => handleOfferDialogChange(false)} variant="auth">
+              Continuă
             </Button>
           </DialogFooter>
         </DialogContent>
