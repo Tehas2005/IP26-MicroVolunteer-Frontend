@@ -20,15 +20,6 @@ export function AboutPage() {
                Am lucrat la el pas cu pas, cu idei schimbate, probleme rezolvate pe ultima sută de metri și momente în care am învățat că uneori un bug mic poate strica o seară întreagă.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <span className="rounded-full bg-brand-purple-light px-4 py-2 text-sm font-medium text-brand-purple-dark">
-                  #realizat_datorită_cafelei
-                </span>
-                <span className="rounded-full bg-brand-cream px-4 py-2 text-sm font-medium text-brand-gray-text">
-                  #testta_pe_rugăciuni
-                </span>
-                <span className="rounded-full bg-[#FFF0E8] px-4 py-2 text-sm font-medium text-brand-orange">
-                  #livrat_cu_încredere
-                </span>
               </div>
             </div>
 
