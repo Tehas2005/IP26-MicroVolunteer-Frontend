@@ -874,7 +874,7 @@ export function ProfilePage() {
                   </label>
                   <input
                     id="max-distance-km"
-                    min="0"
+                    min="0.1"
                     step="0.1"
                     type="number"
                     value={maxDistanceKm}

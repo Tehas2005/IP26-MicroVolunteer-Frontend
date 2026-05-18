@@ -406,6 +406,7 @@ describe('ProfilePage volunteer profile', () => {
     renderProfilePage()
 
     expect(screen.getByText('Primesti alerte pentru cereri potrivite.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Distanta maxima (km)')).toHaveAttribute('min', '0.1')
     fireEvent.change(screen.getByLabelText('Distanta maxima (km)'), {
       target: { value: 'abc' },
     })
