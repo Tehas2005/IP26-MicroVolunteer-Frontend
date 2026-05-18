@@ -7,8 +7,8 @@ import AuthPage from '@/pages/AuthPage'
 import BlockedAccountPage from '@/pages/BlockedAccountPage'
 import ChatPage from '@/pages/ChatPage'
 import HomePage from '@/pages/HomePage'
+import VolunteerProfilePage from '@/pages/VolunteerProfilePage'
 import InteractionHistoryPage from '@/pages/InteractionHistoryPage'
-import ProfilePage from '@/pages/ProfilePage'
 import RequestDetailsPage from '@/pages/RequestDetailsPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import UserProfilePage from '@/pages/UserProfilePage'
@@ -51,7 +51,7 @@ export const router = createBrowserRouter([
         path: 'devino-voluntar',
         element: (
           <RequireAuthenticatedUser>
-            <ProfilePage />
+            <VolunteerProfilePage />
           </RequireAuthenticatedUser>
         ),
       },

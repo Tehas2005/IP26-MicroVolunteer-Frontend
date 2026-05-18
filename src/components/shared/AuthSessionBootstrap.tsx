@@ -2,15 +2,34 @@ import { type ReactNode, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { authClient } from '@/main'
+import { readAccountStatusFromUser } from '@/lib/accountStatus'
 import { backend } from '@/lib/backend'
 import { AUTH_SESSION_QUERY_KEY } from '@/lib/authSessionQuery'
-import type { ProfileType } from '@/sdk/types'
+import {
+  ROMANIA_CITY_COORDINATES,
+  type TaskLocationPayload,
+} from '@/lib/romania-city-coordinates'
+import type {
+  ProfileType,
+  VolunteerLocationPointType,
+  VolunteerOwnProfileType,
+} from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
 interface AuthSessionBootstrapProps {
   children: ReactNode
 }
+
+type VolunteerStoreProfile = {
+  hiddenIdentity: boolean
+  location: string
+  locationCoordinates: TaskLocationPayload
+  skills: string[]
+}
+
+const LOCATION_MATCH_EPSILON = 0.000001
+const PROFILE_DRAFT_KEY_PREFIX = 'mvcr-volunteer-profile-draft'
 
 function resolveAccountStatus(profile: ProfileType | null | undefined) {
   const rawStatus =
@@ -34,6 +53,129 @@ function readSessionUserRole(user: unknown) {
   return typeof role === 'string' ? role.trim().toLowerCase() : ''
 }
 
+function readHiddenIdentity(payload: unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return false
+  }
+
+  if ('hiddenIdentity' in payload) {
+    return Boolean(payload.hiddenIdentity)
+  }
+
+  if ('data' in payload && payload.data && typeof payload.data === 'object') {
+    return readHiddenIdentity(payload.data)
+  }
+
+  if ('profile' in payload && payload.profile && typeof payload.profile === 'object') {
+    return readHiddenIdentity(payload.profile)
+  }
+
+  return false
+}
+
+function sanitizeSkills(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string')
+}
+
+function resolveVolunteerLocationPoint(location: string): TaskLocationPayload | null {
+  const normalizedLocation = location.trim()
+
+  if (!normalizedLocation) {
+    return null
+  }
+
+  return ROMANIA_CITY_COORDINATES[normalizedLocation] ?? null
+}
+
+function resolveRomanianCityByPoint(
+  point: VolunteerLocationPointType | TaskLocationPayload | null | undefined,
+): string {
+  if (!point) {
+    return ''
+  }
+
+  const matchingCity = Object.entries(ROMANIA_CITY_COORDINATES).find(
+    ([, coordinates]) =>
+      Math.abs(coordinates.x - point.x) < LOCATION_MATCH_EPSILON &&
+      Math.abs(coordinates.y - point.y) < LOCATION_MATCH_EPSILON,
+  )
+
+  return matchingCity?.[0] ?? ''
+}
+
+function extractVolunteerProfile(payload: unknown): VolunteerOwnProfileType['profile'] | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  if ('profile' in payload) {
+    return (payload as VolunteerOwnProfileType).profile ?? null
+  }
+
+  if ('data' in payload && payload.data && typeof payload.data === 'object') {
+    const nestedData = payload.data as VolunteerOwnProfileType
+    return nestedData.profile ?? null
+  }
+
+  if ('currentLocation' in payload || 'skills' in payload) {
+    return payload as VolunteerOwnProfileType['profile']
+  }
+
+  return null
+}
+
+function buildStoreProfileFromRemote(
+  payload: unknown,
+  hiddenIdentity: boolean,
+): VolunteerStoreProfile | null {
+  const remoteProfile = extractVolunteerProfile(payload)
+  const currentLocationPoint = remoteProfile?.currentLocation ?? null
+  const location = resolveRomanianCityByPoint(currentLocationPoint)
+
+  if (!currentLocationPoint || !location) {
+    return null
+  }
+
+  return {
+    hiddenIdentity,
+    location,
+    locationCoordinates: currentLocationPoint,
+    skills: sanitizeSkills(remoteProfile?.skills),
+  }
+}
+
+function readLocalVolunteerDraft(userId: string): VolunteerStoreProfile | null {
+  const rawDraft = window.localStorage.getItem(`${PROFILE_DRAFT_KEY_PREFIX}:${userId}`)
+
+  if (!rawDraft) {
+    return null
+  }
+
+  try {
+    const draft = JSON.parse(rawDraft) as Record<string, unknown>
+    const location = typeof draft.currentLocation === 'string' ? draft.currentLocation.trim() : ''
+    const locationCoordinates = resolveVolunteerLocationPoint(location)
+
+    if (!location || !locationCoordinates) {
+      return null
+    }
+
+    return {
+      hiddenIdentity: Boolean(draft.hiddenIdentity),
+      location,
+      locationCoordinates,
+      skills: sanitizeSkills(draft.skills),
+    }
+  } catch {
+    window.localStorage.removeItem(`${PROFILE_DRAFT_KEY_PREFIX}:${userId}`)
+    return null
+  }
+}
+
 async function detectVolunteerAccess() {
   const response = await backend.offers.listMine({
     page: 1,
@@ -53,8 +195,9 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
   const setSessionStatus = useAuthStore((state) => state.setSessionStatus)
   const knownVolunteerUserIds = useAuthStore((state) => state.knownVolunteerUserIds)
   const volunteerProfilesByUserId = useVolunteerProfileStore((state) => state.profilesByUserId)
+  const deleteVolunteerProfile = useVolunteerProfileStore((state) => state.deleteVolunteerProfile)
+  const upsertVolunteerProfile = useVolunteerProfileStore((state) => state.upsertVolunteerProfile)
 
-  // Refs so the async syncSession can read current values without triggering re-runs
   const volunteerProfilesByUserIdRef = useRef(volunteerProfilesByUserId)
   volunteerProfilesByUserIdRef.current = volunteerProfilesByUserId
   const knownVolunteerUserIdsRef = useRef(knownVolunteerUserIds)
@@ -88,6 +231,11 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
           return
         }
 
+        if (!response || response.error) {
+          clearAuthSession()
+          return
+        }
+
         if (response.data) {
           const currentUserId = response.data.user.id
           const sessionUserRole = readSessionUserRole(response.data.user)
@@ -103,6 +251,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
               name: response.data.user.name,
               email: response.data.user.email,
               role: sessionUserRole || null,
+              accountStatus: readAccountStatusFromUser(response.data.user),
             },
           })
           setVolunteerStatus('unknown')
@@ -120,12 +269,31 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
             return
           }
 
-          const hasLocalVolunteerProfile = Boolean(volunteerProfilesByUserIdRef.current[currentUserId])
+          const localDraftProfile = readLocalVolunteerDraft(currentUserId)
+          const hiddenIdentity =
+            readHiddenIdentity(profileResponse.data) || readHiddenIdentity(volunteerResponse.data)
+          const remoteStoreProfile = volunteerResponse.success
+            ? buildStoreProfileFromRemote(volunteerResponse.data, hiddenIdentity)
+            : null
+
+          if (remoteStoreProfile) {
+            upsertVolunteerProfile(currentUserId, remoteStoreProfile)
+          } else if (localDraftProfile) {
+            upsertVolunteerProfile(currentUserId, localDraftProfile)
+          } else if (volunteerResponse.isNotFound) {
+            deleteVolunteerProfile(currentUserId)
+          }
+
+          const hasLocalVolunteerProfile = Boolean(
+            volunteerProfilesByUserIdRef.current[currentUserId],
+          )
           const hasKnownVolunteerStatus = Boolean(knownVolunteerUserIdsRef.current[currentUserId])
           const isVolunteerByRole = sessionUserRole === 'volunteer'
           const hasVolunteerProfile = volunteerResponse.success
+          const hasLocalDraftVolunteerProfile = Boolean(localDraftProfile)
           const shouldProbeVolunteerAccess =
             !hasVolunteerProfile &&
+            !hasLocalDraftVolunteerProfile &&
             !isVolunteerByRole &&
             !hasLocalVolunteerProfile &&
             !hasKnownVolunteerStatus
@@ -138,12 +306,18 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
             return
           }
 
-          if (hasVolunteerProfile || isVolunteerByRole || hasVolunteerAccess) {
+          if (
+            hasVolunteerProfile ||
+            hasLocalDraftVolunteerProfile ||
+            isVolunteerByRole ||
+            hasVolunteerAccess
+          ) {
             rememberVolunteerUser(currentUserId)
           }
 
           setVolunteerStatus(
             hasVolunteerProfile ||
+              hasLocalDraftVolunteerProfile ||
               isVolunteerByRole ||
               hasVolunteerAccess ||
               hasLocalVolunteerProfile ||
@@ -182,6 +356,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
     }
   }, [
     clearAuthSession,
+    deleteVolunteerProfile,
     rememberVolunteerUser,
     sessionQuery.data,
     sessionQuery.error,
@@ -190,6 +365,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
     setAuthSession,
     setSessionStatus,
     setVolunteerStatus,
+    upsertVolunteerProfile,
   ])
 
   if (sessionStatus === 'loading') {
@@ -198,10 +374,10 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
         <div className="w-full max-w-sm rounded-[28px] border border-brand-gray bg-white p-8 text-center shadow-sm">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-brand-purple-light border-t-brand-purple" />
           <h1 className="mt-5 text-xl font-semibold text-brand-black">
-            Verificam sesiunea ta
+            Verificăm sesiunea ta
           </h1>
           <p className="mt-2 text-sm text-brand-gray-text">
-            Pregatim aplicatia si verificam daca esti autentificat.
+            Pregătim aplicația și verificăm dacă ești autentificat.
           </p>
         </div>
       </div>

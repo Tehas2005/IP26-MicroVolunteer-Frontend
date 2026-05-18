@@ -106,6 +106,13 @@ export type VolunteerLocationPointType = {
   y: number
 }
 
+export type VolunteerKnownLocationRecordType = {
+  id?: number
+  city?: string | null
+  addressText?: string | null
+  location?: VolunteerLocationPointType | null
+}
+
 export type VolunteerKnownLocationType = {
   id?: string | number
   city?: string | null
@@ -136,6 +143,24 @@ export type CurrentVolunteerProfileResponseType = {
   volunteer?: VolunteerRecordType | null
   profile?: CurrentVolunteerProfileType | null
   [key: string]: unknown
+}
+
+export type VolunteerOwnProfileType = {
+  volunteer?: {
+    id?: number
+    userId?: string
+    availability?: boolean
+    [key: string]: unknown
+  } | null
+  profile?: {
+    id?: number
+    volunteerId?: number
+    skills?: string[]
+    maxDistanceKm?: number | null
+    currentLocation?: VolunteerLocationPointType | null
+    knownLocations?: VolunteerKnownLocationRecordType[] | null
+    [key: string]: unknown
+  } | null
 }
 
 export type VolunteerKnownLocationPayloadType = {

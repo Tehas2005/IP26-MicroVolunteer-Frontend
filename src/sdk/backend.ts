@@ -7,6 +7,7 @@ import { RatingsFetcher } from './RatingsFetcher'
 import { TasksFetcher } from './TasksFetcher'
 import { UploadsFetcher } from './UploadsFetcher'
 import { UsersFetcher } from './UsersFetcher'
+import { VolunteerProfilesFetcher } from './VolunteerProfilesFetcher'
 import { VolunteersFetcher } from './VolunteersFetcher'
 import type { Fetcher } from './Fetcher'
 
@@ -20,6 +21,7 @@ export class Backend {
   public readonly tasks: TasksFetcher
   public readonly uploads: UploadsFetcher
   public readonly users: UsersFetcher
+  public readonly volunteerProfiles: VolunteerProfilesFetcher
   public readonly volunteers: VolunteersFetcher
 
   constructor(readonly fetcher: Fetcher) {
@@ -32,6 +34,7 @@ export class Backend {
     this.tasks = new TasksFetcher(this.fetcher)
     this.uploads = new UploadsFetcher(this.fetcher)
     this.users = new UsersFetcher(this.fetcher)
+    this.volunteerProfiles = new VolunteerProfilesFetcher(this.fetcher)
     this.volunteers = new VolunteersFetcher(this.fetcher)
   }
 }
