@@ -17,8 +17,8 @@ import { readHiddenIdentityFromResponse } from '@/pages/profile/utils'
 import type {
   CreateProfilePayloadType,
   CurrentVolunteerProfileResponseType,
+  VolunteerProfileCreatePayloadType,
   VolunteerKnownLocationPayloadType,
-  VolunteerProfilePayloadType,
 } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
@@ -178,7 +178,7 @@ function buildVolunteerProfilePayload(options: {
   location: TaskLocationPayload
   maxDistanceKm: string
   skills: string[]
-}): VolunteerProfilePayloadType {
+}): VolunteerProfileCreatePayloadType {
   const { availability, location, maxDistanceKm, skills } = options
 
   return {
@@ -502,14 +502,21 @@ export function ProfilePage() {
       })
 
       if (response.success) {
-        if (selectedLocationCoordinates) {
+        const profileLocation = selectedLocationCoordinates
+          ? location.trim()
+          : (volunteerProfile?.location ?? location.trim())
+        const profileCoordinates =
+          selectedLocationCoordinates ?? volunteerProfile?.locationCoordinates
+
+        if (profileLocation && profileCoordinates) {
           upsertVolunteerProfile(authUser.id, {
-            location: location.trim(),
-            locationCoordinates: selectedLocationCoordinates,
+            location: profileLocation,
+            locationCoordinates: profileCoordinates,
             availability,
-            maxDistanceKm: parsePositiveDistanceInput(maxDistanceKm),
+            maxDistanceKm:
+              volunteerProfile?.maxDistanceKm ?? parsePositiveDistanceInput(maxDistanceKm),
             knownLocations: volunteerProfile?.knownLocations,
-            skills: normalizedSkills,
+            skills: volunteerProfile?.skills ?? normalizedSkills,
             hiddenIdentity: nextValue,
           })
         }

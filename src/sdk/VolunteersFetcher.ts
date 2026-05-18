@@ -3,7 +3,8 @@ import type {
   ApiResponse,
   CurrentVolunteerProfileResponseType,
   ProfileType,
-  VolunteerProfilePayloadType,
+  VolunteerProfileCreatePayloadType,
+  VolunteerProfileUpdatePayloadType,
 } from './types'
 
 export class VolunteersFetcher {
@@ -18,14 +19,20 @@ export class VolunteersFetcher {
   }
 
   public createMeProfile(
-    payload: VolunteerProfilePayloadType,
+    payload: VolunteerProfileCreatePayloadType,
   ): Promise<ApiResponse<CurrentVolunteerProfileResponseType>> {
-    return this.fetcher.post<CurrentVolunteerProfileResponseType>('/api/volunteers/me/profile', payload)
+    return this.fetcher.post<CurrentVolunteerProfileResponseType>(
+      '/api/volunteers/me/profile',
+      payload,
+    )
   }
 
   public updateMeProfile(
-    payload: VolunteerProfilePayloadType,
+    payload: VolunteerProfileUpdatePayloadType,
   ): Promise<ApiResponse<CurrentVolunteerProfileResponseType>> {
-    return this.fetcher.put<CurrentVolunteerProfileResponseType>('/api/volunteers/me/profile', payload)
+    return this.fetcher.put<CurrentVolunteerProfileResponseType>(
+      '/api/volunteers/me/profile',
+      payload,
+    )
   }
 }

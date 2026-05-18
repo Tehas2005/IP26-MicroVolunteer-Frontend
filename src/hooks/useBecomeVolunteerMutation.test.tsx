@@ -65,4 +65,41 @@ describe('useBecomeVolunteerMutation', () => {
     expect(backend.users.becomeVolunteer).toHaveBeenCalled()
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: AUTH_SESSION_QUERY_KEY })
   })
+
+  it('invalideaza query-ul sesiunii cand backend-ul spune ca userul este deja voluntar', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+        mutations: {
+          retry: false,
+        },
+      },
+    })
+    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    vi.mocked(backend.users.becomeVolunteer).mockResolvedValue({
+      success: false,
+      data: null,
+      message: 'User already a volunteer',
+      status: 409,
+      isClientError: true,
+      isServerError: false,
+      isNotFound: false,
+      isUnauthorized: false,
+      isForbidden: false,
+    })
+
+    const { result } = renderHook(() => useBecomeVolunteerMutation(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    await act(async () => {
+      await result.current.mutateAsync()
+    })
+
+    expect(backend.users.becomeVolunteer).toHaveBeenCalled()
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: AUTH_SESSION_QUERY_KEY })
+  })
 })

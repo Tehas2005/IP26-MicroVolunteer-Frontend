@@ -169,12 +169,20 @@ export type VolunteerKnownLocationPayloadType = {
   location: VolunteerLocationPointType
 }
 
-export type VolunteerProfilePayloadType = {
-  skills?: string[]
+export type VolunteerProfileCreatePayloadType = {
+  skills: string[]
+  maxDistanceKm: number | null
+  currentLocation: VolunteerLocationPointType
+  knownLocations?: VolunteerKnownLocationPayloadType[]
+  availability: boolean
+}
+
+export type VolunteerProfileUpdatePayloadType = Partial<VolunteerProfileCreatePayloadType>
+
+export type VolunteerProfilePayloadType = VolunteerProfileUpdatePayloadType & {
   maxDistanceKm?: number | null
   currentLocation?: VolunteerLocationPointType | null
   knownLocations?: VolunteerKnownLocationPayloadType[]
-  availability?: boolean
 }
 
 export type BecomeVolunteerResponseType = {
@@ -274,7 +282,6 @@ export type OfferResponseType = {
   volunteer?: ProfileType | null
   [key: string]: unknown
 }
-
 
 export type OfferSubmissionPayloadType = {
   message: string

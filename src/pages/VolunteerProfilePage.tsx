@@ -7,9 +7,9 @@ import {
   type TaskLocationPayload,
 } from '@/lib/romania-city-coordinates'
 import type {
+  VolunteerProfileCreatePayloadType,
   VolunteerLocationPointType,
   VolunteerOwnProfileType,
-  VolunteerProfilePayloadType,
 } from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
@@ -25,13 +25,7 @@ import {
 
 const CITIES = ROMANIA_CITY_NAMES
 
-const SKILL_SUGGESTIONS = [
-  'traducere',
-  'transport',
-  'insotire',
-  'cumparaturi',
-  'suport emotional',
-]
+const SKILL_SUGGESTIONS = ['traducere', 'transport', 'insotire', 'cumparaturi', 'suport emotional']
 
 const PROFILE_DRAFT_KEY_PREFIX = 'mvcr-volunteer-profile-draft'
 
@@ -139,17 +133,18 @@ function buildDraftFromVolunteerProfile(
   hiddenIdentity: boolean,
 ): ProfileDraft {
   const knownLocations =
-    profile?.knownLocations?.map((entry) => ({
-      city: entry.city?.trim() || resolveRomanianCityByPoint(entry.location ?? null),
-      address: entry.addressText?.trim() || '',
-    }))?.filter((entry) => entry.city && entry.address) ?? []
+    profile?.knownLocations
+      ?.map((entry) => ({
+        city: entry.city?.trim() || resolveRomanianCityByPoint(entry.location ?? null),
+        address: entry.addressText?.trim() || '',
+      }))
+      ?.filter((entry) => entry.city && entry.address) ?? []
 
   return {
     currentLocation: resolveRomanianCityByPoint(profile?.currentLocation ?? null),
     hiddenIdentity,
     knownLocations,
-    maxDistanceKm:
-      typeof profile?.maxDistanceKm === 'number' ? String(profile.maxDistanceKm) : '',
+    maxDistanceKm: typeof profile?.maxDistanceKm === 'number' ? String(profile.maxDistanceKm) : '',
     selectedCity: '',
     skillInput: '',
     skills: sanitizeSkills(profile?.skills),
@@ -157,8 +152,12 @@ function buildDraftFromVolunteerProfile(
   }
 }
 
-function buildVolunteerProfilePayload(draft: ProfileDraft): VolunteerProfilePayloadType {
+function buildVolunteerProfilePayload(draft: ProfileDraft): VolunteerProfileCreatePayloadType {
   const currentLocationPoint = resolveVolunteerLocationPoint(draft.currentLocation)
+
+  if (!currentLocationPoint) {
+    throw new Error('Invalid volunteer current location')
+  }
 
   const knownLocations = draft.knownLocations
     .map((location) => {
@@ -186,6 +185,7 @@ function buildVolunteerProfilePayload(draft: ProfileDraft): VolunteerProfilePayl
     knownLocations,
     maxDistanceKm: Number(draft.maxDistanceKm),
     skills: draft.skills,
+    availability: true,
   }
 }
 
@@ -197,7 +197,9 @@ export default function VolunteerProfilePage() {
   const [currentLocation, setCurrentLocation] = useState(EMPTY_DRAFT.currentLocation)
   const [selectedCity, setSelectedCity] = useState(EMPTY_DRAFT.selectedCity)
   const [specificAddress, setSpecificAddress] = useState(EMPTY_DRAFT.specificAddress)
-  const [knownLocations, setKnownLocations] = useState<KnownLocationEntry[]>(EMPTY_DRAFT.knownLocations)
+  const [knownLocations, setKnownLocations] = useState<KnownLocationEntry[]>(
+    EMPTY_DRAFT.knownLocations,
+  )
   const [skills, setSkills] = useState<string[]>(EMPTY_DRAFT.skills)
   const [skillInput, setSkillInput] = useState(EMPTY_DRAFT.skillInput)
   const [hiddenIdentity, setHiddenIdentity] = useState(EMPTY_DRAFT.hiddenIdentity)
@@ -451,7 +453,7 @@ export default function VolunteerProfilePage() {
     })
   }
 
-  async function saveVolunteerProfile(payload: VolunteerProfilePayloadType) {
+  async function saveVolunteerProfile(payload: VolunteerProfileCreatePayloadType) {
     async function ensureVolunteerRecord() {
       const response = await backend.users.becomeVolunteer()
 
@@ -578,7 +580,9 @@ export default function VolunteerProfilePage() {
 
       if (
         volunteerProfileResponse?.isNotFound ||
-        (volunteerProfileResponse && !volunteerProfileResponse.success && volunteerProfileResponse.status === 404)
+        (volunteerProfileResponse &&
+          !volunteerProfileResponse.success &&
+          volunteerProfileResponse.status === 404)
       ) {
         syncVolunteerProfileStore(persistedDraft)
         setLastSavedDraft(persistedDraft)
@@ -721,11 +725,7 @@ export default function VolunteerProfilePage() {
                           type="button"
                           onClick={() =>
                             setKnownLocations(
-                              removeKnownLocation(
-                                knownLocations,
-                                location.city,
-                                location.address,
-                              ),
+                              removeKnownLocation(knownLocations, location.city, location.address),
                             )
                           }
                           className="text-sm leading-none transition hover:text-red-500"

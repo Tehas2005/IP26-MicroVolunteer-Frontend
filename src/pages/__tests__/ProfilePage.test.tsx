@@ -329,6 +329,49 @@ describe('ProfilePage volunteer profile', () => {
     expect(screen.getByText('Nu primesti alerte pentru cereri potrivite.')).toBeInTheDocument()
   })
 
+  it('actualizeaza hiddenIdentity in store chiar daca locatia curenta nu se mai rezolva', async () => {
+    const user = userEvent.setup()
+
+    setAuthenticatedSession('volunteer')
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {
+        'user-1': {
+          userId: 'user-1',
+          location: 'Oras local vechi',
+          locationCoordinates: { x: 23.5899542, y: 46.769379 },
+          skills: ['transport'],
+          hiddenIdentity: false,
+          availability: false,
+          maxDistanceKm: 12,
+          knownLocations: [],
+          createdAt: '2026-05-15T00:00:00.000Z',
+          updatedAt: '2026-05-15T00:00:00.000Z',
+        },
+      },
+    })
+
+    renderProfilePage()
+
+    const privacyToggle = await screen.findByRole('button', { name: 'Ascunde identitatea' })
+    await waitFor(() => {
+      expect(privacyToggle).not.toBeDisabled()
+    })
+
+    await user.click(privacyToggle)
+
+    await waitFor(() => {
+      expect(backend.profile.updateMe).toHaveBeenCalledWith({ hiddenIdentity: true })
+      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
+        location: 'Oras local vechi',
+        locationCoordinates: { x: 23.5899542, y: 46.769379 },
+        availability: false,
+        maxDistanceKm: 12,
+        skills: ['transport'],
+        hiddenIdentity: true,
+      })
+    })
+  })
+
   it('creeaza profilul local de voluntar dupa completarea locatiei si abilitatilor', async () => {
     const user = userEvent.setup()
     vi.mocked(backend.volunteers.getMeProfile)
