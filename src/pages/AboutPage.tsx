@@ -11,16 +11,18 @@ export function AboutPage() {
                 Despre Noi
               </p>
               <h1 className="mt-4 max-w-2xl text-4xl font-bold leading-tight text-brand-black sm:text-5xl">
-               Grupa B2, între cod, cafea și dorința de a ajuta
+                Grupa B2, între cod, cafea și dorința de a ajuta
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-8 text-brand-gray-text sm:text-lg">
-                Micro-Volunteer Crisis Router este un proiect realizat din dorința de a construi ceva util, nu doar ceva care „arată bine în prezentare”.
+                Micro-Volunteer Crisis Router este un proiect realizat din dorința de a
+                construi ceva util, nu doar ceva care „arată bine în prezentare”.
               </p>
               <p className="mt-4 max-w-2xl text-base leading-8 text-brand-gray-text sm:text-lg">
-               Am lucrat la el pas cu pas, cu idei schimbate, probleme rezolvate pe ultima sută de metri și momente în care am învățat că uneori un bug mic poate strica o seară întreagă.
+                Am lucrat la el pas cu pas, cu idei schimbate, probleme rezolvate pe
+                ultima sută de metri și momente în care am învățat că uneori un bug mic
+                poate strica o seară întreagă.
               </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-              </div>
+              <div className="mt-8 flex flex-wrap gap-3"></div>
             </div>
 
             <div className="flex items-center justify-center bg-[linear-gradient(180deg,_rgba(123,47,190,0.12),_rgba(230,219,247,0.25))] p-5 sm:p-6">
@@ -43,7 +45,7 @@ export function AboutPage() {
             </div>
           </div>
         </div>
-         <div className="overflow-hidden rounded-[36px] border border-brand-gray bg-white shadow-sm">
+        <div className="overflow-hidden rounded-[36px] border border-brand-gray bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[0.85fr_1.15fr]">
             <div className="flex items-center justify-center bg-[linear-gradient(180deg,_rgba(123,47,190,0.12),_rgba(230,219,247,0.25))] p-5 sm:p-6">
               <div className="grid w-full max-w-[34rem] grid-cols-2 items-start gap-4">
@@ -70,14 +72,17 @@ export function AboutPage() {
               <h2 className="mt-4 max-w-2xl text-3xl font-bold leading-tight text-brand-black sm:text-4xl">
                 O idee simplă. O echipă hotărâtă. Un proiect cu impact.
               </h2>
-              <p className="mt-6 max-w-2xl text-base leading-8 text-brand-gray-text sm:text-lg">
-                <p className="mt-4 max-w-2xl text-base leading-8 text-brand-gray-text sm:text-lg">
-               Dincolo de cod, pagini și funcționalități, proiectul nostru pornește de la o idee foarte simplă: în momentele dificile, ajutorul ar trebui să fie mai ușor de cerut și mai ușor de oferit.
-              </p>
-              </p>
-              <p className="mt-4 max-w-2xl text-base leading-8 text-brand-gray-text sm:text-lg">
-               Nu a ieșit perfect din prima, dar a fost construit cu implicare, muncă în echipă și cu intenția sinceră de a face ceva care contează.
-              </p>
+              <div className="mt-6 max-w-2xl">
+                <p className="text-base leading-8 text-brand-gray-text sm:text-lg">
+                  Dincolo de cod, pagini și funcționalități, proiectul nostru pornește de
+                  la o idee foarte simplă: în momentele dificile, ajutorul ar trebui să
+                  fie mai ușor de cerut și mai ușor de oferit.
+                </p>
+                <p className="mt-4 text-base leading-8 text-brand-gray-text sm:text-lg">
+                  Nu a ieșit perfect din prima, dar a fost construit cu implicare, muncă
+                  în echipă și cu intenția sinceră de a face ceva care contează.
+                </p>
+              </div>
               <div className="mt-8 flex flex-wrap gap-3">
                 <span className="rounded-full bg-brand-purple-light px-4 py-2 text-sm font-medium text-brand-purple-dark">
                   #B2
@@ -89,7 +94,6 @@ export function AboutPage() {
             </div>
           </div>
         </div>
-
       </div>
     </section>
   )
