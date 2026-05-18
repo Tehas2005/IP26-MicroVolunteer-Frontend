@@ -280,9 +280,17 @@ describe('AuthSessionBootstrap', () => {
       success: true,
       data: {
         data: {
-          volunteer: { id: 1, userId: 'user-1' },
+          volunteer: { id: 1, userId: 'user-1', availability: false },
           profile: {
             currentLocation: { x: 23.5899542, y: 46.769379 },
+            maxDistanceKm: 12.5,
+            knownLocations: [
+              {
+                city: 'Cluj-Napoca',
+                addressText: 'Centru',
+                location: { x: 23.5899542, y: 46.769379 },
+              },
+            ],
             skills: ['transport'],
           },
         },
@@ -304,6 +312,15 @@ describe('AuthSessionBootstrap', () => {
         hiddenIdentity: true,
         location: 'Cluj-Napoca',
         locationCoordinates: { x: 23.5899542, y: 46.769379 },
+        availability: false,
+        maxDistanceKm: 12.5,
+        knownLocations: [
+          {
+            city: 'Cluj-Napoca',
+            addressText: 'Centru',
+            location: { x: 23.5899542, y: 46.769379 },
+          },
+        ],
         skills: ['transport'],
       })
       expect(useAuthStore.getState().volunteerStatus).toBe('volunteer')

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -40,6 +40,11 @@ function createNotFoundResponse<T>(): ApiResponse<T> {
 function createVolunteerProfileData(options?: {
   availability?: boolean
   currentLocation?: { x: number; y: number }
+  knownLocations?: {
+    city?: string | null
+    addressText?: string | null
+    location: { x: number; y: number }
+  }[]
   maxDistanceKm?: number | null
   skills?: string[]
 }) {
@@ -52,9 +57,12 @@ function createVolunteerProfileData(options?: {
     profile: {
       id: 1,
       volunteerId: 1,
-      currentLocation: options?.currentLocation ?? { x: 23.5899542, y: 46.769379 },
+      currentLocation: options?.currentLocation ?? {
+        x: 23.5899542,
+        y: 46.769379,
+      },
       maxDistanceKm: options?.maxDistanceKm ?? null,
-      knownLocations: [],
+      knownLocations: options?.knownLocations ?? [],
       skills: options?.skills ?? [],
     },
   }
@@ -121,11 +129,20 @@ describe('ProfilePage volunteer profile', () => {
   beforeEach(() => {
     resetStores()
     localStorage.clear()
-    vi.spyOn(backend.profile, 'create').mockResolvedValue(createSuccessResponse({ hiddenIdentity: false }))
-    vi.spyOn(backend.profile, 'getMe').mockResolvedValue(createSuccessResponse({ hiddenIdentity: false }))
-    vi.spyOn(backend.profile, 'updateMe').mockResolvedValue(createSuccessResponse({ hiddenIdentity: false }))
+    vi.spyOn(backend.profile, 'create').mockResolvedValue(
+      createSuccessResponse({ hiddenIdentity: false }),
+    )
+    vi.spyOn(backend.profile, 'getMe').mockResolvedValue(
+      createSuccessResponse({ hiddenIdentity: false }),
+    )
+    vi.spyOn(backend.profile, 'updateMe').mockResolvedValue(
+      createSuccessResponse({ hiddenIdentity: false }),
+    )
     vi.spyOn(backend.users, 'becomeVolunteer').mockResolvedValue(
-      createSuccessResponse({ message: 'You are now a volunteer', volunteerId: 1 }),
+      createSuccessResponse({
+        message: 'You are now a volunteer',
+        volunteerId: 1,
+      }),
     )
     vi.spyOn(backend.volunteers, 'getMeProfile').mockResolvedValue(createNotFoundResponse())
     vi.spyOn(backend.volunteers, 'createMeProfile').mockResolvedValue(
@@ -184,22 +201,31 @@ describe('ProfilePage volunteer profile', () => {
 
   it('hidrateaza skillurile salvate si pastreaza salvarea prin backend', async () => {
     const user = userEvent.setup()
-    const getVolunteerProfileSpy = vi.mocked(backend.volunteers.getMeProfile)
+    const getVolunteerProfileSpy = vi
+      .mocked(backend.volunteers.getMeProfile)
       .mockResolvedValueOnce(
-        createSuccessResponse(createVolunteerProfileData({
-          currentLocation: { x: 23.5899542, y: 46.769379 },
-          maxDistanceKm: 12.5,
-          skills: ['transport'],
-        })),
+        createSuccessResponse(
+          createVolunteerProfileData({
+            availability: false,
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            maxDistanceKm: 12.5,
+            skills: ['transport'],
+          }),
+        ),
       )
       .mockResolvedValue(
-        createSuccessResponse(createVolunteerProfileData({
-          currentLocation: { x: 23.5899542, y: 46.769379 },
-          maxDistanceKm: 12.5,
-          skills: ['transport'],
-        })),
+        createSuccessResponse(
+          createVolunteerProfileData({
+            availability: false,
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            maxDistanceKm: 12.5,
+            skills: ['transport'],
+          }),
+        ),
       )
-    vi.mocked(backend.profile.getMe).mockResolvedValue(createSuccessResponse({ hiddenIdentity: true }))
+    vi.mocked(backend.profile.getMe).mockResolvedValue(
+      createSuccessResponse({ hiddenIdentity: true }),
+    )
     const updateVolunteerProfileSpy = vi.mocked(backend.volunteers.updateMeProfile)
 
     setAuthenticatedSession('volunteer')
@@ -224,6 +250,7 @@ describe('ProfilePage volunteer profile', () => {
       () => {
         expect(updateVolunteerProfileSpy).toHaveBeenCalledWith(
           expect.objectContaining({
+            availability: false,
             currentLocation: { x: 23.5899542, y: 46.769379 },
             maxDistanceKm: 12.5,
             skills: ['transport'],
@@ -231,6 +258,7 @@ describe('ProfilePage volunteer profile', () => {
         )
         expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
           location: 'Cluj-Napoca',
+          availability: false,
           maxDistanceKm: 12.5,
           skills: ['transport'],
           hiddenIdentity: true,
@@ -240,15 +268,78 @@ describe('ProfilePage volunteer profile', () => {
     )
   })
 
+  it('sincronizeaza profilul de voluntar din backend peste datele locale vechi', async () => {
+    setAuthenticatedSession('volunteer')
+    useVolunteerProfileStore.setState({
+      profilesByUserId: {
+        'user-1': {
+          userId: 'user-1',
+          location: 'Iasi',
+          locationCoordinates: { x: 27.6014418, y: 47.1584549 },
+          skills: ['abilitate veche'],
+          hiddenIdentity: false,
+          availability: true,
+          maxDistanceKm: 3,
+          knownLocations: [],
+          createdAt: '2026-05-15T00:00:00.000Z',
+          updatedAt: '2026-05-15T00:00:00.000Z',
+        },
+      },
+    })
+    vi.mocked(backend.profile.getMe).mockResolvedValue(
+      createSuccessResponse({ hiddenIdentity: true }),
+    )
+    vi.mocked(backend.volunteers.getMeProfile).mockResolvedValue(
+      createSuccessResponse(
+        createVolunteerProfileData({
+          availability: false,
+          currentLocation: { x: 23.5899542, y: 46.769379 },
+          knownLocations: [
+            {
+              city: 'Cluj-Napoca',
+              addressText: 'Centru',
+              location: { x: 23.5899542, y: 46.769379 },
+            },
+          ],
+          maxDistanceKm: 12.5,
+          skills: ['transport'],
+        }),
+      ),
+    )
+
+    renderProfilePage()
+
+    await waitFor(() => {
+      expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
+        location: 'Cluj-Napoca',
+        availability: false,
+        maxDistanceKm: 12.5,
+        skills: ['transport'],
+        hiddenIdentity: true,
+        knownLocations: [
+          {
+            city: 'Cluj-Napoca',
+            addressText: 'Centru',
+            location: { x: 23.5899542, y: 46.769379 },
+          },
+        ],
+      })
+    })
+    expect(await screen.findByText('transport')).toBeInTheDocument()
+    expect(screen.getByText('Nu primesti alerte pentru cereri potrivite.')).toBeInTheDocument()
+  })
+
   it('creeaza profilul local de voluntar dupa completarea locatiei si abilitatilor', async () => {
     const user = userEvent.setup()
     vi.mocked(backend.volunteers.getMeProfile)
       .mockResolvedValueOnce(createNotFoundResponse())
       .mockResolvedValueOnce(
-        createSuccessResponse(createVolunteerProfileData({
-          currentLocation: { x: 23.5899542, y: 46.769379 },
-          skills: ['Transport local'],
-        })),
+        createSuccessResponse(
+          createVolunteerProfileData({
+            currentLocation: { x: 23.5899542, y: 46.769379 },
+            skills: ['Transport local'],
+          }),
+        ),
       )
 
     setAuthenticatedSession()
@@ -315,12 +406,13 @@ describe('ProfilePage volunteer profile', () => {
     renderProfilePage()
 
     expect(screen.getByText('Primesti alerte pentru cereri potrivite.')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Distanta maxima (km)'), {
+      target: { value: 'abc' },
+    })
 
     await user.click(screen.getByRole('button', { name: 'Dezactiveaza disponibilitatea' }))
 
-    expect(
-      screen.getByText('Vrei sa dezactivezi disponibilitatea?'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Vrei sa dezactivezi disponibilitatea?')).toBeInTheDocument()
     expect(document.body.style.overflow).toBe('hidden')
 
     await user.click(screen.getByRole('button', { name: 'Anuleaza' }))
@@ -332,9 +424,12 @@ describe('ProfilePage volunteer profile', () => {
     await user.click(screen.getByRole('button', { name: 'Da, dezactiveaza' }))
 
     await waitFor(() => {
-      expect(backend.volunteers.updateMeProfile).toHaveBeenCalledWith({ availability: false })
+      expect(backend.volunteers.updateMeProfile).toHaveBeenCalledWith({
+        availability: false,
+      })
       expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
         availability: false,
+        maxDistanceKm: null,
       })
     })
     expect(document.body.style.overflow).toBe('')
@@ -344,7 +439,9 @@ describe('ProfilePage volunteer profile', () => {
     await user.click(screen.getByRole('button', { name: 'Reactiveaza disponibilitatea' }))
 
     await waitFor(() => {
-      expect(backend.volunteers.updateMeProfile).toHaveBeenCalledWith({ availability: true })
+      expect(backend.volunteers.updateMeProfile).toHaveBeenCalledWith({
+        availability: true,
+      })
       expect(useVolunteerProfileStore.getState().profilesByUserId['user-1']).toMatchObject({
         availability: true,
       })
