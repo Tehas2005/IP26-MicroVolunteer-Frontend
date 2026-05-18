@@ -24,6 +24,8 @@ jobs:
       #Moving the workflow on the VM
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       #Node.js installation for vite
       - name: Setup Node.js
