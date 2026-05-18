@@ -24,7 +24,7 @@ export function AboutPage() {
                   #realizat_datorită_cafelei
                 </span>
                 <span className="rounded-full bg-brand-cream px-4 py-2 text-sm font-medium text-brand-gray-text">
-                  #testa_pe_rugăciuni
+                  #testta_pe_rugăciuni
                 </span>
                 <span className="rounded-full bg-[#FFF0E8] px-4 py-2 text-sm font-medium text-brand-orange">
                   #livrat_cu_încredere
