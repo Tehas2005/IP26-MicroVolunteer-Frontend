@@ -1,4 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { backend } from '@/lib/backend'
@@ -33,14 +35,6 @@ vi.mock('@/lib/backend', () => ({
   },
 }))
 
-function renderBootstrap() {
-  render(
-    <AuthSessionBootstrap>
-      <div>Aplicatie</div>
-    </AuthSessionBootstrap>,
-  )
-}
-
 function setPersistedAuthenticatedSession() {
   useAuthStore.setState({
     user: {
@@ -57,6 +51,22 @@ function setPersistedAuthenticatedSession() {
       'user-1': true,
     },
   })
+}
+
+function renderBootstrap(children: ReactNode = <div>Aplicatie</div>) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AuthSessionBootstrap>{children}</AuthSessionBootstrap>
+    </QueryClientProvider>,
+  )
 }
 
 describe('AuthSessionBootstrap', () => {
@@ -270,9 +280,17 @@ describe('AuthSessionBootstrap', () => {
       success: true,
       data: {
         data: {
-          volunteer: { id: 1, userId: 'user-1' },
+          volunteer: { id: 1, userId: 'user-1', availability: false },
           profile: {
             currentLocation: { x: 23.5899542, y: 46.769379 },
+            maxDistanceKm: 12.5,
+            knownLocations: [
+              {
+                city: 'Cluj-Napoca',
+                addressText: 'Centru',
+                location: { x: 23.5899542, y: 46.769379 },
+              },
+            ],
             skills: ['transport'],
           },
         },
@@ -294,6 +312,15 @@ describe('AuthSessionBootstrap', () => {
         hiddenIdentity: true,
         location: 'Cluj-Napoca',
         locationCoordinates: { x: 23.5899542, y: 46.769379 },
+        availability: false,
+        maxDistanceKm: 12.5,
+        knownLocations: [
+          {
+            city: 'Cluj-Napoca',
+            addressText: 'Centru',
+            location: { x: 23.5899542, y: 46.769379 },
+          },
+        ],
         skills: ['transport'],
       })
       expect(useAuthStore.getState().volunteerStatus).toBe('volunteer')

@@ -1,14 +1,14 @@
 import { type ReactNode, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
 import { authClient } from '@/main'
 import { readAccountStatusFromUser } from '@/lib/accountStatus'
 import { backend } from '@/lib/backend'
-import {
-  ROMANIA_CITY_COORDINATES,
-  type TaskLocationPayload,
-} from '@/lib/romania-city-coordinates'
+import { AUTH_SESSION_QUERY_KEY } from '@/lib/authSessionQuery'
+import { ROMANIA_CITY_COORDINATES, type TaskLocationPayload } from '@/lib/romania-city-coordinates'
 import type {
   ProfileType,
+  VolunteerKnownLocationPayloadType,
   VolunteerLocationPointType,
   VolunteerOwnProfileType,
 } from '@/sdk/types'
@@ -24,6 +24,9 @@ type VolunteerStoreProfile = {
   location: string
   locationCoordinates: TaskLocationPayload
   skills: string[]
+  availability?: boolean
+  maxDistanceKm?: number | null
+  knownLocations?: VolunteerKnownLocationPayloadType[]
 }
 
 const LOCATION_MATCH_EPSILON = 0.000001
@@ -79,6 +82,60 @@ function sanitizeSkills(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === 'string')
 }
 
+function sanitizeMaxDistance(value: unknown): number | null {
+  const numericValue =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim()
+        ? Number(value.trim())
+        : null
+
+  return typeof numericValue === 'number' && Number.isFinite(numericValue) && numericValue > 0
+    ? numericValue
+    : null
+}
+
+function sanitizeKnownLocations(value: unknown): VolunteerKnownLocationPayloadType[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.reduce<VolunteerKnownLocationPayloadType[]>((locations, entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return locations
+    }
+
+    const location = (entry as Record<string, unknown>).location
+
+    if (!location || typeof location !== 'object') {
+      return locations
+    }
+
+    const x = (location as Record<string, unknown>).x
+    const y = (location as Record<string, unknown>).y
+
+    if (
+      typeof x !== 'number' ||
+      typeof y !== 'number' ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y)
+    ) {
+      return locations
+    }
+
+    const city = (entry as Record<string, unknown>).city
+    const addressText = (entry as Record<string, unknown>).addressText
+
+    locations.push({
+      city: typeof city === 'string' ? city : null,
+      addressText: typeof addressText === 'string' ? addressText : null,
+      location: { x, y },
+    })
+
+    return locations
+  }, [])
+}
+
 function resolveVolunteerLocationPoint(location: string): TaskLocationPayload | null {
   const normalizedLocation = location.trim()
 
@@ -105,22 +162,27 @@ function resolveRomanianCityByPoint(
   return matchingCity?.[0] ?? ''
 }
 
-function extractVolunteerProfile(payload: unknown): VolunteerOwnProfileType['profile'] | null {
+function extractVolunteerOwnProfile(payload: unknown): VolunteerOwnProfileType | null {
   if (!payload || typeof payload !== 'object') {
     return null
   }
 
-  if ('profile' in payload) {
-    return (payload as VolunteerOwnProfileType).profile ?? null
+  if ('data' in payload && payload.data && typeof payload.data === 'object') {
+    const nestedProfile = extractVolunteerOwnProfile(payload.data)
+
+    if (nestedProfile) {
+      return nestedProfile
+    }
   }
 
-  if ('data' in payload && payload.data && typeof payload.data === 'object') {
-    const nestedData = payload.data as VolunteerOwnProfileType
-    return nestedData.profile ?? null
+  if ('profile' in payload || 'volunteer' in payload) {
+    return payload as VolunteerOwnProfileType
   }
 
   if ('currentLocation' in payload || 'skills' in payload) {
-    return payload as VolunteerOwnProfileType['profile']
+    return {
+      profile: payload as VolunteerOwnProfileType['profile'],
+    }
   }
 
   return null
@@ -130,7 +192,8 @@ function buildStoreProfileFromRemote(
   payload: unknown,
   hiddenIdentity: boolean,
 ): VolunteerStoreProfile | null {
-  const remoteProfile = extractVolunteerProfile(payload)
+  const remoteVolunteerProfile = extractVolunteerOwnProfile(payload)
+  const remoteProfile = remoteVolunteerProfile?.profile ?? null
   const currentLocationPoint = remoteProfile?.currentLocation ?? null
   const location = resolveRomanianCityByPoint(currentLocationPoint)
 
@@ -143,6 +206,9 @@ function buildStoreProfileFromRemote(
     location,
     locationCoordinates: currentLocationPoint,
     skills: sanitizeSkills(remoteProfile?.skills),
+    availability: remoteVolunteerProfile?.volunteer?.availability ?? true,
+    maxDistanceKm: sanitizeMaxDistance(remoteProfile?.maxDistanceKm),
+    knownLocations: sanitizeKnownLocations(remoteProfile?.knownLocations),
   }
 }
 
@@ -167,6 +233,9 @@ function readLocalVolunteerDraft(userId: string): VolunteerStoreProfile | null {
       location,
       locationCoordinates,
       skills: sanitizeSkills(draft.skills),
+      availability: typeof draft.availability === 'boolean' ? draft.availability : true,
+      maxDistanceKm: sanitizeMaxDistance(draft.maxDistanceKm),
+      knownLocations: sanitizeKnownLocations(draft.knownLocations),
     }
   } catch {
     window.localStorage.removeItem(`${PROFILE_DRAFT_KEY_PREFIX}:${userId}`)
@@ -200,22 +269,36 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
   volunteerProfilesByUserIdRef.current = volunteerProfilesByUserId
   const knownVolunteerUserIdsRef = useRef(knownVolunteerUserIds)
   knownVolunteerUserIdsRef.current = knownVolunteerUserIds
+  const sessionQuery = useQuery({
+    queryKey: AUTH_SESSION_QUERY_KEY,
+    queryFn: () => authClient.getSession(),
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
 
   useEffect(() => {
     let isMounted = true
 
     async function syncSession() {
+      if (sessionQuery.isPending) {
+        setSessionStatus('loading')
+        return
+      }
+
       setSessionStatus('loading')
 
       try {
-        const response = await authClient.getSession()
+        if (sessionQuery.error) {
+          throw sessionQuery.error
+        }
+
+        const response = sessionQuery.data
 
         if (!isMounted) {
           return
         }
 
-        if (response.error) {
-          console.log(response.error.message || 'get-session failed')
+        if (!response || response.error) {
           clearAuthSession()
           return
         }
@@ -331,7 +414,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
       clearAuthSession()
     }
 
-    syncSession()
+    void syncSession()
     window.addEventListener('auth:unauthorized', handleUnauthorized)
 
     return () => {
@@ -342,6 +425,9 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
     clearAuthSession,
     deleteVolunteerProfile,
     rememberVolunteerUser,
+    sessionQuery.data,
+    sessionQuery.error,
+    sessionQuery.isPending,
     setAccountStatus,
     setAuthSession,
     setSessionStatus,
@@ -354,9 +440,7 @@ export function AuthSessionBootstrap({ children }: AuthSessionBootstrapProps) {
       <div className="flex min-h-screen items-center justify-center bg-brand-cream px-6">
         <div className="w-full max-w-sm rounded-[28px] border border-brand-gray bg-white p-8 text-center shadow-sm">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-brand-purple-light border-t-brand-purple" />
-          <h1 className="mt-5 text-xl font-semibold text-brand-black">
-            Verificăm sesiunea ta
-          </h1>
+          <h1 className="mt-5 text-xl font-semibold text-brand-black">Verificăm sesiunea ta</h1>
           <p className="mt-2 text-sm text-brand-gray-text">
             Pregătim aplicația și verificăm dacă ești autentificat.
           </p>

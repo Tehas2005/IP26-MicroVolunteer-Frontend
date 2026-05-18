@@ -248,6 +248,7 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
 
     await waitFor(() => {
       expect(mockCreateVolunteerProfile).toHaveBeenCalledWith({
+        availability: true,
         currentLocation: { x: 23.5899542, y: 46.769379 },
         knownLocations: [],
         maxDistanceKm: 12.5,
@@ -366,6 +367,7 @@ describe('VolunteerProfilePage - Locație și Distanță (FE-005-A)', () => {
     await waitFor(() => {
       expect(mockBecomeVolunteer).toHaveBeenCalled()
       expect(mockCreateVolunteerProfile).toHaveBeenCalledWith({
+        availability: true,
         currentLocation: { x: 23.5899542, y: 46.769379 },
         knownLocations: [],
         maxDistanceKm: 16,

@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
 import { SkillTagSelector } from '@/components/shared/SkillTagSelector'
+import {
+  useBecomeVolunteerMutation,
+  indicatesExistingVolunteer,
+} from '@/hooks/useBecomeVolunteerMutation'
 import { backend } from '@/lib/backend'
 import {
   ROMANIA_CITY_COORDINATES,
@@ -10,12 +14,18 @@ import {
 } from '@/lib/romania-city-coordinates'
 import { COMMON_SKILL_SUGGESTIONS } from '@/lib/skillSuggestions'
 import { readHiddenIdentityFromResponse } from '@/pages/profile/utils'
-import type { CreateProfilePayloadType } from '@/sdk/types'
+import type {
+  CreateProfilePayloadType,
+  CurrentVolunteerProfileResponseType,
+  VolunteerProfileCreatePayloadType,
+  VolunteerKnownLocationPayloadType,
+} from '@/sdk/types'
 import { useAuthStore } from '@/store/authStore'
 import { useVolunteerProfileStore } from '@/store/volunteerProfileStore'
 
 const SAVE_DELAY_MS = 1200
 const SKILLS_STORAGE_KEY_PREFIX = 'mvcr-profile-skills'
+const LOCATION_MATCH_EPSILON = 0.000001
 
 function resolveVolunteerLocation(location: string): TaskLocationPayload | null {
   const normalizedLocation = location.trim()
@@ -27,43 +37,57 @@ function resolveVolunteerLocation(location: string): TaskLocationPayload | null 
   return ROMANIA_CITY_COORDINATES[normalizedLocation] ?? null
 }
 
+function resolveRomanianCityByPoint(point: TaskLocationPayload | null | undefined) {
+  if (!point) {
+    return ''
+  }
+
+  const matchingCity = Object.entries(ROMANIA_CITY_COORDINATES).find(
+    ([, coordinates]) =>
+      Math.abs(coordinates.x - point.x) < LOCATION_MATCH_EPSILON &&
+      Math.abs(coordinates.y - point.y) < LOCATION_MATCH_EPSILON,
+  )
+
+  return matchingCity?.[0] ?? ''
+}
+
 function normalizeString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
 }
 
-function normalizeId(value: unknown) {
-  if (typeof value === 'number') {
-    return String(value)
+function readCurrentVolunteerPayload(payload: unknown): CurrentVolunteerProfileResponseType | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
   }
 
-  return normalizeString(value)
+  if ('data' in payload && payload.data && typeof payload.data === 'object') {
+    const nestedPayload = readCurrentVolunteerPayload(payload.data)
+
+    if (nestedPayload) {
+      return nestedPayload
+    }
+  }
+
+  if (!('profile' in payload) && !('volunteer' in payload)) {
+    return null
+  }
+
+  return payload as CurrentVolunteerProfileResponseType
 }
 
 function readVolunteerLocationFromPayload(payload: unknown) {
-  if (!payload || typeof payload !== 'object') {
-    return ''
-  }
-
-  const candidate = payload as Record<string, unknown>
+  const currentVolunteerProfile = readCurrentVolunteerPayload(payload)
+  const profile = currentVolunteerProfile?.profile
 
   return (
-    normalizeString(candidate.city) ||
-    normalizeString(candidate.location) ||
-    normalizeString(candidate.addressText)
+    resolveRomanianCityByPoint(profile?.currentLocation ?? null) ||
+    normalizeString(profile?.knownLocations?.[0]?.city)
   )
 }
 
 function readVolunteerSkillsFromPayload(payload: unknown) {
-  if (!payload || typeof payload !== 'object') {
-    return []
-  }
-
-  const candidate = payload as Record<string, unknown>
-  const directSkills = candidate.skills
-  const skillsNeeded = candidate.skillsNeeded
-  const languages = candidate.languages
-
-  const rawValues = [directSkills, skillsNeeded, languages].find((value) => Array.isArray(value))
+  const currentVolunteerProfile = readCurrentVolunteerPayload(payload)
+  const rawValues = currentVolunteerProfile?.profile?.skills
 
   if (!Array.isArray(rawValues)) {
     return []
@@ -74,39 +98,73 @@ function readVolunteerSkillsFromPayload(payload: unknown) {
     .map((value) => value.trim())
 }
 
-function readProfileIdFromPayload(payload: unknown) {
-  if (!payload || typeof payload !== 'object') {
-    return ''
+function parsePositiveDistanceInput(value: string): number | null {
+  const trimmedValue = value.trim()
+
+  if (!trimmedValue) {
+    return null
   }
 
-  const candidate = payload as Record<string, unknown>
-  const directId = normalizeId(candidate.id) || normalizeId(candidate.profileId)
+  const parsedDistance = Number(trimmedValue)
 
-  if (directId) {
-    return directId
-  }
-
-  const nestedData = candidate.data
-
-  if (nestedData && typeof nestedData === 'object') {
-    const nestedCandidate = nestedData as Record<string, unknown>
-    return normalizeId(nestedCandidate.id) || normalizeId(nestedCandidate.profileId)
-  }
-
-  return ''
+  return Number.isFinite(parsedDistance) && parsedDistance > 0 ? parsedDistance : null
 }
 
-function indicatesExistingVolunteer(message: string | null | undefined) {
-  if (!message) {
-    return false
-  }
+function readVolunteerMaxDistanceValueFromPayload(payload: unknown) {
+  const currentVolunteerProfile = readCurrentVolunteerPayload(payload)
+  const maxDistanceKm = currentVolunteerProfile?.profile?.maxDistanceKm
 
-  return /already exists|already a volunteer|volunteer already exists|user already exists/i.test(
-    message,
-  )
+  return typeof maxDistanceKm === 'number' && Number.isFinite(maxDistanceKm) && maxDistanceKm > 0
+    ? maxDistanceKm
+    : null
 }
 
-function buildGeneralProfilePayload(name: string, hiddenIdentity: boolean): CreateProfilePayloadType {
+function readVolunteerMaxDistanceFromPayload(payload: unknown) {
+  const maxDistanceKm = readVolunteerMaxDistanceValueFromPayload(payload)
+
+  return maxDistanceKm === null ? '' : String(maxDistanceKm)
+}
+
+function readVolunteerKnownLocationsFromPayload(
+  payload: unknown,
+): VolunteerKnownLocationPayloadType[] {
+  const currentVolunteerProfile = readCurrentVolunteerPayload(payload)
+  const rawKnownLocations = currentVolunteerProfile?.profile?.knownLocations
+
+  if (!Array.isArray(rawKnownLocations)) {
+    return []
+  }
+
+  return rawKnownLocations.reduce<VolunteerKnownLocationPayloadType[]>((knownLocations, entry) => {
+    const location = entry?.location
+
+    if (
+      !location ||
+      typeof location.x !== 'number' ||
+      typeof location.y !== 'number' ||
+      !Number.isFinite(location.x) ||
+      !Number.isFinite(location.y)
+    ) {
+      return knownLocations
+    }
+
+    knownLocations.push({
+      city: typeof entry.city === 'string' ? entry.city : null,
+      addressText: typeof entry.addressText === 'string' ? entry.addressText : null,
+      location: {
+        x: location.x,
+        y: location.y,
+      },
+    })
+
+    return knownLocations
+  }, [])
+}
+
+function buildGeneralProfilePayload(
+  name: string,
+  hiddenIdentity: boolean,
+): CreateProfilePayloadType {
   return {
     name,
     bio: 'Utilizator activ in platforma Micro-Volunteer Crisis Router.',
@@ -116,26 +174,18 @@ function buildGeneralProfilePayload(name: string, hiddenIdentity: boolean): Crea
 }
 
 function buildVolunteerProfilePayload(options: {
-  name: string
-  city: string
-  hiddenIdentity: boolean
+  availability: boolean
   location: TaskLocationPayload
+  maxDistanceKm: string
   skills: string[]
-  profileId?: string
-}): CreateProfilePayloadType {
-  const { name, city, hiddenIdentity, location, skills, profileId } = options
+}): VolunteerProfileCreatePayloadType {
+  const { availability, location, maxDistanceKm, skills } = options
 
   return {
-    ...(profileId ? { profileId } : {}),
-    name,
-    displayName: name,
-    bio: `Voluntar disponibil in ${city}. Abilitati: ${skills.join(', ')}.`,
-    city,
-    languages: ['ro'],
-    hiddenIdentity,
-    location,
+    availability,
+    currentLocation: location,
+    maxDistanceKm: parsePositiveDistanceInput(maxDistanceKm),
     skills,
-    skillsNeeded: skills,
   }
 }
 
@@ -149,6 +199,7 @@ export function ProfilePage() {
   const knownVolunteerUserIds = useAuthStore((state) => state.knownVolunteerUserIds)
   const setVolunteerStatus = useAuthStore((state) => state.setVolunteerStatus)
   const rememberVolunteerUser = useAuthStore((state) => state.rememberVolunteerUser)
+  const becomeVolunteerMutation = useBecomeVolunteerMutation()
   const volunteerProfile = useVolunteerProfileStore((state) =>
     authUser?.id ? state.profilesByUserId[authUser.id] : undefined,
   )
@@ -157,6 +208,10 @@ export function ProfilePage() {
 
   const [isFormVisible, setIsFormVisible] = useState(Boolean(volunteerProfile))
   const [location, setLocation] = useState(volunteerProfile?.location ?? '')
+  const [maxDistanceKm, setMaxDistanceKm] = useState(
+    volunteerProfile?.maxDistanceKm ? String(volunteerProfile.maxDistanceKm) : '',
+  )
+  const [availability, setAvailability] = useState(volunteerProfile?.availability ?? true)
   const [hiddenIdentity, setHiddenIdentity] = useState(volunteerProfile?.hiddenIdentity ?? false)
   const [skills, setSkills] = useState<string[]>(volunteerProfile?.skills ?? [])
   const [hasHydratedProfile, setHasHydratedProfile] = useState(false)
@@ -169,14 +224,17 @@ export function ProfilePage() {
   const [hasBackendVolunteerProfile, setHasBackendVolunteerProfile] = useState(false)
   const hasVolunteerRole = readAuthUserRole(authUser) === 'volunteer'
   const isKnownVolunteerUser = Boolean(authUser?.id && knownVolunteerUserIds[authUser.id])
+  const volunteerStatusRef = useRef(volunteerStatus)
+  volunteerStatusRef.current = volunteerStatus
 
   const isExistingVolunteer = Boolean(
     volunteerProfile ||
-      hasBackendVolunteerProfile ||
-      volunteerStatus === 'volunteer' ||
-      hasVolunteerRole ||
-      isKnownVolunteerUser,
+    hasBackendVolunteerProfile ||
+    volunteerStatus === 'volunteer' ||
+    hasVolunteerRole ||
+    isKnownVolunteerUser,
   )
+  const isVolunteerAvailable = availability !== false
   const pageTitle = isExistingVolunteer ? 'Setari profil voluntar' : 'Devino voluntar'
   const selectedLocationCoordinates = resolveVolunteerLocation(location)
 
@@ -197,6 +255,8 @@ export function ProfilePage() {
     if (volunteerProfile) {
       setIsFormVisible(true)
       setLocation(volunteerProfile.location)
+      setMaxDistanceKm(volunteerProfile.maxDistanceKm ? String(volunteerProfile.maxDistanceKm) : '')
+      setAvailability(volunteerProfile.availability ?? true)
       setSkills(volunteerProfile.skills)
       setHiddenIdentity(volunteerProfile.hiddenIdentity)
       setSaveError('')
@@ -215,6 +275,8 @@ export function ProfilePage() {
 
     setIsFormVisible(false)
     setLocation('')
+    setMaxDistanceKm('')
+    setAvailability(true)
     setIsLocationListOpen(false)
     setIsConfirmModalOpen(false)
   }, [
@@ -275,47 +337,108 @@ export function ProfilePage() {
           return
         }
 
-        const volunteerResponse = await backend.volunteers.getMeProfile()
+        const [profileResponse, volunteerResponse] = await Promise.all([
+          backend.profile.getMe().catch(() => null),
+          backend.volunteers.getMeProfile().catch(() => null),
+        ])
 
         if (!isMounted) {
           return
         }
 
-        if (volunteerResponse.success) {
-          setHasBackendVolunteerProfile(true)
-          setVolunteerStatus('volunteer')
-          rememberVolunteerUser(authUser.id)
-          setHiddenIdentity(readHiddenIdentityFromResponse(volunteerResponse.data))
+        if (profileResponse?.success) {
+          setHiddenIdentity(readHiddenIdentityFromResponse(profileResponse.data))
+        }
 
+        if (volunteerResponse?.success) {
+          const currentVolunteerProfile = readCurrentVolunteerPayload(volunteerResponse.data)
+          const nextAvailability = currentVolunteerProfile?.volunteer?.availability ?? true
+          const hasBackendSkills = Array.isArray(currentVolunteerProfile?.profile?.skills)
           const volunteerLocation = readVolunteerLocationFromPayload(volunteerResponse.data)
           const volunteerSkills = readVolunteerSkillsFromPayload(volunteerResponse.data)
+          const volunteerMaxDistanceKm = readVolunteerMaxDistanceFromPayload(volunteerResponse.data)
+          const volunteerMaxDistanceValue = readVolunteerMaxDistanceValueFromPayload(
+            volunteerResponse.data,
+          )
+          const knownLocations = readVolunteerKnownLocationsFromPayload(volunteerResponse.data)
+          const locationCoordinates =
+            currentVolunteerProfile?.profile?.currentLocation ??
+            (volunteerLocation ? resolveVolunteerLocation(volunteerLocation) : null)
+          const nextHiddenIdentity = profileResponse?.success
+            ? readHiddenIdentityFromResponse(profileResponse.data)
+            : (volunteerProfile?.hiddenIdentity ?? false)
 
-          if (!volunteerProfile) {
-            if (volunteerLocation) {
-              setLocation(volunteerLocation)
-            }
+          setHasBackendVolunteerProfile(Boolean(currentVolunteerProfile?.profile))
+          setAvailability(nextAvailability)
+          setVolunteerStatus('volunteer')
+          rememberVolunteerUser(authUser.id)
 
-            if (volunteerSkills.length > 0) {
-              setSkills(volunteerSkills)
+          if (volunteerLocation) {
+            setLocation(volunteerLocation)
+          }
+
+          setMaxDistanceKm(volunteerMaxDistanceKm)
+
+          if (hasBackendSkills) {
+            setSkills(volunteerSkills)
+          }
+
+          if (volunteerLocation && locationCoordinates) {
+            const nextStoreSkills = hasBackendSkills
+              ? volunteerSkills
+              : (volunteerProfile?.skills ?? [])
+            const nextKnownLocations = JSON.stringify(knownLocations)
+            const currentKnownLocations = JSON.stringify(volunteerProfile?.knownLocations ?? [])
+            const shouldSyncVolunteerStore =
+              !volunteerProfile ||
+              volunteerProfile.location !== volunteerLocation ||
+              volunteerProfile.locationCoordinates.x !== locationCoordinates.x ||
+              volunteerProfile.locationCoordinates.y !== locationCoordinates.y ||
+              volunteerProfile.availability !== nextAvailability ||
+              volunteerProfile.maxDistanceKm !== volunteerMaxDistanceValue ||
+              JSON.stringify(volunteerProfile.skills) !== JSON.stringify(nextStoreSkills) ||
+              volunteerProfile.hiddenIdentity !== nextHiddenIdentity ||
+              currentKnownLocations !== nextKnownLocations
+
+            if (shouldSyncVolunteerStore) {
+              upsertVolunteerProfile(authUser.id, {
+                location: volunteerLocation,
+                locationCoordinates,
+                availability: nextAvailability,
+                maxDistanceKm: volunteerMaxDistanceValue,
+                knownLocations,
+                skills: nextStoreSkills,
+                hiddenIdentity: nextHiddenIdentity,
+              })
             }
           }
         } else {
           setHasBackendVolunteerProfile(false)
           const shouldKeepVolunteerStatus = Boolean(
             volunteerProfile ||
-              volunteerStatus === 'volunteer' ||
-              hasVolunteerRole ||
-              isKnownVolunteerUser,
+            volunteerStatusRef.current === 'volunteer' ||
+            hasVolunteerRole ||
+            isKnownVolunteerUser,
           )
 
           setVolunteerStatus(shouldKeepVolunteerStatus ? 'volunteer' : 'not-volunteer')
 
-          if (volunteerResponse.isNotFound && authUser?.id && volunteerProfile && !hasVolunteerRole) {
+          if (
+            volunteerResponse?.isNotFound &&
+            authUser?.id &&
+            volunteerProfile &&
+            !hasVolunteerRole
+          ) {
             deleteVolunteerProfile(authUser.id)
           }
         }
 
-        if (!volunteerResponse.success && !volunteerResponse.isNotFound && volunteerResponse.message) {
+        if (
+          volunteerResponse &&
+          !volunteerResponse.success &&
+          !volunteerResponse.isNotFound &&
+          volunteerResponse.message
+        ) {
           setSaveError('Nu am reusit sa incarcam setarile profilului.')
         }
       } catch {
@@ -341,9 +464,9 @@ export function ProfilePage() {
     hasVolunteerRole,
     isKnownVolunteerUser,
     rememberVolunteerUser,
-    volunteerStatus,
     setVolunteerStatus,
     skillsStorageKey,
+    upsertVolunteerProfile,
     volunteerProfile,
   ])
 
@@ -369,28 +492,34 @@ export function ProfilePage() {
     setSaveError('')
     setSaveMessage('')
 
-    if (!authUser?.id || !isExistingVolunteer || !selectedLocationCoordinates) {
+    if (!authUser?.id || !isExistingVolunteer) {
       return
     }
 
     try {
-      const response = await backend.volunteers.updateMeProfile(
-        buildVolunteerProfilePayload({
-          name: authUser.name,
-          city: location.trim(),
-          hiddenIdentity: nextValue,
-          location: selectedLocationCoordinates,
-          skills: normalizedSkills,
-        }),
-      )
+      const response = await backend.profile.updateMe({
+        hiddenIdentity: nextValue,
+      })
 
       if (response.success) {
-        upsertVolunteerProfile(authUser.id, {
-          location: location.trim(),
-          locationCoordinates: selectedLocationCoordinates,
-          skills: normalizedSkills,
-          hiddenIdentity: nextValue,
-        })
+        const profileLocation = selectedLocationCoordinates
+          ? location.trim()
+          : (volunteerProfile?.location ?? location.trim())
+        const profileCoordinates =
+          selectedLocationCoordinates ?? volunteerProfile?.locationCoordinates
+
+        if (profileLocation && profileCoordinates) {
+          upsertVolunteerProfile(authUser.id, {
+            location: profileLocation,
+            locationCoordinates: profileCoordinates,
+            availability,
+            maxDistanceKm:
+              volunteerProfile?.maxDistanceKm ?? parsePositiveDistanceInput(maxDistanceKm),
+            knownLocations: volunteerProfile?.knownLocations,
+            skills: volunteerProfile?.skills ?? normalizedSkills,
+            hiddenIdentity: nextValue,
+          })
+        }
         return
       }
     } catch {
@@ -416,6 +545,14 @@ export function ProfilePage() {
       return
     }
 
+    const parsedDistance = Number(maxDistanceKm.trim())
+
+    if (maxDistanceKm.trim() && (!Number.isFinite(parsedDistance) || parsedDistance <= 0)) {
+      setSaveMessage('')
+      setSaveError('distanta maxima trebuie sa fie un numar pozitiv')
+      return
+    }
+
     if (normalizedSkills.length === 0) {
       setSaveMessage('')
       setSaveError('adauga cel putin o abilitate')
@@ -437,35 +574,36 @@ export function ProfilePage() {
     }
 
     const generalProfilePayload = buildGeneralProfilePayload(authUser.name, hiddenIdentity)
+    const nextAvailability = isExistingVolunteer ? availability : true
     const volunteerProfilePayload = buildVolunteerProfilePayload({
-      name: authUser.name,
-      city: trimmedLocation,
-      hiddenIdentity,
+      availability: nextAvailability,
       location: selectedLocationCoordinates,
+      maxDistanceKm,
       skills: normalizedSkills,
     })
 
     try {
-      const initialProfileResponse = hasBackendVolunteerProfile
-        ? await backend.profile.updateMe(generalProfilePayload)
-        : await backend.profile.create(generalProfilePayload)
+      const initialProfileResponse = await backend.profile.updateMe(generalProfilePayload)
 
       const profileResponse =
-        !initialProfileResponse.success && !hasBackendVolunteerProfile
-          ? await backend.profile.updateMe(generalProfilePayload)
+        !initialProfileResponse.success && initialProfileResponse.isNotFound
+          ? await backend.profile.create(generalProfilePayload)
           : initialProfileResponse
 
       if (!profileResponse.success) {
-        setSaveError(profileResponse.message || 'Nu am reusit sa salvam profilul. Incearca din nou.')
+        setSaveError(
+          profileResponse.message || 'Nu am reusit sa salvam profilul. Incearca din nou.',
+        )
         return
       }
 
-      const profileId = readProfileIdFromPayload(profileResponse.data)
+      if (!isExistingVolunteer) {
+        const becomeVolunteerResponse = await becomeVolunteerMutation.mutateAsync()
 
-      if (!hasBackendVolunteerProfile) {
-        const becomeVolunteerResponse = await backend.users.becomeVolunteer()
-
-        if (!becomeVolunteerResponse.success && !indicatesExistingVolunteer(becomeVolunteerResponse.message)) {
+        if (
+          !becomeVolunteerResponse.success &&
+          !indicatesExistingVolunteer(becomeVolunteerResponse.message)
+        ) {
           setSaveError(
             becomeVolunteerResponse.message ||
               'Profilul general a fost salvat, dar nu am putut activa statutul de voluntar.',
@@ -478,33 +616,18 @@ export function ProfilePage() {
       }
 
       const volunteerProfileResponse = hasBackendVolunteerProfile
-        ? await backend.volunteers.updateMeProfile({
-            ...volunteerProfilePayload,
-            ...(profileId ? { profileId } : {}),
-          })
-        : await backend.volunteers.createMeProfile({
-            ...volunteerProfilePayload,
-            ...(profileId ? { profileId } : {}),
-          })
+        ? await backend.volunteers.updateMeProfile(volunteerProfilePayload)
+        : await backend.volunteers.createMeProfile(volunteerProfilePayload)
 
       const persistedVolunteerProfileResponse =
         !volunteerProfileResponse.success && !hasBackendVolunteerProfile
-          ? await backend.volunteers.updateMeProfile({
-              ...volunteerProfilePayload,
-              ...(profileId ? { profileId } : {}),
-            })
+          ? await backend.volunteers.updateMeProfile(volunteerProfilePayload)
           : volunteerProfileResponse
 
       if (!persistedVolunteerProfileResponse.success) {
         setHasBackendVolunteerProfile(false)
         setVolunteerStatus('volunteer')
         rememberVolunteerUser(authUser.id)
-        upsertVolunteerProfile(authUser.id, {
-          location: trimmedLocation,
-          locationCoordinates: selectedLocationCoordinates,
-          skills: normalizedSkills,
-          hiddenIdentity,
-        })
         setSaveError(
           persistedVolunteerProfileResponse.message ||
             'Statutul de voluntar a fost activat, dar profilul de voluntar nu a putut fi salvat.',
@@ -521,6 +644,9 @@ export function ProfilePage() {
         upsertVolunteerProfile(authUser.id, {
           location: trimmedLocation,
           locationCoordinates: selectedLocationCoordinates,
+          availability: nextAvailability,
+          maxDistanceKm: volunteerProfilePayload.maxDistanceKm,
+          knownLocations: volunteerProfile?.knownLocations,
           skills: normalizedSkills,
           hiddenIdentity,
         })
@@ -536,11 +662,15 @@ export function ProfilePage() {
       })
 
       setHasBackendVolunteerProfile(true)
+      setAvailability(nextAvailability)
       setVolunteerStatus('volunteer')
       rememberVolunteerUser(authUser.id)
       upsertVolunteerProfile(authUser.id, {
         location: trimmedLocation,
         locationCoordinates: selectedLocationCoordinates,
+        availability: nextAvailability,
+        maxDistanceKm: volunteerProfilePayload.maxDistanceKm,
+        knownLocations: volunteerProfile?.knownLocations,
         skills: normalizedSkills,
         hiddenIdentity,
       })
@@ -557,12 +687,97 @@ export function ProfilePage() {
     }
   }
 
-  function handleConfirmOptOut() {
-    setSaveError(
-      'Renuntarea la statutul de voluntar nu este inca legata la un endpoint backend dedicat.',
-    )
+  async function handleConfirmOptOut() {
+    if (!authUser?.id) {
+      return
+    }
+
+    setSaveError('')
     setSaveMessage('')
-    setIsConfirmModalOpen(false)
+    setIsSaving(true)
+
+    try {
+      const response = await backend.volunteers.updateMeProfile({
+        availability: false,
+      })
+
+      if (!response.success) {
+        setSaveError(response.message || 'Nu am putut dezactiva disponibilitatea de voluntar.')
+        return
+      }
+
+      setAvailability(false)
+
+      const profileLocation = volunteerProfile?.location ?? location.trim()
+      const profileCoordinates =
+        volunteerProfile?.locationCoordinates ?? selectedLocationCoordinates
+
+      if (profileCoordinates) {
+        upsertVolunteerProfile(authUser.id, {
+          location: profileLocation,
+          locationCoordinates: profileCoordinates,
+          availability: false,
+          maxDistanceKm:
+            volunteerProfile?.maxDistanceKm ?? parsePositiveDistanceInput(maxDistanceKm),
+          knownLocations: volunteerProfile?.knownLocations,
+          skills: volunteerProfile?.skills ?? normalizedSkills,
+          hiddenIdentity: volunteerProfile?.hiddenIdentity ?? hiddenIdentity,
+        })
+      }
+
+      setSaveMessage('Disponibilitatea de voluntar a fost dezactivata.')
+      setIsConfirmModalOpen(false)
+    } catch {
+      setSaveError('Nu am putut dezactiva disponibilitatea de voluntar.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleReactivateAvailability() {
+    if (!authUser?.id) {
+      return
+    }
+
+    setSaveError('')
+    setSaveMessage('')
+    setIsSaving(true)
+
+    try {
+      const response = await backend.volunteers.updateMeProfile({
+        availability: true,
+      })
+
+      if (!response.success) {
+        setSaveError(response.message || 'Nu am putut reactiva disponibilitatea de voluntar.')
+        return
+      }
+
+      setAvailability(true)
+
+      const profileLocation = volunteerProfile?.location ?? location.trim()
+      const profileCoordinates =
+        volunteerProfile?.locationCoordinates ?? selectedLocationCoordinates
+
+      if (profileCoordinates) {
+        upsertVolunteerProfile(authUser.id, {
+          location: profileLocation,
+          locationCoordinates: profileCoordinates,
+          availability: true,
+          maxDistanceKm:
+            volunteerProfile?.maxDistanceKm ?? parsePositiveDistanceInput(maxDistanceKm),
+          knownLocations: volunteerProfile?.knownLocations,
+          skills: volunteerProfile?.skills ?? normalizedSkills,
+          hiddenIdentity: volunteerProfile?.hiddenIdentity ?? hiddenIdentity,
+        })
+      }
+
+      setSaveMessage('Disponibilitatea de voluntar a fost reactivata.')
+    } catch {
+      setSaveError('Nu am putut reactiva disponibilitatea de voluntar.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -656,6 +871,29 @@ export function ProfilePage() {
                     </div>
                   ) : null}
                 </div>
+
+                <div className="mt-5">
+                  <label
+                    className="mb-2 block text-sm font-semibold text-brand-black"
+                    htmlFor="max-distance-km"
+                  >
+                    Distanta maxima (km)
+                  </label>
+                  <input
+                    id="max-distance-km"
+                    min="0.1"
+                    step="0.1"
+                    type="number"
+                    value={maxDistanceKm}
+                    onChange={(event) => {
+                      setMaxDistanceKm(event.target.value)
+                      setSaveError('')
+                      setSaveMessage('')
+                    }}
+                    className="w-full rounded-[18px] border border-brand-gray bg-white px-4 py-3 text-sm text-brand-black outline-none transition focus:border-brand-purple"
+                    placeholder="Ex: 15"
+                  />
+                </div>
               </div>
 
               <div className="rounded-[28px] border border-brand-gray bg-brand-cream/70 p-5 sm:p-6">
@@ -722,17 +960,49 @@ export function ProfilePage() {
 
               {isExistingVolunteer ? (
                 <div className="border-t border-brand-gray pt-6">
-                  <div className="rounded-[24px] border border-red-200 bg-red-50/50 p-5">
-                    <h2 className="text-base font-bold text-red-700">Renuntare voluntariat</h2>
-                    <p className="mt-2 text-sm leading-6 text-red-700/80">
-                      Nu vei mai primi alerte pentru cereri potrivite.
+                  <div
+                    className={`rounded-[24px] border p-5 ${
+                      isVolunteerAvailable
+                        ? 'border-red-200 bg-red-50/50'
+                        : 'border-emerald-200 bg-emerald-50/60'
+                    }`}
+                  >
+                    <h2
+                      className={`text-base font-bold ${
+                        isVolunteerAvailable ? 'text-red-700' : 'text-emerald-800'
+                      }`}
+                    >
+                      Disponibilitate voluntar
+                    </h2>
+                    <p
+                      className={`mt-2 text-sm leading-6 ${
+                        isVolunteerAvailable ? 'text-red-700/80' : 'text-emerald-800/80'
+                      }`}
+                    >
+                      {isVolunteerAvailable
+                        ? 'Primesti alerte pentru cereri potrivite.'
+                        : 'Nu primesti alerte pentru cereri potrivite.'}
                     </p>
                     <button
                       type="button"
-                      className="mt-4 rounded-[18px] border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                      onClick={() => setIsConfirmModalOpen(true)}
+                      className={`mt-4 rounded-[18px] border bg-white px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                        isVolunteerAvailable
+                          ? 'border-red-300 text-red-700 hover:bg-red-100'
+                          : 'border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                      }`}
+                      onClick={() => {
+                        if (isVolunteerAvailable) {
+                          setIsConfirmModalOpen(true)
+                          return
+                        }
+
+                        void handleReactivateAvailability()
+                      }}
+                      disabled={isSaving}
                     >
-                      Renunta la statutul de voluntar
+                      {isVolunteerAvailable
+                        ? 'Dezactiveaza disponibilitatea'
+                        : 'Reactiveaza disponibilitatea'}
                     </button>
                   </div>
                 </div>
@@ -751,10 +1021,10 @@ export function ProfilePage() {
             className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-xl"
           >
             <h2 id="volunteer-opt-out-title" className="text-xl font-bold text-brand-black">
-              Esti sigur ca vrei sa stergi profilul tau de voluntar?
+              Vrei sa dezactivezi disponibilitatea?
             </h2>
             <p className="mt-3 text-sm leading-6 text-brand-gray-text">
-              Nu vei mai primi notificari pentru cererile de ajutor din zona ta.
+              Profilul tau ramane salvat, dar nu vei mai primi notificari pentru cereri potrivite.
             </p>
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
@@ -769,7 +1039,7 @@ export function ProfilePage() {
                 className="rounded-[18px] bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
                 onClick={handleConfirmOptOut}
               >
-                Da, renunt
+                Da, dezactiveaza
               </button>
             </div>
           </div>

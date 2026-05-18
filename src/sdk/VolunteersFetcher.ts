@@ -1,5 +1,11 @@
 import type { Fetcher } from './Fetcher'
-import type { ApiResponse, CreateProfilePayloadType, ProfileType, UpdateProfilePayloadType } from './types'
+import type {
+  ApiResponse,
+  CurrentVolunteerProfileResponseType,
+  ProfileType,
+  VolunteerProfileCreatePayloadType,
+  VolunteerProfileUpdatePayloadType,
+} from './types'
 
 export class VolunteersFetcher {
   constructor(private readonly fetcher: Fetcher) {}
@@ -8,15 +14,25 @@ export class VolunteersFetcher {
     return this.fetcher.get<ProfileType>(`/api/volunteers/${userId}`)
   }
 
-  public getMeProfile(): Promise<ApiResponse<ProfileType>> {
-    return this.fetcher.get<ProfileType>('/api/volunteers/me/profile')
+  public getMeProfile(): Promise<ApiResponse<CurrentVolunteerProfileResponseType>> {
+    return this.fetcher.get<CurrentVolunteerProfileResponseType>('/api/volunteers/me/profile')
   }
 
-  public createMeProfile(payload: CreateProfilePayloadType): Promise<ApiResponse<ProfileType>> {
-    return this.fetcher.post<ProfileType>('/api/volunteers/me/profile', payload)
+  public createMeProfile(
+    payload: VolunteerProfileCreatePayloadType,
+  ): Promise<ApiResponse<CurrentVolunteerProfileResponseType>> {
+    return this.fetcher.post<CurrentVolunteerProfileResponseType>(
+      '/api/volunteers/me/profile',
+      payload,
+    )
   }
 
-  public updateMeProfile(payload: UpdateProfilePayloadType): Promise<ApiResponse<ProfileType>> {
-    return this.fetcher.put<ProfileType>('/api/volunteers/me/profile', payload)
+  public updateMeProfile(
+    payload: VolunteerProfileUpdatePayloadType,
+  ): Promise<ApiResponse<CurrentVolunteerProfileResponseType>> {
+    return this.fetcher.put<CurrentVolunteerProfileResponseType>(
+      '/api/volunteers/me/profile',
+      payload,
+    )
   }
 }
